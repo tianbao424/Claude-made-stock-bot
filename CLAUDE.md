@@ -1,163 +1,481 @@
-# CLAUDE.md
+# 🤖 AI股票聊天助手 - 开发指南
 
-This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
+本文档为Claude开发人员提供项目结构、技术细节和开发指导。
 
-## 🏗️ Architecture Overview
+## 📁 项目结构详解
 
-This is a **complete dual-version stock analysis chatbot** project with both CLI and modern web interfaces:
-
-### Core Components
-- **`stock_bot.py`**: CLI chatbot using asyncio, MCP protocol, and Qwen-Coder LLM
-- **`backend/main.py`**: ✅ Complete FastAPI web server with embedded frontend
-- **`backend/database.py`**: SQLite-based stock pool management with dataclass models  
-- **`backend/stock_pool.db`**: SQLite database for holding/potential stock pools
-
-### Data Flow Architecture
-
-#### Web Version (Production Ready)
+### 🏗️ 根目录结构
 ```
-Web UI → WebSocket → FastAPI → WebStockAnalysisBot → MCP Client → AkShare Tools → AI Analysis
-                         ↓
-                    DatabaseManager → SQLite (stock_pool table)
+stock-bot/
+├── 📄 package.json                   # 主项目配置，包含并发启动脚本
+├── 📄 stock_bot.py                   # CLI版本(保留兼容性)
+├── 📄 requirements.txt               # Python依赖包列表
+├── 📁 backend/                       # 后端FastAPI服务
+├── 📁 frontend/                      # React前端应用
+├── 📁 config/                        # 配置管理模块
+├── 📁 scripts/                       # 部署和工具脚本
+├── 📁 tests/                         # 测试文件
+└── 📄 *.md                          # 文档文件
 ```
 
-#### CLI Version (Development/Testing)
+### 🔧 后端架构 (backend/)
+```python
+backend/
+├── main.py                 # FastAPI应用入口
+│   ├── WebStockAnalysisBot # 主业务逻辑类
+│   ├── ConnectionManager   # WebSocket连接管理
+│   ├── API路由定义         # REST API端点
+│   └── WebSocket处理       # 实时通信
+├── database.py             # 数据层
+│   ├── StockPool          # 股票池数据模型
+│   ├── DatabaseManager    # 数据库操作类
+│   └── SQLite管理         # 数据持久化
+├── requirements.txt        # Python依赖
+└── stock_pool.db          # SQLite数据库文件
 ```
-Terminal → StockAnalysisBot → MCP Client → AkShare Tools → AI Analysis → Terminal Output
+
+### ⚛️ 前端架构 (frontend/)
+```typescript
+frontend/
+├── src/
+│   ├── components/                    # React组件
+│   │   ├── StockPoolManager.tsx      # 股票池管理主界面
+│   │   ├── StockPoolForm.tsx         # 股票添加/编辑表单
+│   │   └── ChatInterface.tsx         # AI聊天界面
+│   ├── hooks/                        # 自定义React Hooks
+│   │   ├── useStockPool.ts           # 股票池数据管理
+│   │   └── useWebSocket.ts           # WebSocket通信
+│   ├── services/                     # 服务层
+│   │   └── api.ts                    # HTTP API客户端
+│   ├── types/                        # TypeScript类型定义
+│   │   └── index.ts                  # 共享类型接口
+│   ├── App.tsx                       # 主应用组件
+│   ├── App.css                       # 全局样式
+│   └── main.tsx                      # 应用入口点
+├── package.json                      # 前端依赖配置
+├── vite.config.ts                    # Vite构建配置
+├── tsconfig.json                     # TypeScript配置
+└── index.html                        # HTML入口文件
 ```
 
-### Key Design Patterns
-- **Async/Await**: All MCP communication and LLM calls are async
-- **Tool Selection**: LLM chooses appropriate AkShare tools based on user query
-- **Error Handling**: Detailed error classification for user-friendly messages (stock_bot.py:154-178)
-- **Stock Name Mapping**: Hardcoded Chinese name → stock code conversion (stock_bot.py:28-41)
+## 🛠️ 技术栈详解
 
-## 🚀 Development Commands
+### 🔙 后端技术栈
 
-### Setup and Installation
+#### FastAPI框架
+```python
+# main.py - 核心应用结构
+from fastapi import FastAPI, WebSocket, HTTPException
+from fastapi.responses import HTMLResponse
+from pydantic import BaseModel, Field
+
+app = FastAPI(title="AI股票聊天助手", version="1.1.0")
+
+# WebSocket连接管理
+class ConnectionManager:
+    def __init__(self):
+        self.active_connections: List[WebSocket] = []
+    
+    async def connect(self, websocket: WebSocket):
+        await websocket.accept()
+        self.active_connections.append(websocket)
+```
+
+#### 数据库设计
+```python
+# database.py - 数据模型
+@dataclass
+class StockPool:
+    stock_code: str              # 股票代码
+    stock_name: str              # 股票名称  
+    pool_type: str               # holding|potential
+    tags: Optional[List[str]]    # 标签列表(JSON存储)
+    notes: str                   # 备注信息
+    created_at: str              # 创建时间
+    updated_at: str              # 更新时间
+    id: Optional[int] = None     # 主键ID
+```
+
+#### API端点设计
+```python
+# REST API路由
+@app.get("/api/stock-pools")           # 获取股票池列表
+@app.post("/api/stock-pools")          # 创建股票
+@app.get("/api/stock-pools/{id}")      # 获取单个股票
+@app.put("/api/stock-pools/{id}")      # 更新股票
+@app.delete("/api/stock-pools/{id}")   # 删除股票
+
+# WebSocket端点
+@app.websocket("/ws")                  # 实时聊天通信
+```
+
+### 🎨 前端技术栈
+
+#### React组件架构
+```typescript
+// App.tsx - 主应用结构
+const App: React.FC = () => {
+  const [activeTab, setActiveTab] = useState<TabType>('chat');
+  
+  return (
+    <div className="h-screen bg-gray-50 flex">
+      <Sidebar />                    {/* 导航侧边栏 */}
+      <MainContent>
+        {activeTab === 'chat' && <ChatInterface />}
+        {activeTab === 'pool' && <StockPoolManager />}
+      </MainContent>
+    </div>
+  );
+};
+```
+
+#### 数据管理Hooks
+```typescript
+// useStockPool.ts - 股票池数据管理
+export const useStockPool = () => {
+  const [stockPools, setStockPools] = useState<StockPool[]>([]);
+  const [loading, setLoading] = useState(false);
+  
+  const createStockPool = async (data: StockPoolCreate) => {
+    const newPool = await stockPoolAPI.create(data);
+    setStockPools(prev => [...prev, newPool]);
+  };
+  
+  return { stockPools, createStockPool, ... };
+};
+```
+
+#### WebSocket通信
+```typescript
+// useWebSocket.ts - 实时通信管理
+export const useWebSocket = () => {
+  const [messages, setMessages] = useState<ChatMessage[]>([]);
+  const wsRef = useRef<WebSocket | null>(null);
+  
+  const sendMessage = (content: string) => {
+    const wsMessage = { type: 'query', content };
+    wsRef.current?.send(JSON.stringify(wsMessage));
+  };
+  
+  return { messages, sendMessage, ... };
+};
+```
+
+## 🔄 数据流设计
+
+### 📊 股票池管理流程
+```
+前端操作 → API调用 → 后端处理 → 数据库更新 → 响应返回 → UI更新
+    ↓
+StockPoolManager.tsx
+    ↓
+useStockPool Hook
+    ↓  
+api.ts (HTTP Client)
+    ↓
+FastAPI Route Handler
+    ↓
+DatabaseManager
+    ↓
+SQLite Database
+```
+
+### 💬 AI聊天流程
+```
+用户输入 → WebSocket发送 → AI处理 → MCP调用 → 数据获取 → AI分析 → 响应返回
+    ↓
+ChatInterface.tsx
+    ↓
+useWebSocket Hook
+    ↓
+WebSocket Connection
+    ↓
+FastAPI WebSocket Handler
+    ↓
+WebStockAnalysisBot.process_query()
+    ↓
+MCP AkShare Server
+    ↓
+AI Model (Qwen-Coder)
+```
+
+## 🛠️ 开发工作流
+
+### 🚀 开发环境搭建
 ```bash
-# One-click installation (recommended)
-./scripts/install.sh
+# 1. 克隆项目
+git clone <repository>
+cd stock-bot
 
-# Manual installation
-pip3 install -r requirements.txt          # CLI dependencies
-pip3 install -r backend/requirements.txt  # Web dependencies
+# 2. 安装依赖
+npm install              # 安装根目录和前端依赖
+pip install -r requirements.txt  # 安装后端依赖
+
+# 3. 启动开发服务器
+npm run dev             # 并发启动前后端
 ```
 
-### Running the Application
+### 📝 代码规范
 
-#### Web Version (Production - Recommended)
+#### Python代码规范
+```python
+# 遵循PEP 8规范
+# 使用类型注解
+async def create_stock_pool(
+    stock_data: StockPoolCreateRequest
+) -> ApiResponse[StockPool]:
+    """创建股票池条目
+    
+    Args:
+        stock_data: 股票池创建请求数据
+        
+    Returns:
+        包含创建结果的API响应
+        
+    Raises:
+        HTTPException: 当创建失败时抛出
+    """
+    try:
+        # 实现逻辑
+        pass
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+```
+
+#### TypeScript代码规范  
+```typescript
+// 使用严格类型检查
+// 接口优先于类型别名
+interface StockPoolCreateRequest {
+  stock_code: string;
+  stock_name: string;
+  pool_type: 'holding' | 'potential';
+  tags?: string[];
+  notes?: string;
+}
+
+// 使用函数式组件和Hooks
+const StockPoolManager: React.FC = () => {
+  // Hook调用位于顶层
+  const { stockPools, createStockPool } = useStockPool();
+  
+  // 事件处理函数
+  const handleCreate = useCallback(async (data: StockPoolCreateRequest) => {
+    try {
+      await createStockPool(data);
+    } catch (error) {
+      console.error('创建失败:', error);
+    }
+  }, [createStockPool]);
+  
+  return <div>...</div>;
+};
+```
+
+### 🧪 测试策略
+
+#### 后端测试
+```python
+# tests/test_database.py
+import pytest
+from backend.database import DatabaseManager, StockPool
+
+@pytest.fixture
+def db_manager():
+    return DatabaseManager(":memory:")  # 内存数据库测试
+
+def test_create_stock_pool(db_manager):
+    stock = StockPool(
+        stock_code="000001",
+        stock_name="平安银行", 
+        pool_type="holding"
+    )
+    stock_id = db_manager.add_stock(stock)
+    assert stock_id is not None
+```
+
+#### 前端测试
+```typescript
+// 使用React Testing Library
+import { render, screen } from '@testing-library/react';
+import StockPoolManager from './StockPoolManager';
+
+test('renders stock pool manager', () => {
+  render(<StockPoolManager />);
+  expect(screen.getByText('股票池管理')).toBeInTheDocument();
+});
+```
+
+## 🔧 配置管理
+
+### 环境变量配置
+```python
+# config/settings.py
+from pydantic_settings import BaseSettings
+
+class Settings(BaseSettings):
+    # AI服务配置
+    API_KEY: str
+    BASE_URL: str = "https://dashscope.aliyuncs.com/compatible-mode/v1"
+    MODEL: str = "qwen-coder-plus"
+    
+    # 服务器配置
+    SERVER_HOST: str = "0.0.0.0"
+    SERVER_PORT: int = 8001
+    
+    # 数据库配置  
+    DATABASE_PATH: str = "stock_pool.db"
+    
+    class Config:
+        env_file = ".env"
+```
+
+### Vite配置
+```typescript
+// frontend/vite.config.ts
+export default defineConfig({
+  plugins: [react()],
+  server: {
+    port: 3000,
+    proxy: {
+      '/api': {
+        target: 'http://localhost:8001',
+        changeOrigin: true,
+      },
+      '/ws': {
+        target: 'ws://localhost:8001', 
+        ws: true,
+      },
+    },
+  },
+});
+```
+
+## 🚀 部署指南
+
+### 开发部署
 ```bash
-# Using start script
-./scripts/start.sh
-
-# Direct startup  
-python3 backend/main.py
-
-# Access: http://localhost:8001
+# 使用npm并发启动
+npm run dev
 ```
 
-#### CLI Version (Development/Testing)
+### 生产部署
 ```bash
-# Command line interface
-python3 stock_bot.py
+# 构建前端
+npm run build
+
+# 启动后端(生产模式)
+uvicorn backend.main:app --host 0.0.0.0 --port 8001
 ```
 
-### Testing
+### Docker部署
+```dockerfile
+# Dockerfile
+FROM python:3.11-slim
+
+WORKDIR /app
+COPY requirements.txt .
+RUN pip install -r requirements.txt
+
+COPY backend/ ./backend/
+COPY frontend/dist/ ./frontend/dist/
+
+CMD ["uvicorn", "backend.main:app", "--host", "0.0.0.0", "--port", "8001"]
+```
+
+## 🐛 调试指南
+
+### 后端调试
+```python
+# 启用调试模式
+import logging
+logging.basicConfig(level=logging.DEBUG)
+
+# FastAPI自动文档: http://localhost:8001/docs
+# 查看API交互和测试端点
+```
+
+### 前端调试
+```typescript
+// 使用React Developer Tools
+// Chrome控制台查看网络请求
+// Vite热重载和错误提示
+
+// WebSocket连接调试
+const ws = new WebSocket('ws://localhost:8001/ws');
+ws.onmessage = (event) => {
+  console.log('WebSocket message:', JSON.parse(event.data));
+};
+```
+
+## 📈 性能优化
+
+### 后端优化
+- 使用异步操作 (async/await)
+- 数据库连接池管理
+- Redis缓存热点数据
+- API响应压缩
+
+### 前端优化
+- React.memo() 避免不必要重渲染
+- useMemo() 缓存计算结果  
+- useCallback() 稳定函数引用
+- 虚拟滚动处理大量数据
+
+## 🔐 安全考虑
+
+- API密钥环境变量存储
+- SQL注入防护 (Pydantic验证)
+- CORS跨域配置
+- WebSocket连接认证
+- 输入数据验证和清理
+
+## ✅ 当前状态
+
+### 🎯 v1.1.0 完成功能
+- ✅ React前端架构完整实现
+- ✅ 表格式股票池管理界面
+- ✅ 标签和备注系统
+- ✅ WebSocket实时通信
+- ✅ 响应式UI设计
+- ✅ 一键启动系统 (`npm run dev`)
+- ✅ TypeScript类型安全
+- ✅ 自定义CSS样式系统
+
+### 🚀 启动方式
 ```bash
-# Browser automation testing (requires running web server)
-node test_browser.js
+# 一键启动前后端
+npm run dev
+
+# 访问地址
+# 前端: http://localhost:3000
+# 后端: http://localhost:8001
 ```
 
-## ✅ Current Status
+### 📋 主要组件
+- **StockPoolManager.tsx** - 股票池管理主界面 (表格视图)
+- **StockPoolForm.tsx** - 股票添加/编辑表单
+- **ChatInterface.tsx** - AI聊天界面
+- **useStockPool.ts** - 股票池数据管理Hook
+- **useWebSocket.ts** - WebSocket通信Hook
 
-### Completed Features
-1. **✅ Complete Web Server**: `backend/main.py` fully implemented with FastAPI + embedded frontend
-2. **✅ Fixed Start Script**: `scripts/start.sh` correctly launches the web application
-3. **✅ WebSocket Real-time**: Full duplex communication with connection management
-4. **✅ Stock Pool Management**: SQLite database with REST API endpoints
-5. **✅ Responsive Web UI**: Modern chat interface with mobile support
+### 🔄 数据库结构
+```sql
+CREATE TABLE stock_pool (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    stock_code TEXT NOT NULL,           -- 股票代码
+    stock_name TEXT NOT NULL,           -- 股票名称
+    pool_type TEXT NOT NULL,            -- holding|potential
+    tags TEXT DEFAULT '',               -- JSON格式标签
+    notes TEXT DEFAULT '',              -- 备注信息
+    created_at TEXT NOT NULL,           -- 创建时间
+    updated_at TEXT NOT NULL,           -- 更新时间
+    UNIQUE(stock_code, pool_type)
+);
+```
 
-### Environment Configuration
-- **Configuration Template**: `.env.template` with comprehensive setup guide
-- **Configuration Management**: `config/settings.py` with Pydantic validation
-- **Required Variables**: `API_KEY`, `AKSHARE_MCP_PATH`  
-- **Optional Variables**: `SERVER_HOST`, `SERVER_PORT`, `DEBUG`, `LOG_LEVEL`
-- **Configuration Validation**: Run `python3 config/settings.py` to validate setup
+---
 
-## 🔧 Development Guidelines
-
-### When Adding Features
-- **Web Features**: Extend `WebStockAnalysisBot` class in `backend/main.py`
-- **CLI Features**: Extend `StockAnalysisBot` class in `stock_bot.py`
-- **Database Features**: Add methods to `DatabaseManager` class in `database.py`
-- **Stock Mappings**: Update `stock_name_map` dictionary in both versions
-- **API Endpoints**: Add new FastAPI routes in `backend/main.py`
-- **Frontend**: Modify embedded HTML in the `get()` function
-
-### Testing Approach
-- **Manual Testing**: Interactive testing via web interface and CLI
-- **Automated Testing**: `test_browser.js` for web UI automation
-- **API Testing**: Use `/health` endpoint to verify service status
-- **MCP Testing**: Test connection independently before running bot
-- **Integration Testing**: Verify both CLI and Web versions work with same backend
-
-### Architecture Highlights
-- **Async Framework**: Full async/await pattern with FastAPI and AsyncIO
-- **WebSocket Management**: Connection pooling with automatic reconnection
-- **Embedded Frontend**: Single-file deployment with built-in HTML/CSS/JS
-- **Dual Interface**: Both CLI and Web versions share core business logic
-- **Database Integration**: SQLite with transaction support and error handling
-
-## 🎯 Development Roadmap
-
-### ✅ Phase 1: Core Web Architecture (Completed)
-1. ✅ Created `backend/main.py` FastAPI server with WebSocket support
-2. ✅ Implemented embedded HTML frontend with modern UI
-3. ✅ Fixed start script and deployment process
-4. ✅ Resolved environment configuration conflicts
-
-### 🚧 Phase 2: Feature Enhancement (Optional)
-1. Add real-time stock price updates in web interface
-2. Implement user authentication and session management
-3. Add stock portfolio performance analytics
-4. Create mobile app companion
-5. Add more technical indicators and chart visualization
-
-### 🔮 Phase 3: Advanced Features (Future)
-1. Multi-language support (English, Chinese)
-2. Integration with more data sources
-3. Advanced AI models for market prediction
-4. Social trading features and stock discussion
-
-## 📋 Quick Reference
-
-### Key Files and Their Roles
-- **`backend/main.py`** - FastAPI web application with frontend file serving
-- **`frontend/`** - Separated frontend files (HTML/CSS/JS)
-- **`stock_bot.py`** - CLI version with identical AI functionality  
-- **`backend/database.py`** - Database layer with comprehensive stock pool management
-- **`config/settings.py`** - Configuration management with Pydantic validation
-- **`.env.template`** - Comprehensive configuration template
-
-### Important Code Locations
-- **WebSocket Handler**: `backend/main.py:332-354`
-- **AI Query Processing**: `backend/main.py:90-208` (Web) / `stock_bot.py:82-208` (CLI)
-- **Stock Name Mapping**: `backend/main.py:32-41` / `stock_bot.py:28-41`
-- **Database Models**: `backend/database.py:8-18`
-- **API Endpoints**: `backend/main.py:356-368`
-
-### Code Quality Features
-- ✅ Full async/await implementation
-- ✅ Comprehensive error handling and user-friendly messages
-- ✅ Type hints with Pydantic models
-- ✅ Transaction-safe database operations
-- ✅ WebSocket connection management with auto-reconnect
-- ✅ Responsive design with mobile support
-
-### Current Production Status
-**🟢 READY FOR PRODUCTION**
-- Web application fully functional at http://localhost:8001
-- CLI version available for development/testing
-- Database properly initialized and integrated
-- All dependencies resolved and tested
+**更新时间**: 2025-09-01  
+**版本**: v1.1.0  
+**维护者**: Claude AI Assistant

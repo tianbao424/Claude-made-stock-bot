@@ -1,0 +1,24 @@
+{
+  "name": "claude-made-stock-bot",
+  "version": "1.0.0",
+  "description": "基于**FastAPI + WebSocket**的现代化股票分析聊天机器人，集成**Qwen-Coder AI**和**AkShare数据源**，提供实时股票分析、技术指标计算和财务数据查询。支持**CLI命令行**和**Web浏览器**双重使用方式。",
+  "main": "test_browser.js",
+  "directories": {
+    "doc": "docs",
+    "test": "tests"
+  },
+  "scripts": {
+    "dev": "concurrently --names \"BACKEND,FRONTEND\" --prefix-colors \"blue,green\" \"npm run backend\" \"npm run frontend\"",
+    "backend": "python3 backend/main.py",
+    "frontend": "cd frontend && npm run dev",
+    "install": "npm install && cd frontend && npm install",
+    "build": "cd frontend && npm run build"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "devDependencies": {
+    "concurrently": "^9.2.1",
+    "npm-run-all": "^4.1.5"
+  }
+}

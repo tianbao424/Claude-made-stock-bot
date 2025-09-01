@@ -1,7 +1,7 @@
 import os
 import json
 import asyncio
-from typing import Dict, List, Optional
+from typing import Dict, List, Optional, Any
 from datetime import datetime
 from contextlib import AsyncExitStack
 
@@ -212,13 +212,24 @@ class ConnectionManager:
         for connection in self.active_connections:
             await connection.send_text(message)
 
-class StockPoolAPI(BaseModel):
+class StockPoolCreateRequest(BaseModel):
     stock_code: str = Field(..., description="股票代码")
     stock_name: str = Field(..., description="股票名称")
     pool_type: str = Field(..., description="池类型", pattern="^(holding|potential)$")
-    shares: int = Field(0, description="持股数量")
-    avg_cost: float = Field(0.0, description="平均成本")
-    notes: str = Field("", description="备注")
+    tags: Optional[List[str]] = Field(None, description="标签")
+    notes: Optional[str] = Field(None, description="备注")
+
+class StockPoolUpdateRequest(BaseModel):
+    stock_code: Optional[str] = Field(None, description="股票代码")
+    stock_name: Optional[str] = Field(None, description="股票名称")
+    pool_type: Optional[str] = Field(None, description="池类型", pattern="^(holding|potential)$")
+    tags: Optional[List[str]] = Field(None, description="标签")
+    notes: Optional[str] = Field(None, description="备注")
+
+class ApiResponse(BaseModel):
+    success: bool
+    data: Optional[Any] = None
+    message: Optional[str] = None
 
 bot = WebStockAnalysisBot()
 manager = ConnectionManager()
@@ -276,29 +287,178 @@ async def websocket_endpoint(websocket: WebSocket):
     except WebSocketDisconnect:
         manager.disconnect(websocket)
 
-@app.get("/api/stocks")
-async def get_stocks(pool_type: Optional[str] = None):
+# 股票池管理API
+@app.get("/api/stock-pools")
+async def get_stock_pools(pool_type: Optional[str] = None):
+    """获取股票池列表"""
     try:
         stocks = bot.db_manager.get_stocks(pool_type)
-        return {"stocks": [stock.__dict__ for stock in stocks]}
+        stock_dicts = []
+        for stock in stocks:
+            stock_dict = {
+                "id": stock.id,
+                "stock_code": stock.stock_code,
+                "stock_name": stock.stock_name,
+                "pool_type": stock.pool_type,
+                "tags": stock.tags,
+                "notes": stock.notes,
+                "created_at": stock.created_at,
+                "updated_at": stock.updated_at
+            }
+            stock_dicts.append(stock_dict)
+        
+        return ApiResponse(success=True, data=stock_dicts)
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
-@app.post("/api/stocks")
-async def add_stock(stock_data: StockPoolAPI):
+@app.get("/api/stock-pools/{stock_id}")
+async def get_stock_pool_by_id(stock_id: int):
+    """根据ID获取股票池"""
+    try:
+        stock = bot.db_manager.get_stock_by_id(stock_id)
+        if not stock:
+            raise HTTPException(status_code=404, detail="股票不存在")
+        
+        stock_dict = {
+            "id": stock.id,
+            "stock_code": stock.stock_code,
+            "stock_name": stock.stock_name,
+            "pool_type": stock.pool_type,
+            "tags": stock.tags,
+            "notes": stock.notes,
+            "created_at": stock.created_at,
+            "updated_at": stock.updated_at
+        }
+        
+        return ApiResponse(success=True, data=stock_dict)
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.post("/api/stock-pools")
+async def create_stock_pool(stock_data: StockPoolCreateRequest):
+    """创建股票池"""
     try:
         stock = StockPool(
             stock_code=stock_data.stock_code,
             stock_name=stock_data.stock_name,
             pool_type=stock_data.pool_type,
-            shares=stock_data.shares,
-            avg_cost=stock_data.avg_cost,
-            notes=stock_data.notes
+            tags=stock_data.tags,
+            notes=stock_data.notes or ""
         )
         stock_id = bot.db_manager.add_stock(stock)
-        return {"message": "股票添加成功", "stock_id": stock_id}
-    except Exception as e:
+        
+        # 返回创建的股票信息
+        created_stock = bot.db_manager.get_stock_by_id(stock_id)
+        stock_dict = {
+            "id": created_stock.id,
+            "stock_code": created_stock.stock_code,
+            "stock_name": created_stock.stock_name,
+            "pool_type": created_stock.pool_type,
+            "tags": created_stock.tags,
+            "notes": created_stock.notes,
+            "created_at": created_stock.created_at,
+            "updated_at": created_stock.updated_at
+        }
+        
+        return ApiResponse(success=True, data=stock_dict, message="股票添加成功")
+    except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.put("/api/stock-pools/{stock_id}")
+async def update_stock_pool(stock_id: int, stock_data: StockPoolUpdateRequest):
+    """更新股票池"""
+    try:
+        # 检查股票是否存在
+        existing_stock = bot.db_manager.get_stock_by_id(stock_id)
+        if not existing_stock:
+            raise HTTPException(status_code=404, detail="股票不存在")
+        
+        # 准备更新数据
+        updates = {}
+        if stock_data.stock_code is not None:
+            updates["stock_code"] = stock_data.stock_code
+        if stock_data.stock_name is not None:
+            updates["stock_name"] = stock_data.stock_name
+        if stock_data.pool_type is not None:
+            updates["pool_type"] = stock_data.pool_type
+        if stock_data.tags is not None:
+            updates["tags"] = stock_data.tags
+        if stock_data.notes is not None:
+            updates["notes"] = stock_data.notes
+        
+        # 更新股票
+        success = bot.db_manager.update_stock(stock_id, updates)
+        if not success:
+            raise HTTPException(status_code=400, detail="更新失败")
+        
+        # 返回更新后的股票信息
+        updated_stock = bot.db_manager.get_stock_by_id(stock_id)
+        stock_dict = {
+            "id": updated_stock.id,
+            "stock_code": updated_stock.stock_code,
+            "stock_name": updated_stock.stock_name,
+            "pool_type": updated_stock.pool_type,
+            "tags": updated_stock.tags,
+            "notes": updated_stock.notes,
+            "created_at": updated_stock.created_at,
+            "updated_at": updated_stock.updated_at
+        }
+        
+        return ApiResponse(success=True, data=stock_dict, message="股票更新成功")
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.delete("/api/stock-pools/{stock_id}")
+async def delete_stock_pool(stock_id: int):
+    """删除股票池"""
+    try:
+        # 检查股票是否存在
+        existing_stock = bot.db_manager.get_stock_by_id(stock_id)
+        if not existing_stock:
+            raise HTTPException(status_code=404, detail="股票不存在")
+        
+        # 删除股票
+        success = bot.db_manager.delete_stock(stock_id)
+        if not success:
+            raise HTTPException(status_code=400, detail="删除失败")
+        
+        return ApiResponse(success=True, message="股票删除成功")
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.get("/api/stock-pools/type/{pool_type}")
+async def get_stock_pools_by_type(pool_type: str):
+    """根据类型获取股票池"""
+    if pool_type not in ["holding", "potential"]:
+        raise HTTPException(status_code=400, detail="无效的股票池类型")
+    
+    try:
+        stocks = bot.db_manager.get_stocks(pool_type)
+        stock_dicts = []
+        for stock in stocks:
+            stock_dict = {
+                "id": stock.id,
+                "stock_code": stock.stock_code,
+                "stock_name": stock.stock_name,
+                "pool_type": stock.pool_type,
+                "tags": stock.tags,
+                "notes": stock.notes,
+                "created_at": stock.created_at,
+                "updated_at": stock.updated_at
+            }
+            stock_dicts.append(stock_dict)
+        
+        return ApiResponse(success=True, data=stock_dicts)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
 
 @app.get("/health")
 async def health_check():

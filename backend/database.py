@@ -13,6 +13,7 @@ class StockPool:
     shares: int = 0
     avg_cost: float = 0.0
     notes: str = ""
+    tags: Optional[List[str]] = None
     created_at: str = ""
     updated_at: str = ""
     id: Optional[int] = None
@@ -37,6 +38,7 @@ class DatabaseManager:
                     shares INTEGER DEFAULT 0,
                     avg_cost REAL DEFAULT 0.0,
                     notes TEXT DEFAULT '',
+                    tags TEXT DEFAULT '',
                     created_at TEXT NOT NULL,
                     updated_at TEXT NOT NULL,
                     UNIQUE(stock_code, pool_type)
@@ -56,13 +58,16 @@ class DatabaseManager:
                 stock.created_at = now
                 stock.updated_at = now
                 
+                # 序列化标签为JSON字符串
+                tags_json = json.dumps(stock.tags) if stock.tags else ""
+                
                 cursor.execute('''
                     INSERT INTO stock_pool 
-                    (stock_code, stock_name, pool_type, shares, avg_cost, notes, created_at, updated_at)
-                    VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                    (stock_code, stock_name, pool_type, shares, avg_cost, notes, tags, created_at, updated_at)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
                 ''', (
                     stock.stock_code, stock.stock_name, stock.pool_type,
-                    stock.shares, stock.avg_cost, stock.notes,
+                    stock.shares, stock.avg_cost, stock.notes, tags_json,
                     stock.created_at, stock.updated_at
                 ))
                 
@@ -84,7 +89,7 @@ class DatabaseManager:
                 if pool_type:
                     cursor.execute('''
                         SELECT id, stock_code, stock_name, pool_type, shares, avg_cost, 
-                               notes, created_at, updated_at
+                               notes, tags, created_at, updated_at
                         FROM stock_pool 
                         WHERE pool_type = ?
                         ORDER BY updated_at DESC
@@ -92,7 +97,7 @@ class DatabaseManager:
                 else:
                     cursor.execute('''
                         SELECT id, stock_code, stock_name, pool_type, shares, avg_cost,
-                               notes, created_at, updated_at
+                               notes, tags, created_at, updated_at
                         FROM stock_pool 
                         ORDER BY pool_type, updated_at DESC
                     ''')
@@ -101,6 +106,9 @@ class DatabaseManager:
                 
                 stocks = []
                 for row in rows:
+                    # 反序列化标签
+                    tags = json.loads(row[7]) if row[7] else None
+                    
                     stock = StockPool(
                         id=row[0],
                         stock_code=row[1],
@@ -109,8 +117,9 @@ class DatabaseManager:
                         shares=row[4],
                         avg_cost=row[5],
                         notes=row[6],
-                        created_at=row[7],
-                        updated_at=row[8]
+                        tags=tags,
+                        created_at=row[8],
+                        updated_at=row[9]
                     )
                     stocks.append(stock)
                 
@@ -129,9 +138,12 @@ class DatabaseManager:
                 update_fields = []
                 values = []
                 
-                allowed_fields = ['stock_name', 'shares', 'avg_cost', 'notes', 'pool_type']
+                allowed_fields = ['stock_name', 'shares', 'avg_cost', 'notes', 'pool_type', 'tags']
                 for field, value in updates.items():
                     if field in allowed_fields:
+                        if field == 'tags':
+                            # 序列化标签
+                            value = json.dumps(value) if value else ""
                         update_fields.append(f"{field} = ?")
                         values.append(value)
                 
@@ -177,13 +189,16 @@ class DatabaseManager:
                 
                 cursor.execute('''
                     SELECT id, stock_code, stock_name, pool_type, shares, avg_cost,
-                           notes, created_at, updated_at
+                           notes, tags, created_at, updated_at
                     FROM stock_pool 
                     WHERE id = ?
                 ''', (stock_id,))
                 
                 row = cursor.fetchone()
                 if row:
+                    # 反序列化标签
+                    tags = json.loads(row[7]) if row[7] else None
+                    
                     return StockPool(
                         id=row[0],
                         stock_code=row[1],
@@ -192,8 +207,9 @@ class DatabaseManager:
                         shares=row[4],
                         avg_cost=row[5],
                         notes=row[6],
-                        created_at=row[7],
-                        updated_at=row[8]
+                        tags=tags,
+                        created_at=row[8],
+                        updated_at=row[9]
                     )
                 return None
                 
