@@ -1,0 +1,37 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>🤖 AI股票聊天助手</title>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <link rel="stylesheet" href="static/css/style.css">
+</head>
+<body>
+    <div class="header">
+        <h1>🤖 AI股票聊天助手</h1>
+        <p>专业股票分析 · 实时数据查询 · 智能建议</p>
+    </div>
+    
+    <div id="status" class="status disconnected">未连接</div>
+    
+    <div class="container">
+        <div class="chat-area">
+            <div id="messages">
+                <div class="message bot">
+                    👋 欢迎使用AI股票聊天助手！<br>
+                    💡 您可以询问：<br>
+                    • "茅台现在多少钱" - 实时行情<br>
+                    • "分析一下比亚迪最近走势" - 技术分析<br>
+                    • "宁德时代财务怎么样" - 基本面分析
+                </div>
+            </div>
+            <div class="input-area">
+                <input type="text" id="messageInput" placeholder="输入您的股票问题..." />
+                <button id="sendButton" onclick="sendMessage()">发送</button>
+            </div>
+        </div>
+    </div>
+
+    <script src="static/js/script.js"></script>
+</body>
+</html>
