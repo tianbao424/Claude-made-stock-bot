@@ -15,15 +15,21 @@ from mcp import ClientSession, StdioServerParameters
 from mcp.client.stdio import stdio_client
 from openai import OpenAI
 from dotenv import load_dotenv
+import logging
 
-from database import DatabaseManager, StockPool
+from database import DatabaseManager, StockPool, StockInfo
+from services.stock_data import stock_data_service
+from services.akshare_service import akshare_service
 
 load_dotenv()
+
+# 配置日志
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
 
 app = FastAPI(title="AI股票聊天助手", version="1.0.0")
 
 # 挂载静态文件服务
-import os
 frontend_static_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), "frontend", "static")
 if os.path.exists(frontend_static_path):
     app.mount("/static", StaticFiles(directory=frontend_static_path), name="static")
@@ -46,12 +52,14 @@ class WebStockAnalysisBot:
             "美团": "03690", "小米": "01810"
         }
         
-        self.db_manager = DatabaseManager()
+        # 使用统一的数据库路径
+        self.db_manager = DatabaseManager(os.path.join(os.path.dirname(__file__), "stock_pool.db"))
 
     async def connect_to_server(self) -> bool:
         try:
+            python_path = os.getenv("MCP_PYTHON_PATH", "python3")
             server_params = StdioServerParameters(
-                command="/Users/quxiaomeng/.venvs/akmcp312/bin/python3",
+                command=python_path,
                 args=["-m", "akshare_one_mcp"],
                 env=None
             )
@@ -67,12 +75,12 @@ class WebStockAnalysisBot:
 
             await self.session.initialize()
             response = await self.session.list_tools()
-            print(f"🔗 已连接到akshare MCP服务器")
-            print(f"📊 可用工具: {', '.join([tool.name for tool in response.tools])}")
+            logger.info("🔗 已连接到akshare MCP服务器")
+            logger.info(f"📊 可用工具: {', '.join([tool.name for tool in response.tools])}")
             return True
             
         except Exception as e:
-            print(f"❌ 连接MCP服务器失败: {e}")
+            logger.error(f"❌ 连接MCP服务器失败: {e}")
             return False
 
     def normalize_stock_input(self, user_input: str) -> str:
@@ -231,17 +239,65 @@ class ApiResponse(BaseModel):
     data: Optional[Any] = None
     message: Optional[str] = None
 
+class StockInfoResponse(BaseModel):
+    symbol: str = Field(description="股票代码")
+    name: str = Field(description="股票名称")
+    short_name: str = Field(description="股票简称")
+    market: str = Field(description="所属市场")
+    industry: str = Field(description="所属行业")
+    sector: str = Field(default="", description="板块分类")
+    market_cap: float = Field(default=0.0, description="市值")
+    pe_ratio: float = Field(default=0.0, description="市盈率")
+    pb_ratio: float = Field(default=0.0, description="市净率")
+    dividend_yield: float = Field(default=0.0, description="股息率")
+    listing_date: str = Field(default="", description="上市日期")
+    is_active: bool = Field(default=True, description="是否活跃")
+
+class StockSearchRequest(BaseModel):
+    query: str = Field(description="搜索关键词")
+    limit: Optional[int] = Field(20, description="返回结果数量限制")
+
+def stock_pool_to_dict(stock: 'StockPool') -> Dict:
+    """将StockPool对象转换为字典"""
+    return {
+        "id": stock.id,
+        "stock_code": stock.stock_code,
+        "stock_name": stock.stock_name,
+        "pool_type": stock.pool_type,
+        "tags": stock.tags,
+        "notes": stock.notes,
+        "created_at": stock.created_at,
+        "updated_at": stock.updated_at
+    }
+
+def stock_info_to_dict(stock: 'StockInfo') -> Dict:
+    """将StockInfo对象转换为字典"""
+    return {
+        "symbol": stock.symbol,
+        "name": stock.name,
+        "short_name": stock.short_name,
+        "market": stock.market,
+        "industry": stock.industry,
+        "sector": stock.sector,
+        "market_cap": stock.market_cap,
+        "pe_ratio": stock.pe_ratio,
+        "pb_ratio": stock.pb_ratio,
+        "dividend_yield": stock.dividend_yield,
+        "listing_date": stock.listing_date,
+        "is_active": stock.is_active
+    }
+
 bot = WebStockAnalysisBot()
 manager = ConnectionManager()
 
 @app.on_event("startup")
 async def startup_event():
-    print("🚀 启动AI股票聊天助手...")
+    logger.info("🚀 启动AI股票聊天助手...")
     success = await bot.connect_to_server()
     if success:
-        print("✅ Stock bot initialized successfully")
+        logger.info("✅ Stock bot initialized successfully")
     else:
-        print("❌ Failed to connect to MCP server")
+        logger.error("❌ Failed to connect to MCP server")
 
 @app.on_event("shutdown")
 async def shutdown_event():
@@ -293,19 +349,7 @@ async def get_stock_pools(pool_type: Optional[str] = None):
     """获取股票池列表"""
     try:
         stocks = bot.db_manager.get_stocks(pool_type)
-        stock_dicts = []
-        for stock in stocks:
-            stock_dict = {
-                "id": stock.id,
-                "stock_code": stock.stock_code,
-                "stock_name": stock.stock_name,
-                "pool_type": stock.pool_type,
-                "tags": stock.tags,
-                "notes": stock.notes,
-                "created_at": stock.created_at,
-                "updated_at": stock.updated_at
-            }
-            stock_dicts.append(stock_dict)
+        stock_dicts = [stock_pool_to_dict(stock) for stock in stocks]
         
         return ApiResponse(success=True, data=stock_dicts)
     except Exception as e:
@@ -331,6 +375,114 @@ async def get_stock_pool_by_id(stock_id: int):
         }
         
         return ApiResponse(success=True, data=stock_dict)
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.get("/api/stocks/search")
+async def search_stocks(query: str, limit: int = 20):
+    """智能搜索股票"""
+    try:
+        if not query.strip():
+            return ApiResponse(success=False, message="搜索关键词不能为空")
+        
+        # 使用已有的数据库管理器
+        results = bot.db_manager.search_stocks(query.strip(), limit)
+        
+        # 转换为响应格式
+        stock_list = []
+        for stock in results:
+            stock_dict = {
+                "symbol": stock.symbol,
+                "name": stock.name,
+                "short_name": stock.short_name,
+                "market": stock.market,
+                "industry": stock.industry,
+                "sector": stock.sector,
+                "market_cap": stock.market_cap,
+                "pe_ratio": stock.pe_ratio,
+                "pb_ratio": stock.pb_ratio,
+                "dividend_yield": stock.dividend_yield,
+                "listing_date": stock.listing_date,
+                "is_active": stock.is_active
+            }
+            stock_list.append(stock_dict)
+        
+        return ApiResponse(
+            success=True, 
+            data=stock_list, 
+            message=f"找到 {len(stock_list)} 条结果"
+        )
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.get("/api/stocks/info/{symbol}")
+async def get_stock_info(symbol: str):
+    """根据代码获取股票详细信息"""
+    try:
+        stock = bot.db_manager.get_stock_info_by_symbol(symbol)
+        if not stock:
+            raise HTTPException(status_code=404, detail="股票不存在")
+        
+        stock_dict = {
+            "symbol": stock.symbol,
+            "name": stock.name,
+            "short_name": stock.short_name,
+            "market": stock.market,
+            "industry": stock.industry,
+            "sector": stock.sector,
+            "market_cap": stock.market_cap,
+            "pe_ratio": stock.pe_ratio,
+            "pb_ratio": stock.pb_ratio,
+            "dividend_yield": stock.dividend_yield,
+            "listing_date": stock.listing_date,
+            "is_active": stock.is_active,
+            "created_at": stock.created_at,
+            "updated_at": stock.updated_at
+        }
+        
+        return ApiResponse(success=True, data=stock_dict)
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.get("/api/stocks/stats")
+async def get_stock_stats():
+    """获取股票数据统计信息"""
+    try:
+        count = bot.db_manager.get_stock_info_count()
+        return ApiResponse(
+            success=True, 
+            data={"total_stocks": count}, 
+            message=f"数据库中共有 {count} 只股票"
+        )
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.get("/api/stocks/realtime/{symbol}")
+async def get_stock_realtime(symbol: str):
+    """获取股票实时行情数据"""
+    try:
+        # 从数据库获取股票基本信息以确定市场
+        stock_info = bot.db_manager.get_stock_info_by_symbol(symbol)
+        
+        if not stock_info:
+            raise HTTPException(status_code=404, detail="股票不存在")
+        
+        # 根据市场类型获取实时数据
+        market = "HK" if stock_info.market == "HK" else "A"
+        realtime_data = await akshare_service.get_stock_realtime_data(symbol, market)
+        
+        if not realtime_data:
+            raise HTTPException(status_code=500, detail="获取实时数据失败")
+        
+        return ApiResponse(
+            success=True, 
+            data=realtime_data,
+            message="实时数据获取成功"
+        )
     except HTTPException:
         raise
     except Exception as e:

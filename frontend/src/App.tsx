@@ -1,10 +1,11 @@
 import React, { useState } from 'react';
-import { BarChart3, MessageSquare, Settings, Menu, X } from 'lucide-react';
+import { BarChart3, MessageSquare, Settings, Menu, X, Database } from 'lucide-react';
 import StockPoolManager from './components/StockPoolManager';
 import ChatInterface from './components/ChatInterface';
+import StockInfoManager from './components/StockInfoManager';
 import './App.css';
 
-type TabType = 'chat' | 'pool' | 'settings';
+type TabType = 'chat' | 'pool' | 'stockinfo' | 'settings';
 
 const App: React.FC = () => {
   const [activeTab, setActiveTab] = useState<TabType>('chat');
@@ -22,6 +23,12 @@ const App: React.FC = () => {
       name: '股票池',
       icon: BarChart3,
       component: <StockPoolManager />,
+    },
+    {
+      id: 'stockinfo' as TabType,
+      name: '股票信息',
+      icon: Database,
+      component: <StockInfoManager />,
     },
     {
       id: 'settings' as TabType,
@@ -62,7 +69,7 @@ const App: React.FC = () => {
               </div>
               <div>
                 <h1 className="text-lg font-bold text-gray-900">股票助手</h1>
-                <p className="text-sm text-gray-500">v1.1.0</p>
+                <p className="text-sm text-gray-500">v2.0.0</p>
               </div>
             </div>
             

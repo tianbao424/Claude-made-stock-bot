@@ -1,7 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { Send, MessageCircle, Loader } from 'lucide-react';
 import { useWebSocket } from '../hooks/useWebSocket';
-import { ChatMessage } from '../types';
 
 const ChatInterface: React.FC = () => {
   const [inputValue, setInputValue] = useState('');

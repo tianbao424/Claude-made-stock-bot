@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { X, Plus, Minus, Tag, FileText } from 'lucide-react';
 import { StockPool } from '../types';
+import { StockSearch, StockInfo } from './StockSearch';
 
 interface StockPoolFormProps {
   stock?: StockPool | null;
@@ -18,6 +19,7 @@ const StockPoolForm: React.FC<StockPoolFormProps> = ({ stock, onSubmit, onCancel
   });
 
   const [errors, setErrors] = useState<Record<string, string>>({});
+  const [isSearchMode, setIsSearchMode] = useState(true);
 
   useEffect(() => {
     if (stock) {
@@ -30,6 +32,22 @@ const StockPoolForm: React.FC<StockPoolFormProps> = ({ stock, onSubmit, onCancel
       });
     }
   }, [stock]);
+
+  const handleStockSelect = (selectedStock: StockInfo) => {
+    setFormData(prev => ({
+      ...prev,
+      stock_code: selectedStock.symbol,
+      stock_name: selectedStock.name,
+    }));
+    setIsSearchMode(false);
+    
+    // 清除相关错误
+    setErrors(prev => ({
+      ...prev,
+      stock_code: '',
+      stock_name: ''
+    }));
+  };
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) => {
     const { name, value } = e.target;
@@ -127,46 +145,80 @@ const StockPoolForm: React.FC<StockPoolFormProps> = ({ stock, onSubmit, onCancel
 
         {/* 表单内容 */}
         <form onSubmit={handleSubmit} className="p-6">
-          {/* 股票代码 */}
+          {/* 股票搜索/手动输入 */}
           <div className="mb-4">
-            <label htmlFor="stock_code" className="block text-sm font-medium text-gray-700 mb-1">
-              股票代码 *
-            </label>
-            <input
-              type="text"
-              id="stock_code"
-              name="stock_code"
-              value={formData.stock_code}
-              onChange={handleInputChange}
-              placeholder="例：000001"
-              className={`w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent ${
-                errors.stock_code ? 'border-red-500' : 'border-gray-300'
-              }`}
-              maxLength={6}
-            />
-            {errors.stock_code && (
-              <p className="mt-1 text-sm text-red-600">{errors.stock_code}</p>
+            <div className="flex items-center justify-between mb-2">
+              <label className="block text-sm font-medium text-gray-700">
+                股票信息 *
+              </label>
+              <button
+                type="button"
+                onClick={() => setIsSearchMode(!isSearchMode)}
+                className="text-xs text-blue-600 hover:text-blue-800 transition-colors"
+              >
+                {isSearchMode ? '手动输入' : '智能搜索'}
+              </button>
+            </div>
+            
+            {isSearchMode ? (
+              <StockSearch
+                onSelect={handleStockSelect}
+                placeholder="搜索股票代码或名称..."
+                autoFocus={!stock}
+              />
+            ) : (
+              <div className="space-y-3">
+                <div>
+                  <input
+                    type="text"
+                    id="stock_code"
+                    name="stock_code"
+                    value={formData.stock_code}
+                    onChange={handleInputChange}
+                    placeholder="股票代码，例：000001"
+                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  />
+                  {errors.stock_code && (
+                    <p className="text-red-500 text-xs mt-1">{errors.stock_code}</p>
+                  )}
+                </div>
+                <div>
+                  <input
+                    type="text"
+                    id="stock_name"
+                    name="stock_name"
+                    value={formData.stock_name}
+                    onChange={handleInputChange}
+                    placeholder="股票名称，例：平安银行"
+                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  />
+                  {errors.stock_name && (
+                    <p className="text-red-500 text-xs mt-1">{errors.stock_name}</p>
+                  )}
+                </div>
+              </div>
             )}
-          </div>
-
-          {/* 股票名称 */}
-          <div className="mb-4">
-            <label htmlFor="stock_name" className="block text-sm font-medium text-gray-700 mb-1">
-              股票名称 *
-            </label>
-            <input
-              type="text"
-              id="stock_name"
-              name="stock_name"
-              value={formData.stock_name}
-              onChange={handleInputChange}
-              placeholder="例：平安银行"
-              className={`w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent ${
-                errors.stock_name ? 'border-red-500' : 'border-gray-300'
-              }`}
-            />
-            {errors.stock_name && (
-              <p className="mt-1 text-sm text-red-600">{errors.stock_name}</p>
+            
+            {/* 显示已选择的股票信息 */}
+            {formData.stock_code && formData.stock_name && (
+              <div className="mt-3 p-3 bg-gray-50 rounded-md">
+                <div className="flex items-center gap-2">
+                  <span className="font-mono font-semibold text-blue-600">
+                    {formData.stock_code}
+                  </span>
+                  <span className="text-gray-600">{formData.stock_name}</span>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setFormData(prev => ({ ...prev, stock_code: '', stock_name: '' }));
+                      setIsSearchMode(true);
+                    }}
+                    className="ml-auto text-gray-400 hover:text-gray-600"
+                  >
+                    <X className="w-4 h-4" />
+                  </button>
+                </div>
+              </div>
             )}
           </div>
 
