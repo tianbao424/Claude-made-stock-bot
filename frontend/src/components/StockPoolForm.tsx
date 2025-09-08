@@ -30,6 +30,8 @@ const StockPoolForm: React.FC<StockPoolFormProps> = ({ stock, onSubmit, onCancel
         tags: stock.tags || [''],
         notes: stock.notes || '',
       });
+      // 编辑模式下默认使用手动输入模式
+      setIsSearchMode(false);
     }
   }, [stock]);
 
@@ -96,8 +98,8 @@ const StockPoolForm: React.FC<StockPoolFormProps> = ({ stock, onSubmit, onCancel
 
     if (!formData.stock_code.trim()) {
       newErrors.stock_code = '股票代码不能为空';
-    } else if (!/^[0-9A-Za-z]{6}$/.test(formData.stock_code.trim())) {
-      newErrors.stock_code = '股票代码格式不正确（应为6位数字或字母）';
+    } else if (!/^[0-9A-Za-z]{4,8}$/.test(formData.stock_code.trim())) {
+      newErrors.stock_code = '股票代码格式不正确（应为4-8位数字或字母）';
     }
 
     if (!formData.stock_name.trim()) {

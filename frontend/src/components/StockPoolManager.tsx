@@ -20,6 +20,10 @@ const StockPoolManager: React.FC = () => {
   const [selectedType, setSelectedType] = useState<'all' | 'holding' | 'potential'>('all');
   const [showForm, setShowForm] = useState(false);
   const [editingStock, setEditingStock] = useState<StockPool | null>(null);
+  
+  // 分页状态
+  const [currentPage, setCurrentPage] = useState(1);
+  const [itemsPerPage] = useState(5);
 
   // 筛选股票池
   const filteredStocks = React.useMemo(() => {
@@ -31,6 +35,16 @@ const StockPoolManager: React.FC = () => {
     
     return filtered;
   }, [stockPools, searchTerm, selectedType, searchStockPools]);
+
+  // 分页计算
+  const totalPages = Math.ceil(filteredStocks.length / itemsPerPage);
+  const startIndex = (currentPage - 1) * itemsPerPage;
+  const paginatedStocks = filteredStocks.slice(startIndex, startIndex + itemsPerPage);
+
+  // 重置页码当筛选条件改变时
+  React.useEffect(() => {
+    setCurrentPage(1);
+  }, [searchTerm, selectedType]);
 
   const handleCreateStock = async (stockData: Omit<StockPool, 'id' | 'created_at' | 'updated_at'>) => {
     try {
@@ -151,6 +165,15 @@ const StockPoolManager: React.FC = () => {
         </div>
       ) : filteredStocks.length > 0 ? (
         <div className="bg-white rounded-lg shadow-sm border overflow-hidden">
+          {/* 分页信息 */}
+          <div className="px-6 py-3 bg-gray-50 border-b text-sm text-gray-600 flex items-center justify-between">
+            <span>共 {filteredStocks.length} 只股票</span>
+            {totalPages > 1 && (
+              <span>第 {currentPage} 页，共 {totalPages} 页</span>
+            )}
+          </div>
+          
+          {/* 表格 */}
           <div className="overflow-x-auto">
             <table className="w-full">
               <thead className="bg-gray-50">
@@ -162,13 +185,13 @@ const StockPoolManager: React.FC = () => {
                     类型
                   </th>
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    持仓信息
+                  </th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                     标签
                   </th>
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                     备注
-                  </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    添加时间
                   </th>
                   <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
                     操作
@@ -176,7 +199,7 @@ const StockPoolManager: React.FC = () => {
                 </tr>
               </thead>
               <tbody className="bg-white divide-y divide-gray-200">
-                {filteredStocks.map((stock) => (
+                {paginatedStocks.map((stock) => (
                   <tr key={stock.id} className="hover:bg-gray-50 transition-colors">
                     <td className="px-6 py-4 whitespace-nowrap">
                       <div className="flex items-center">
@@ -194,6 +217,20 @@ const StockPoolManager: React.FC = () => {
                       }`}>
                         {stock.pool_type === 'holding' ? '持仓' : '关注'}
                       </span>
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap">
+                      {stock.pool_type === 'holding' ? (
+                        <div className="text-sm">
+                          <div className="text-gray-900">股数: {stock.shares || 0}</div>
+                          <div className="text-gray-500">成本: ¥{(stock.avg_cost || 0).toFixed(2)}</div>
+                          <div className="text-gray-500">现价: ¥{(stock.current_price || 0).toFixed(2)}</div>
+                          <div className={`font-medium ${(stock.market_value || 0) >= (stock.shares || 0) * (stock.avg_cost || 0) ? 'text-green-600' : 'text-red-600'}`}>
+                            市值: ¥{(stock.market_value || 0).toFixed(2)}
+                          </div>
+                        </div>
+                      ) : (
+                        <span className="text-xs text-gray-400">-</span>
+                      )}
                     </td>
                     <td className="px-6 py-4">
                       <div className="flex flex-wrap gap-1">
@@ -220,9 +257,6 @@ const StockPoolManager: React.FC = () => {
                         )}
                       </div>
                     </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                      {stock.created_at ? new Date(stock.created_at).toLocaleDateString('zh-CN') : '-'}
-                    </td>
                     <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
                       <div className="flex items-center justify-end gap-2">
                         <button
@@ -246,6 +280,34 @@ const StockPoolManager: React.FC = () => {
               </tbody>
             </table>
           </div>
+
+          {/* 分页控件 */}
+          {totalPages > 1 && (
+            <div className="px-6 py-4 border-t bg-gray-50 flex items-center justify-between">
+              <div className="text-sm text-gray-700">
+                显示第 {startIndex + 1}-{Math.min(startIndex + itemsPerPage, filteredStocks.length)} 项，共 {filteredStocks.length} 项
+              </div>
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={() => setCurrentPage(prev => Math.max(1, prev - 1))}
+                  disabled={currentPage === 1}
+                  className="px-3 py-2 text-sm border border-gray-300 rounded-lg disabled:opacity-50 disabled:cursor-not-allowed hover:bg-gray-100 transition-colors"
+                >
+                  上一页
+                </button>
+                <span className="text-sm text-gray-600">
+                  {currentPage} / {totalPages}
+                </span>
+                <button
+                  onClick={() => setCurrentPage(prev => Math.min(totalPages, prev + 1))}
+                  disabled={currentPage === totalPages}
+                  className="px-3 py-2 text-sm border border-gray-300 rounded-lg disabled:opacity-50 disabled:cursor-not-allowed hover:bg-gray-100 transition-colors"
+                >
+                  下一页
+                </button>
+              </div>
+            </div>
+          )}
         </div>
       ) : (
         <div className="text-center py-12">

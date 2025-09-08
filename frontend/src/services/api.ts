@@ -61,6 +61,34 @@ export const stockPoolAPI = {
   },
 };
 
+// 添加股票到股票池的接口
+export interface AddToPoolRequest {
+  pool_type: 'holding' | 'potential';
+  tags?: string[];
+  notes?: string;
+  shares?: number;
+  avg_cost?: number;
+}
+
+export const addStockToPool = async (symbol: string, request: AddToPoolRequest): Promise<{success: boolean, message: string, data?: StockPool}> => {
+  try {
+    const response = await api.post<ApiResponse<StockPool>>(`/stocks/${symbol}/add-to-pool`, request);
+    return {
+      success: response.data.success,
+      message: response.data.message || '添加成功',
+      data: response.data.data
+    };
+  } catch (error: any) {
+    if (error.response?.data?.success === false) {
+      return {
+        success: false,
+        message: error.response.data.message || '添加失败'
+      };
+    }
+    throw error;
+  }
+};
+
 // 股票搜索API
 export const searchStocks = async (query: string, limit: number = 20): Promise<StockInfo[]> => {
   try {
@@ -91,5 +119,15 @@ export const getStockStats = async () => {
   } catch (error) {
     console.error('获取股票统计失败:', error);
     return null;
+  }
+};
+
+export const getStockPrice = async (symbol: string): Promise<number> => {
+  try {
+    const response = await api.get<ApiResponse<{ symbol: string, current_price: number }>>(`/stocks/${symbol}/price`);
+    return response.data.data?.current_price || 0;
+  } catch (error) {
+    console.error('获取股票价格失败:', error);
+    return 0;
   }
 };

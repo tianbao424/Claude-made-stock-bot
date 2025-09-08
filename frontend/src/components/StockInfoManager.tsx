@@ -1,7 +1,9 @@
-import React, { useState, useEffect } from 'react';
-import { Search, Database, TrendingUp, Building2, Globe, RefreshCw, Eye } from 'lucide-react';
+import React, { useState, useEffect, useCallback } from 'react';
+import { Search, Database, TrendingUp, Building2, Globe, RefreshCw, Eye, Plus } from 'lucide-react';
 import { searchStocks, getStockStats, StockInfo } from '../services/api';
 import StockDetailModal from './StockDetailModal';
+import DataSourceStatus from './DataSourceStatus';
+import AddToPoolModal from './AddToPoolModal';
 
 const StockInfoManager: React.FC = () => {
   const [stocks, setStocks] = useState<StockInfo[]>([]);
@@ -19,6 +21,11 @@ const StockInfoManager: React.FC = () => {
   const [selectedStock, setSelectedStock] = useState<StockInfo | null>(null);
   const [isDetailModalOpen, setIsDetailModalOpen] = useState(false);
 
+  // 添加到股票池模态框状态
+  const [stockToAdd, setStockToAdd] = useState<StockInfo | null>(null);
+  const [isAddToPoolModalOpen, setIsAddToPoolModalOpen] = useState(false);
+  const [successMessage, setSuccessMessage] = useState<string | null>(null);
+
   // 加载统计信息
   const loadStats = async () => {
     try {
@@ -30,7 +37,7 @@ const StockInfoManager: React.FC = () => {
   };
 
   // 搜索股票
-  const handleSearch = async (query: string) => {
+  const handleSearch = useCallback(async (query: string) => {
     if (query.trim()) {
       setLoading(true);
       try {
@@ -48,8 +55,9 @@ const StockInfoManager: React.FC = () => {
     } else {
       setStocks([]);
       setFilteredStocks([]);
+      setCurrentPage(1);
     }
-  };
+  }, []);
 
   // 市场筛选
   const filterByMarket = (market: string) => {
@@ -119,6 +127,24 @@ const StockInfoManager: React.FC = () => {
     setSelectedStock(null);
   };
 
+  // 处理添加到股票池
+  const handleAddToPool = (stock: StockInfo) => {
+    setStockToAdd(stock);
+    setIsAddToPoolModalOpen(true);
+  };
+
+  // 关闭添加到股票池模态框
+  const handleCloseAddToPool = () => {
+    setIsAddToPoolModalOpen(false);
+    setStockToAdd(null);
+  };
+
+  // 添加成功回调
+  const handleAddSuccess = (message: string) => {
+    setSuccessMessage(message);
+    setTimeout(() => setSuccessMessage(null), 3000);
+  };
+
   return (
     <div className="space-y-6">
       {/* 页面标题和统计 */}
@@ -144,6 +170,17 @@ const StockInfoManager: React.FC = () => {
           </div>
         )}
       </div>
+
+      {/* 成功消息 */}
+      {successMessage && (
+        <div className="bg-green-50 border border-green-200 text-green-700 px-4 py-3 rounded-lg flex items-center gap-2">
+          <div className="w-2 h-2 bg-green-400 rounded-full animate-pulse"></div>
+          {successMessage}
+        </div>
+      )}
+
+      {/* 数据源状态监控 */}
+      <DataSourceStatus />
 
       {/* 搜索和筛选栏 */}
       <div className="bg-white rounded-lg border shadow-sm p-4">
@@ -252,14 +289,27 @@ const StockInfoManager: React.FC = () => {
                           </div>
                         </td>
                         <td className="px-6 py-4 whitespace-nowrap">
-                          <button
-                            onClick={() => handleViewStock(stock)}
-                            className="inline-flex items-center gap-1 px-3 py-1 text-sm bg-blue-50 text-blue-600 rounded-lg hover:bg-blue-100 transition-colors"
-                            title="查看实时行情"
-                          >
-                            <Eye className="w-3 h-3" />
-                            查看详情
-                          </button>
+                          <div className="flex items-center gap-2">
+                            {/* 查看详情按钮 */}
+                            <button
+                              onClick={() => handleViewStock(stock)}
+                              className="inline-flex items-center gap-1 px-2 py-1 text-sm bg-blue-50 text-blue-600 rounded hover:bg-blue-100 transition-colors"
+                              title="查看实时行情"
+                            >
+                              <Eye className="w-3 h-3" />
+                              详情
+                            </button>
+                            
+                            {/* 添加到股票池按钮 */}
+                            <button
+                              onClick={() => handleAddToPool(stock)}
+                              className="inline-flex items-center gap-1 px-2 py-1 text-sm bg-green-50 text-green-600 rounded hover:bg-green-100 transition-colors"
+                              title="添加到股票池"
+                            >
+                              <Plus className="w-3 h-3" />
+                              添加
+                            </button>
+                          </div>
                         </td>
                       </tr>
                     ))}
@@ -336,6 +386,16 @@ const StockInfoManager: React.FC = () => {
         isOpen={isDetailModalOpen}
         onClose={handleCloseDetail}
       />
+
+      {/* 添加到股票池模态框 */}
+      {stockToAdd && (
+        <AddToPoolModal
+          stock={stockToAdd}
+          isOpen={isAddToPoolModalOpen}
+          onClose={handleCloseAddToPool}
+          onSuccess={handleAddSuccess}
+        />
+      )}
     </div>
   );
 };

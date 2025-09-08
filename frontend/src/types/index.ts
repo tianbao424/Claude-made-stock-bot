@@ -4,6 +4,10 @@ export interface StockPool {
   stock_code: string;
   stock_name: string;
   pool_type: 'holding' | 'potential';
+  shares?: number;
+  avg_cost?: number;
+  current_price?: number;
+  market_value?: number;
   tags?: string[];
   notes?: string;
   created_at?: string;

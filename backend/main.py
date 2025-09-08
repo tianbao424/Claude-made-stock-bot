@@ -20,6 +20,8 @@ import logging
 from database import DatabaseManager, StockPool, StockInfo
 from services.stock_data import stock_data_service
 from services.akshare_service import akshare_service
+from services.improved_akshare_service import improved_akshare_service
+from services.optimized_data_service import get_optimized_data_service
 
 load_dotenv()
 
@@ -257,6 +259,13 @@ class StockSearchRequest(BaseModel):
     query: str = Field(description="搜索关键词")
     limit: Optional[int] = Field(20, description="返回结果数量限制")
 
+class AddToPoolRequest(BaseModel):
+    pool_type: str = Field(..., description="池类型", pattern="^(holding|potential)$")
+    tags: Optional[List[str]] = Field(default_factory=list, description="标签列表")
+    notes: Optional[str] = Field("", description="备注信息")
+    shares: Optional[int] = Field(0, description="股数，持仓股票必填")
+    avg_cost: Optional[float] = Field(0.0, description="平均成本，持仓股票必填")
+
 def stock_pool_to_dict(stock: 'StockPool') -> Dict:
     """将StockPool对象转换为字典"""
     return {
@@ -264,6 +273,10 @@ def stock_pool_to_dict(stock: 'StockPool') -> Dict:
         "stock_code": stock.stock_code,
         "stock_name": stock.stock_name,
         "pool_type": stock.pool_type,
+        "shares": stock.shares,
+        "avg_cost": stock.avg_cost,
+        "current_price": stock.current_price,
+        "market_value": stock.market_value,
         "tags": stock.tags,
         "notes": stock.notes,
         "created_at": stock.created_at,
@@ -381,38 +394,20 @@ async def get_stock_pool_by_id(stock_id: int):
         raise HTTPException(status_code=500, detail=str(e))
 
 @app.get("/api/stocks/search")
-async def search_stocks(query: str, limit: int = 20):
-    """智能搜索股票"""
+async def search_stocks(query: str, market: str = 'all', limit: int = 20):
+    """高性能智能搜索股票"""
     try:
         if not query.strip():
             return ApiResponse(success=False, message="搜索关键词不能为空")
         
-        # 使用已有的数据库管理器
-        results = bot.db_manager.search_stocks(query.strip(), limit)
-        
-        # 转换为响应格式
-        stock_list = []
-        for stock in results:
-            stock_dict = {
-                "symbol": stock.symbol,
-                "name": stock.name,
-                "short_name": stock.short_name,
-                "market": stock.market,
-                "industry": stock.industry,
-                "sector": stock.sector,
-                "market_cap": stock.market_cap,
-                "pe_ratio": stock.pe_ratio,
-                "pb_ratio": stock.pb_ratio,
-                "dividend_yield": stock.dividend_yield,
-                "listing_date": stock.listing_date,
-                "is_active": stock.is_active
-            }
-            stock_list.append(stock_dict)
+        # 使用优化的数据服务
+        optimized_service = get_optimized_data_service()
+        results, total = await optimized_service.search_stocks(query.strip(), market, limit)
         
         return ApiResponse(
             success=True, 
-            data=stock_list, 
-            message=f"找到 {len(stock_list)} 条结果"
+            data=results,
+            message=f"找到 {len(results)} 条结果 (共{total}条匹配)"
         )
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
@@ -450,13 +445,16 @@ async def get_stock_info(symbol: str):
 
 @app.get("/api/stocks/stats")
 async def get_stock_stats():
-    """获取股票数据统计信息"""
+    """获取股票数据统计信息（优化版本）"""
     try:
-        count = bot.db_manager.get_stock_info_count()
+        # 使用优化的数据服务获取详细统计
+        optimized_service = get_optimized_data_service()
+        stats = await optimized_service.get_stats()
+        
         return ApiResponse(
             success=True, 
-            data={"total_stocks": count}, 
-            message=f"数据库中共有 {count} 只股票"
+            data=stats, 
+            message=f"数据库中共有 {stats['total_stocks']} 只股票"
         )
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
@@ -465,26 +463,81 @@ async def get_stock_stats():
 async def get_stock_realtime(symbol: str):
     """获取股票实时行情数据"""
     try:
-        # 从数据库获取股票基本信息以确定市场
-        stock_info = bot.db_manager.get_stock_info_by_symbol(symbol)
+        # 从优化数据服务获取股票基本信息
+        optimized_service = get_optimized_data_service()
+        search_results, _ = await optimized_service.search_stocks(symbol, limit=1)
         
-        if not stock_info:
+        if not search_results:
             raise HTTPException(status_code=404, detail="股票不存在")
         
-        # 根据市场类型获取实时数据
-        market = "HK" if stock_info.market == "HK" else "A"
-        realtime_data = await akshare_service.get_stock_realtime_data(symbol, market)
+        stock_info = search_results[0]
+        
+        # 根据市场类型获取实时数据（使用改进的多源服务）
+        market = "HK" if stock_info['market'] == "HK" else "A"
+        realtime_data = await improved_akshare_service.get_stock_realtime_data_enhanced(symbol, market)
         
         if not realtime_data:
             raise HTTPException(status_code=500, detail="获取实时数据失败")
         
+        # 转换为字典格式并添加数据源信息
+        response_data = {
+            'symbol': realtime_data.symbol,
+            'name': realtime_data.name,
+            'current_price': realtime_data.current_price,
+            'change_amount': realtime_data.change_amount,
+            'change_percent': realtime_data.change_percent,
+            'volume': realtime_data.volume,
+            'turnover': realtime_data.turnover,
+            'open_price': realtime_data.open_price,
+            'high_price': realtime_data.high_price,
+            'low_price': realtime_data.low_price,
+            'prev_close': realtime_data.prev_close,
+            'market_cap': realtime_data.market_cap,
+            'pe_ratio': realtime_data.pe_ratio,
+            'pb_ratio': realtime_data.pb_ratio,
+            'timestamp': realtime_data.timestamp,
+            'data_source': realtime_data.data_source.value,
+            'is_simulated': realtime_data.is_simulated
+        }
+        
         return ApiResponse(
             success=True, 
-            data=realtime_data,
+            data=response_data,
             message="实时数据获取成功"
         )
     except HTTPException:
         raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.get("/api/data-sources/status")
+async def get_data_sources_status():
+    """获取数据源状态"""
+    try:
+        # 检查所有数据源状态
+        await improved_akshare_service.check_all_data_sources()
+        status_summary = improved_akshare_service.get_data_source_summary()
+        
+        return ApiResponse(
+            success=True,
+            data=status_summary,
+            message="数据源状态获取成功"
+        )
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.get("/api/performance/cache-stats")
+async def get_cache_stats():
+    """获取缓存性能统计"""
+    try:
+        optimized_service = get_optimized_data_service()
+        cache_stats = optimized_service.get_cache_stats()
+        
+        return ApiResponse(
+            success=True,
+            data=cache_stats,
+            message="缓存统计获取成功"
+        )
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
@@ -609,6 +662,139 @@ async def get_stock_pools_by_type(pool_type: str):
             stock_dicts.append(stock_dict)
         
         return ApiResponse(success=True, data=stock_dicts)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+async def get_stock_current_price(symbol: str) -> float:
+    """获取股票当前价格"""
+    try:
+        # 使用MCP AkShare服务获取实时价格
+        if bot.session:
+            result = await bot.session.call_tool(
+                "get_realtime_data", 
+                {"symbol": symbol}
+            )
+            if result.content and len(result.content) > 0:
+                data = json.loads(result.content[0].text)
+                if data.get("data") and len(data["data"]) > 0:
+                    # 获取当前价格字段
+                    price_data = data["data"][0]
+                    return float(price_data.get("current", 0.0) or price_data.get("close", 0.0))
+    except Exception as e:
+        logger.warning(f"获取股票 {symbol} 实时价格失败: {e}")
+    
+    return 0.0
+
+@app.get("/api/stocks/{symbol}/price")
+async def get_stock_price(symbol: str):
+    """获取股票实时价格"""
+    try:
+        price = await get_stock_current_price(symbol)
+        return ApiResponse(
+            success=True,
+            data={"symbol": symbol, "current_price": price},
+            message="获取股价成功"
+        )
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"获取股价失败: {str(e)}")
+
+@app.post("/api/stocks/{symbol}/add-to-pool")
+async def add_stock_to_pool(symbol: str, request: AddToPoolRequest):
+    """从股票信息库添加股票到股票池"""
+    try:
+        # 1. 检查股票是否存在于信息库中
+        optimized_service = get_optimized_data_service()
+        search_results, _ = await optimized_service.search_stocks(symbol, limit=1)
+        
+        if not search_results:
+            raise HTTPException(status_code=404, detail="股票不存在")
+        
+        stock_info = search_results[0]
+        
+        # 2. 检查股票是否已经存在于股票池中
+        existing_stock = bot.db_manager.check_stock_exists(symbol)
+        
+        if existing_stock:
+            # 股票已存在，检查是否要转换类型
+            if existing_stock.pool_type == request.pool_type:
+                return ApiResponse(
+                    success=False, 
+                    message=f"股票 {symbol} 已存在于{('持仓' if request.pool_type == 'holding' else '关注')}股票池中"
+                )
+            else:
+                # 转换股票池类型
+                current_price = await get_stock_current_price(symbol) if request.pool_type == 'holding' else 0.0
+                market_value = (request.shares or 0) * current_price if request.pool_type == 'holding' else 0.0
+                
+                # 验证持仓股票必填字段
+                if request.pool_type == 'holding' and (not request.shares or request.shares <= 0):
+                    return ApiResponse(
+                        success=False,
+                        message="持仓股票必须填写股数"
+                    )
+                
+                # 更新现有股票
+                updates = {
+                    'pool_type': request.pool_type,
+                    'shares': request.shares or 0,
+                    'avg_cost': request.avg_cost or 0.0,
+                    'current_price': current_price,
+                    'market_value': market_value,
+                    'tags': request.tags,
+                    'notes': request.notes
+                }
+                
+                bot.db_manager.update_stock(existing_stock.id, updates)
+                updated_stock = bot.db_manager.get_stock_by_id(existing_stock.id)
+                
+                pool_type_name = "持仓股票池" if request.pool_type == "holding" else "关注股票池"
+                
+                return ApiResponse(
+                    success=True,
+                    data=stock_pool_to_dict(updated_stock),
+                    message=f"成功将 {stock_info['name']} ({symbol}) 转换到{pool_type_name}"
+                )
+        
+        # 3. 创建新股票
+        # 验证持仓股票必填字段
+        if request.pool_type == 'holding' and (not request.shares or request.shares <= 0):
+            return ApiResponse(
+                success=False,
+                message="持仓股票必须填写股数"
+            )
+        
+        # 获取当前价格并计算市值
+        current_price = await get_stock_current_price(symbol) if request.pool_type == 'holding' else 0.0
+        market_value = (request.shares or 0) * current_price if request.pool_type == 'holding' else 0.0
+        
+        stock_pool = StockPool(
+            stock_code=symbol,
+            stock_name=stock_info['name'],
+            pool_type=request.pool_type,
+            shares=request.shares or 0,
+            avg_cost=request.avg_cost or 0.0,
+            current_price=current_price,
+            market_value=market_value,
+            tags=request.tags,
+            notes=request.notes
+        )
+        
+        stock_id = bot.db_manager.add_stock(stock_pool)
+        
+        # 4. 返回创建的股票信息
+        created_stock = bot.db_manager.get_stock_by_id(stock_id)
+        stock_dict = stock_pool_to_dict(created_stock)
+        
+        pool_type_name = "持仓股票池" if request.pool_type == "holding" else "关注股票池"
+        
+        return ApiResponse(
+            success=True, 
+            data=stock_dict, 
+            message=f"成功将 {stock_info['name']} ({symbol}) 添加到{pool_type_name}"
+        )
+        
+    except HTTPException:
+        raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 

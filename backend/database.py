@@ -16,6 +16,8 @@ class StockPool:
     pool_type: str  # "holding" | "potential"
     shares: int = 0
     avg_cost: float = 0.0
+    current_price: float = 0.0
+    market_value: float = 0.0
     notes: str = ""
     tags: Optional[List[str]] = None
     created_at: str = ""
@@ -59,16 +61,17 @@ class DatabaseManager:
             cursor.execute('''
                 CREATE TABLE IF NOT EXISTS stock_pool (
                     id INTEGER PRIMARY KEY AUTOINCREMENT,
-                    stock_code TEXT NOT NULL,
+                    stock_code TEXT NOT NULL UNIQUE,
                     stock_name TEXT NOT NULL,
                     pool_type TEXT NOT NULL CHECK(pool_type IN ('holding', 'potential')),
                     shares INTEGER DEFAULT 0,
                     avg_cost REAL DEFAULT 0.0,
+                    current_price REAL DEFAULT 0.0,
+                    market_value REAL DEFAULT 0.0,
                     notes TEXT DEFAULT '',
                     tags TEXT DEFAULT '',
                     created_at TEXT NOT NULL,
-                    updated_at TEXT NOT NULL,
-                    UNIQUE(stock_code, pool_type)
+                    updated_at TEXT NOT NULL
                 )
             ''')
             
@@ -118,12 +121,12 @@ class DatabaseManager:
                 
                 cursor.execute('''
                     INSERT INTO stock_pool 
-                    (stock_code, stock_name, pool_type, shares, avg_cost, notes, tags, created_at, updated_at)
-                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    (stock_code, stock_name, pool_type, shares, avg_cost, current_price, market_value, notes, tags, created_at, updated_at)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 ''', (
                     stock.stock_code, stock.stock_name, stock.pool_type,
-                    stock.shares, stock.avg_cost, stock.notes, tags_json,
-                    stock.created_at, stock.updated_at
+                    stock.shares, stock.avg_cost, stock.current_price, stock.market_value, 
+                    stock.notes, tags_json, stock.created_at, stock.updated_at
                 ))
                 
                 stock_id = cursor.lastrowid
@@ -131,7 +134,7 @@ class DatabaseManager:
                 return stock_id
                 
         except sqlite3.IntegrityError:
-            raise ValueError(f"股票 {stock.stock_code} 已存在于 {stock.pool_type} 池中")
+            raise ValueError(f"股票 {stock.stock_code} 已存在于股票池中")
         except Exception as e:
             raise Exception(f"添加股票失败: {str(e)}")
     
@@ -144,7 +147,7 @@ class DatabaseManager:
                 if pool_type:
                     cursor.execute('''
                         SELECT id, stock_code, stock_name, pool_type, shares, avg_cost, 
-                               notes, tags, created_at, updated_at
+                               current_price, market_value, notes, tags, created_at, updated_at
                         FROM stock_pool 
                         WHERE pool_type = ?
                         ORDER BY updated_at DESC
@@ -152,7 +155,7 @@ class DatabaseManager:
                 else:
                     cursor.execute('''
                         SELECT id, stock_code, stock_name, pool_type, shares, avg_cost,
-                               notes, tags, created_at, updated_at
+                               current_price, market_value, notes, tags, created_at, updated_at
                         FROM stock_pool 
                         ORDER BY pool_type, updated_at DESC
                     ''')
@@ -162,7 +165,7 @@ class DatabaseManager:
                 stocks = []
                 for row in rows:
                     # 反序列化标签
-                    tags = json.loads(row[7]) if row[7] else None
+                    tags = json.loads(row[9]) if row[9] else None
                     
                     stock = StockPool(
                         id=row[0],
@@ -171,10 +174,12 @@ class DatabaseManager:
                         pool_type=row[3],
                         shares=row[4],
                         avg_cost=row[5],
-                        notes=row[6],
+                        current_price=row[6],
+                        market_value=row[7],
+                        notes=row[8],
                         tags=tags,
-                        created_at=row[8],
-                        updated_at=row[9]
+                        created_at=row[10],
+                        updated_at=row[11]
                     )
                     stocks.append(stock)
                 
@@ -193,7 +198,7 @@ class DatabaseManager:
                 update_fields = []
                 values = []
                 
-                allowed_fields = ['stock_name', 'shares', 'avg_cost', 'notes', 'pool_type', 'tags']
+                allowed_fields = ['stock_name', 'shares', 'avg_cost', 'current_price', 'market_value', 'notes', 'pool_type', 'tags']
                 for field, value in updates.items():
                     if field in allowed_fields:
                         if field == 'tags':
@@ -244,7 +249,7 @@ class DatabaseManager:
                 
                 cursor.execute('''
                     SELECT id, stock_code, stock_name, pool_type, shares, avg_cost,
-                           notes, tags, created_at, updated_at
+                           current_price, market_value, notes, tags, created_at, updated_at
                     FROM stock_pool 
                     WHERE id = ?
                 ''', (stock_id,))
@@ -252,7 +257,7 @@ class DatabaseManager:
                 row = cursor.fetchone()
                 if row:
                     # 反序列化标签
-                    tags = json.loads(row[7]) if row[7] else None
+                    tags = json.loads(row[9]) if row[9] else None
                     
                     return StockPool(
                         id=row[0],
@@ -261,32 +266,54 @@ class DatabaseManager:
                         pool_type=row[3],
                         shares=row[4],
                         avg_cost=row[5],
-                        notes=row[6],
+                        current_price=row[6],
+                        market_value=row[7],
+                        notes=row[8],
                         tags=tags,
-                        created_at=row[8],
-                        updated_at=row[9]
+                        created_at=row[10],
+                        updated_at=row[11]
                     )
                 return None
                 
         except Exception as e:
             raise Exception(f"获取股票信息失败: {str(e)}")
     
-    def check_stock_exists(self, stock_code: str, pool_type: str) -> bool:
-        """检查股票是否已存在于指定池中"""
+    def check_stock_exists(self, stock_code: str) -> Optional[StockPool]:
+        """检查股票是否已存在，返回现有股票信息"""
         try:
             with sqlite3.connect(self.db_path) as conn:
                 cursor = conn.cursor()
                 
                 cursor.execute('''
-                    SELECT COUNT(*) FROM stock_pool 
-                    WHERE stock_code = ? AND pool_type = ?
-                ''', (stock_code, pool_type))
+                    SELECT id, stock_code, stock_name, pool_type, shares, avg_cost,
+                           current_price, market_value, notes, tags, created_at, updated_at
+                    FROM stock_pool 
+                    WHERE stock_code = ?
+                ''', (stock_code,))
                 
-                count = cursor.fetchone()[0]
-                return count > 0
+                row = cursor.fetchone()
+                if row:
+                    # 反序列化标签
+                    tags = json.loads(row[9]) if row[9] else None
+                    
+                    return StockPool(
+                        id=row[0],
+                        stock_code=row[1],
+                        stock_name=row[2],
+                        pool_type=row[3],
+                        shares=row[4],
+                        avg_cost=row[5],
+                        current_price=row[6],
+                        market_value=row[7],
+                        notes=row[8],
+                        tags=tags,
+                        created_at=row[10],
+                        updated_at=row[11]
+                    )
+                return None
                 
         except Exception as e:
-            return False
+            return None
     
     def get_pool_summary(self) -> Dict:
         """获取股票池概览信息"""
