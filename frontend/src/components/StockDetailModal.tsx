@@ -18,6 +18,8 @@ interface RealtimeStockData {
   pe_ratio?: number;
   pb_ratio?: number;
   timestamp: string;
+  data_source?: string;
+  is_simulated?: boolean;
 }
 
 interface StockDetailModalProps {
@@ -98,6 +100,19 @@ const StockDetailModal: React.FC<StockDetailModalProps> = ({ stock, isOpen, onCl
     if (change > 0) return <TrendingUp className="w-4 h-4" />;
     if (change < 0) return <TrendingDown className="w-4 h-4" />;
     return null;
+  };
+
+  // 获取数据源显示名称
+  const getDataSourceName = (source: string) => {
+    const sourceNames: Record<string, string> = {
+      'eastmoney_a': '东方财富A股',
+      'eastmoney_hk': '东方财富港股',
+      'sina_a': '新浪A股',
+      'sina_hk': '新浪港股',
+      'individual_em': '东方财富个股',
+      'mock': '模拟数据'
+    };
+    return sourceNames[source] || source;
   };
 
   if (!isOpen || !stock) return null;
@@ -201,6 +216,25 @@ const StockDetailModal: React.FC<StockDetailModalProps> = ({ stock, isOpen, onCl
                       ({realtimeData.change_percent > 0 ? '+' : ''}{formatNumber(realtimeData.change_percent)}%)
                     </span>
                   </div>
+                  
+                  {/* 数据源状态指示器 */}
+                  {realtimeData.data_source && (
+                    <div className="flex justify-center mt-2">
+                      <div className={`inline-flex items-center gap-2 px-2 py-1 rounded-md text-xs ${
+                        realtimeData.is_simulated 
+                          ? 'bg-yellow-100 text-yellow-700'
+                          : 'bg-blue-100 text-blue-700'
+                      }`}>
+                        <div className={`w-2 h-2 rounded-full ${
+                          realtimeData.is_simulated ? 'bg-yellow-500' : 'bg-green-500'
+                        }`}></div>
+                        <span>
+                          数据源: {getDataSourceName(realtimeData.data_source)}
+                          {realtimeData.is_simulated && ' (模拟数据)'}
+                        </span>
+                      </div>
+                    </div>
+                  )}
                 </div>
                 
                 {/* 基础数据紧凑布局 */}

@@ -28,8 +28,13 @@ backend/
 │   └── WebSocket处理       # 实时通信
 ├── database.py             # 数据层
 │   ├── StockPool          # 股票池数据模型
+│   ├── StrategyAnalysis   # 策略分析数据模型
 │   ├── DatabaseManager    # 数据库操作类
 │   └── SQLite管理         # 数据持久化
+├── services/               # 业务服务层
+│   ├── strategy_service.py # AI策略分析服务
+│   ├── akshare_service.py  # AkShare数据服务
+│   └── ...                # 其他服务
 ├── requirements.txt        # Python依赖
 └── stock_pool.db          # SQLite数据库文件
 ```
@@ -41,6 +46,8 @@ frontend/
 │   ├── components/                    # React组件
 │   │   ├── StockPoolManager.tsx      # 股票池管理主界面
 │   │   ├── StockPoolForm.tsx         # 股票添加/编辑表单
+│   │   ├── StrategyAnalysisButton.tsx # AI策略分析按钮
+│   │   ├── StrategyModal.tsx         # 策略分析结果展示
 │   │   └── ChatInterface.tsx         # AI聊天界面
 │   ├── hooks/                        # 自定义React Hooks
 │   │   ├── useStockPool.ts           # 股票池数据管理
@@ -104,6 +111,11 @@ class StockPool:
 @app.get("/api/stock-pools/{id}")      # 获取单个股票
 @app.put("/api/stock-pools/{id}")      # 更新股票
 @app.delete("/api/stock-pools/{id}")   # 删除股票
+
+# AI策略分析API
+@app.post("/api/strategy/generate/{stock_pool_id}")  # 生成策略分析
+@app.get("/api/strategy/history/{stock_pool_id}")   # 获取策略历史
+@app.get("/api/strategy/{strategy_id}")             # 获取单个策略
 
 # WebSocket端点
 @app.websocket("/ws")                  # 实时聊天通信
@@ -198,6 +210,85 @@ MCP AkShare Server
     ↓
 AI Model (Qwen-Coder)
 ```
+
+### 🤖 AI策略分析流程
+```
+点击策略按钮 → 实时价格更新 → 数据收集 → AI策略生成 → 结果存储 → 策略展示
+    ↓
+StrategyAnalysisButton.tsx
+    ↓
+strategyAPI.generateAnalysis()
+    ↓
+POST /api/strategy/generate/{id}
+    ↓
+StrategyDataCollector.collect_comprehensive_data()
+    ↓ (并发收集)
+├── 技术指标 (RSI, MACD, BOLL)
+├── 基本面数据 (PE, PB, ROE)
+├── 市场环境数据
+└── 价格历史数据
+    ↓
+AIStrategyGenerator.generate_strategy()
+    ↓
+OpenAI Compatible API (Qwen-Coder-Plus)
+    ↓
+StrategyModal.tsx (结果展示)
+```
+
+## 🤖 AI策略分析系统详解
+
+### 💡 核心功能
+AI策略分析系统是本项目的核心创新功能，为持仓股票提供智能化的投资策略建议。
+
+#### ✨ 主要特性
+- **🔄 实时数据更新**：策略生成前自动获取最新股价
+- **📊 多维度分析**：技术面、基本面、市场环境综合分析
+- **🧠 AI驱动生成**：基于Qwen-Coder-Plus模型的智能策略生成
+- **📈 量化评分**：1-10分综合评分系统
+- **⚠️ 风险评估**：低/中/高风险等级评估
+- **📋 具体建议**：买入/持有/减仓/卖出操作建议
+- **📅 历史记录**：完整的策略分析历史追踪
+
+#### 🔧 技术实现
+
+**数据收集层** (`StrategyDataCollector`)
+```python
+# 并发收集多维度数据
+tasks = [
+    get_technical_indicators(stock_code),    # RSI, MACD, BOLL指标
+    get_fundamental_data(stock_code),        # PE, PB, ROE财务数据
+    get_market_context(stock_code),          # 大盘走势, 市场情绪
+    get_price_history(stock_code, days=30)   # 30天价格历史
+]
+```
+
+**AI策略生成层** (`AIStrategyGenerator`)
+```python
+# 结构化提示工程
+prompt = f"""
+## 投资策略分析请求
+### 股票基本信息: {stock_name}({stock_code})
+### 持仓情况: {shares}股, 成本￥{avg_cost}, 现价￥{current_price}
+### 技术面数据: RSI {rsi}, MACD {macd_signal}
+### 基本面数据: PE {pe_ratio}, ROE {roe}%
+### 市场环境: {market_trend}
+
+请提供结构化的投资策略建议(JSON格式)...
+"""
+```
+
+**前端展示层** (`StrategyModal`)
+- 📱 响应式全屏模态框设计
+- 🎨 可视化风险等级和操作建议
+- 📊 清晰的目标价位区间展示
+- 📋 详细的分析内容和行动计划
+- 📈 策略历史记录对比
+
+#### 🎯 使用场景
+1. **持仓优化**：为现有持仓提供操作建议
+2. **风险控制**：评估持仓风险等级
+3. **投资决策**：基于AI分析制定投资策略
+4. **策略追踪**：历史策略对比和复盘
 
 ## 🛠️ 开发工作流
 
@@ -432,7 +523,7 @@ ws.onmessage = (event) => {
 
 ## ✅ 当前状态
 
-### 🎯 v1.1.0 完成功能
+### 🎯 v2.0.0 完成功能
 - ✅ React前端架构完整实现
 - ✅ 表格式股票池管理界面
 - ✅ 标签和备注系统
@@ -441,6 +532,10 @@ ws.onmessage = (event) => {
 - ✅ 一键启动系统 (`npm run dev`)
 - ✅ TypeScript类型安全
 - ✅ 自定义CSS样式系统
+- ✅ **AI投资策略分析系统**
+- ✅ **实时价格获取和更新**
+- ✅ **完整的策略历史记录**
+- ✅ **智能化投资建议生成**
 
 ### 🚀 启动方式
 ```bash
@@ -455,27 +550,74 @@ npm run dev
 ### 📋 主要组件
 - **StockPoolManager.tsx** - 股票池管理主界面 (表格视图)
 - **StockPoolForm.tsx** - 股票添加/编辑表单
+- **StrategyAnalysisButton.tsx** - AI策略分析触发按钮
+- **StrategyModal.tsx** - 策略分析结果展示模态框
 - **ChatInterface.tsx** - AI聊天界面
 - **useStockPool.ts** - 股票池数据管理Hook
 - **useWebSocket.ts** - WebSocket通信Hook
 
 ### 🔄 数据库结构
 ```sql
+-- 股票池表
 CREATE TABLE stock_pool (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     stock_code TEXT NOT NULL,           -- 股票代码
     stock_name TEXT NOT NULL,           -- 股票名称
     pool_type TEXT NOT NULL,            -- holding|potential
+    shares INTEGER DEFAULT 0,           -- 持股数量
+    avg_cost REAL DEFAULT 0.0,          -- 平均成本
+    current_price REAL DEFAULT 0.0,     -- 当前价格
+    market_value REAL DEFAULT 0.0,      -- 市值
     tags TEXT DEFAULT '',               -- JSON格式标签
     notes TEXT DEFAULT '',              -- 备注信息
     created_at TEXT NOT NULL,           -- 创建时间
     updated_at TEXT NOT NULL,           -- 更新时间
     UNIQUE(stock_code, pool_type)
 );
+
+-- 策略分析表
+CREATE TABLE strategy_analysis (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    stock_pool_id INTEGER NOT NULL,     -- 关联股票池ID
+    stock_code TEXT NOT NULL,           -- 股票代码
+    
+    -- 分析时的持仓数据
+    shares_at_analysis INTEGER,         -- 分析时持股数量
+    cost_at_analysis REAL,              -- 分析时成本价
+    price_at_analysis REAL,             -- 分析时股价
+    market_value_at_analysis REAL,      -- 分析时市值
+    profit_loss_pct REAL,               -- 盈亏百分比
+    
+    -- AI策略结果
+    comprehensive_score REAL,           -- 综合评分(1-10)
+    risk_level TEXT,                    -- 风险等级(low/medium/high)
+    action_recommendation TEXT,         -- 操作建议(buy/hold/reduce/sell)
+    target_price_min REAL,              -- 目标价位下限
+    target_price_max REAL,              -- 目标价位上限
+    timeframe TEXT,                     -- 投资时间框架(short/medium/long)
+    position_suggestion REAL,           -- 建议仓位比例(0-1)
+    
+    -- 分析内容(JSON格式存储)
+    analysis_summary TEXT,              -- 分析摘要
+    key_metrics TEXT,                   -- 关键指标
+    risk_warnings TEXT,                 -- 风险提示
+    action_plan TEXT,                   -- 行动计划
+    technical_analysis TEXT,            -- 技术分析
+    fundamental_analysis TEXT,          -- 基本面分析
+    market_context TEXT,                -- 市场环境
+    
+    -- 元数据
+    analysis_date TEXT NOT NULL,        -- 分析日期
+    model_version TEXT DEFAULT 'qwen-coder-plus',  -- AI模型版本
+    confidence_level REAL,              -- 置信度(0-1)
+    created_at TEXT NOT NULL,           -- 创建时间
+    
+    FOREIGN KEY (stock_pool_id) REFERENCES stock_pool(id)
+);
 ```
 
 ---
 
-**更新时间**: 2025-09-01  
-**版本**: v1.1.0  
+**更新时间**: 2025-09-09  
+**版本**: v2.0.0  
 **维护者**: Claude AI Assistant
