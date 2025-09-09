@@ -1,5 +1,5 @@
 import axios from 'axios';
-import { StockPool, ApiResponse } from '../types';
+import { StockPool, ApiResponse, StrategyAnalysis, StrategyAnalysisResponse } from '../types';
 
 export interface StockInfo {
   symbol: string;
@@ -20,7 +20,13 @@ const API_BASE_URL = '/api';
 
 export const api = axios.create({
   baseURL: API_BASE_URL,
-  timeout: 10000,
+  timeout: 10000, // 默认超时10秒
+});
+
+// 为策略分析创建专门的API实例，使用更长的超时时间
+export const strategyApi = axios.create({
+  baseURL: API_BASE_URL,
+  timeout: 60000, // 策略分析超时60秒
 });
 
 // 股票池API
@@ -129,5 +135,36 @@ export const getStockPrice = async (symbol: string): Promise<number> => {
   } catch (error) {
     console.error('获取股票价格失败:', error);
     return 0;
+  }
+};
+
+// 策略分析API
+export const strategyAPI = {
+  // 生成策略分析 - 使用长超时时间
+  generateAnalysis: async (stockPoolId: number): Promise<StrategyAnalysisResponse> => {
+    const response = await strategyApi.post<ApiResponse<StrategyAnalysisResponse>>(`/strategy/generate/${stockPoolId}`);
+    if (!response.data.success || !response.data.data) {
+      throw new Error(response.data.message || '策略分析生成失败');
+    }
+    return response.data.data;
+  },
+
+  // 获取策略分析历史
+  getHistory: async (stockPoolId: number, limit: number = 10): Promise<StrategyAnalysisResponse[]> => {
+    const response = await api.get<ApiResponse<StrategyAnalysisResponse[]>>(`/strategy/history/${stockPoolId}`, {
+      params: { limit }
+    });
+    return response.data.data || [];
+  },
+
+  // 获取单个策略分析详情
+  getAnalysis: async (strategyId: number): Promise<StrategyAnalysisResponse | null> => {
+    try {
+      const response = await api.get<ApiResponse<StrategyAnalysisResponse>>(`/strategy/${strategyId}`);
+      return response.data.data || null;
+    } catch (error) {
+      console.error('获取策略分析详情失败:', error);
+      return null;
+    }
   }
 };

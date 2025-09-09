@@ -43,6 +43,102 @@ class StockInfo:
     updated_at: str = ""
     id: Optional[int] = None
 
+@dataclass  
+class StrategyAnalysisData:
+    """策略分析输入数据"""
+    # 股票基本信息
+    stock_code: str
+    stock_name: str
+    industry: str = ""
+    
+    # 持仓信息
+    shares: int = 0
+    avg_cost: float = 0.0
+    current_price: float = 0.0
+    market_value: float = 0.0
+    profit_loss_pct: float = 0.0
+    profit_loss_amount: float = 0.0
+    
+    # 技术分析数据
+    price_trend_30d: List[float] = None
+    rsi: float = 50.0
+    macd_signal: str = ""
+    support_level: float = 0.0
+    resistance_level: float = 0.0
+    volume_status: str = ""
+    
+    # 基本面数据
+    pe_ratio: float = 0.0
+    pb_ratio: float = 0.0
+    roe: float = 0.0
+    financial_health: str = ""
+    recent_performance: str = ""
+    industry_position: str = ""
+    
+    # 市场环境
+    market_trend: str = ""
+    sector_performance: str = ""
+    market_sentiment: str = ""
+
+@dataclass
+class GeneratedStrategy:
+    """AI生成的投资策略"""
+    comprehensive_score: float
+    risk_level: str  # low/medium/high
+    action_recommendation: str  # buy/hold/reduce/sell
+    target_price_min: float
+    target_price_max: float
+    timeframe: str  # short/medium/long
+    position_suggestion: float  # 0-1
+    analysis_summary: str
+    key_metrics: List[str]
+    risk_warnings: List[str]
+    action_plan: List[str]
+    confidence_level: float
+    
+    # 额外分析内容
+    technical_analysis: str = ""
+    fundamental_analysis: str = ""
+    market_context: str = ""
+
+@dataclass
+class StrategyAnalysis:
+    """策略分析记录"""
+    id: Optional[int] = None
+    stock_pool_id: int = 0
+    stock_code: str = ""
+    
+    # 分析时的持仓数据
+    shares_at_analysis: int = 0
+    cost_at_analysis: float = 0.0
+    price_at_analysis: float = 0.0
+    market_value_at_analysis: float = 0.0
+    profit_loss_pct: float = 0.0
+    
+    # AI策略结果
+    comprehensive_score: float = 0.0
+    risk_level: str = ""
+    action_recommendation: str = ""
+    target_price_min: float = 0.0
+    target_price_max: float = 0.0
+    timeframe: str = ""
+    position_suggestion: float = 0.0
+    
+    # 分析内容
+    analysis_summary: str = ""
+    key_metrics: Optional[List[str]] = None
+    risk_warnings: Optional[List[str]] = None
+    action_plan: Optional[List[str]] = None
+    technical_analysis: str = ""
+    fundamental_analysis: str = ""
+    market_context: str = ""
+    
+    # 元数据
+    analysis_date: str = ""
+    model_version: str = "qwen-coder-plus"
+    confidence_level: float = 0.0
+    created_at: str = ""
+
 class DatabaseManager:
     def __init__(self, db_path: str = None):
         if db_path is None:
@@ -97,11 +193,56 @@ class DatabaseManager:
                 )
             ''')
             
+            # 创建策略分析表
+            cursor.execute('''
+                CREATE TABLE IF NOT EXISTS strategy_analysis (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    stock_pool_id INTEGER NOT NULL,
+                    stock_code TEXT NOT NULL,
+                    
+                    -- 分析时的持仓数据
+                    shares_at_analysis INTEGER,
+                    cost_at_analysis REAL,
+                    price_at_analysis REAL,
+                    market_value_at_analysis REAL,
+                    profit_loss_pct REAL,
+                    
+                    -- AI策略结果
+                    comprehensive_score REAL,
+                    risk_level TEXT,
+                    action_recommendation TEXT,
+                    target_price_min REAL,
+                    target_price_max REAL,
+                    timeframe TEXT,
+                    position_suggestion REAL,
+                    
+                    -- 分析内容 (JSON格式存储)
+                    analysis_summary TEXT,
+                    key_metrics TEXT,
+                    risk_warnings TEXT,  
+                    action_plan TEXT,
+                    technical_analysis TEXT,
+                    fundamental_analysis TEXT,
+                    market_context TEXT,
+                    
+                    -- 元数据
+                    analysis_date TEXT NOT NULL,
+                    model_version TEXT DEFAULT 'qwen-coder-plus',
+                    confidence_level REAL,
+                    
+                    created_at TEXT NOT NULL,
+                    
+                    FOREIGN KEY (stock_pool_id) REFERENCES stock_pool(id)
+                )
+            ''')
+            
             # 创建搜索索引
             cursor.execute('CREATE INDEX IF NOT EXISTS idx_stock_name ON stock_info(name)')
             cursor.execute('CREATE INDEX IF NOT EXISTS idx_stock_pinyin ON stock_info(pinyin)')
             cursor.execute('CREATE INDEX IF NOT EXISTS idx_stock_market ON stock_info(market)')
             cursor.execute('CREATE INDEX IF NOT EXISTS idx_stock_symbol ON stock_info(symbol)')
+            cursor.execute('CREATE INDEX IF NOT EXISTS idx_strategy_stock_code ON strategy_analysis(stock_code)')
+            cursor.execute('CREATE INDEX IF NOT EXISTS idx_strategy_date ON strategy_analysis(analysis_date)')
             
             conn.commit()
             logger.info("✅ Database initialized successfully")
@@ -478,6 +619,119 @@ class DatabaseManager:
                 
         except Exception as e:
             return None
+    
+    # ===== 策略分析管理方法 =====
+    
+    def save_strategy_analysis(self, strategy: GeneratedStrategy, pool_id: int, analysis_data: StrategyAnalysisData) -> Optional[int]:
+        """保存策略分析结果"""
+        try:
+            with sqlite3.connect(self.db_path) as conn:
+                cursor = conn.cursor()
+                
+                now = datetime.now().isoformat()
+                
+                cursor.execute('''
+                    INSERT INTO strategy_analysis 
+                    (stock_pool_id, stock_code, shares_at_analysis, cost_at_analysis, 
+                     price_at_analysis, market_value_at_analysis, profit_loss_pct,
+                     comprehensive_score, risk_level, action_recommendation,
+                     target_price_min, target_price_max, timeframe, position_suggestion,
+                     analysis_summary, key_metrics, risk_warnings, action_plan,
+                     technical_analysis, fundamental_analysis, market_context,
+                     analysis_date, model_version, confidence_level, created_at)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                ''', (
+                    pool_id, analysis_data.stock_code, analysis_data.shares,
+                    analysis_data.avg_cost, analysis_data.current_price, 
+                    analysis_data.market_value, analysis_data.profit_loss_pct,
+                    strategy.comprehensive_score, strategy.risk_level,
+                    strategy.action_recommendation, strategy.target_price_min,
+                    strategy.target_price_max, strategy.timeframe, strategy.position_suggestion,
+                    strategy.analysis_summary, 
+                    json.dumps(strategy.key_metrics),
+                    json.dumps(strategy.risk_warnings),
+                    json.dumps(strategy.action_plan),
+                    strategy.technical_analysis, strategy.fundamental_analysis,
+                    strategy.market_context, now, strategy.model_version,
+                    strategy.confidence_level, now
+                ))
+                
+                strategy_id = cursor.lastrowid
+                conn.commit()
+                return strategy_id
+                
+        except Exception as e:
+            raise Exception(f"保存策略分析失败: {str(e)}")
+    
+    def get_strategy_analysis(self, strategy_id: int) -> Optional[StrategyAnalysis]:
+        """获取策略分析记录"""
+        try:
+            with sqlite3.connect(self.db_path) as conn:
+                cursor = conn.cursor()
+                
+                cursor.execute('''
+                    SELECT * FROM strategy_analysis WHERE id = ?
+                ''', (strategy_id,))
+                
+                row = cursor.fetchone()
+                if row:
+                    return self._row_to_strategy_analysis(row)
+                return None
+                
+        except Exception as e:
+            logger.error(f"获取策略分析失败: {e}")
+            return None
+    
+    def get_strategies_by_pool(self, pool_id: int, limit: int = 10) -> List[StrategyAnalysis]:
+        """获取股票池的策略分析历史"""
+        try:
+            with sqlite3.connect(self.db_path) as conn:
+                cursor = conn.cursor()
+                
+                cursor.execute('''
+                    SELECT * FROM strategy_analysis 
+                    WHERE stock_pool_id = ?
+                    ORDER BY created_at DESC
+                    LIMIT ?
+                ''', (pool_id, limit))
+                
+                rows = cursor.fetchall()
+                return [self._row_to_strategy_analysis(row) for row in rows]
+                
+        except Exception as e:
+            logger.error(f"获取策略历史失败: {e}")
+            return []
+    
+    def _row_to_strategy_analysis(self, row) -> StrategyAnalysis:
+        """将数据库行转换为StrategyAnalysis对象"""
+        return StrategyAnalysis(
+            id=row[0],
+            stock_pool_id=row[1], 
+            stock_code=row[2],
+            shares_at_analysis=row[3],
+            cost_at_analysis=row[4],
+            price_at_analysis=row[5],
+            market_value_at_analysis=row[6],
+            profit_loss_pct=row[7],
+            comprehensive_score=row[8],
+            risk_level=row[9],
+            action_recommendation=row[10],
+            target_price_min=row[11],
+            target_price_max=row[12],
+            timeframe=row[13],
+            position_suggestion=row[14],
+            analysis_summary=row[15],
+            key_metrics=json.loads(row[16]) if row[16] else [],
+            risk_warnings=json.loads(row[17]) if row[17] else [],
+            action_plan=json.loads(row[18]) if row[18] else [],
+            technical_analysis=row[19] or "",
+            fundamental_analysis=row[20] or "",
+            market_context=row[21] or "",
+            analysis_date=row[22],
+            model_version=row[23],
+            confidence_level=row[24],
+            created_at=row[25]
+        )
 
 # 全局数据库实例
 db_manager = DatabaseManager()

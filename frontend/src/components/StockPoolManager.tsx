@@ -1,8 +1,10 @@
 import React, { useState } from 'react';
 import { Plus, Search, Edit, Trash2 } from 'lucide-react';
-import { StockPool } from '../types';
+import { StockPool, StrategyAnalysisResponse } from '../types';
 import { useStockPool } from '../hooks/useStockPool';
 import StockPoolForm from './StockPoolForm';
+import StrategyAnalysisButton from './StrategyAnalysisButton';
+import StrategyModal from './StrategyModal';
 
 const StockPoolManager: React.FC = () => {
   const {
@@ -20,6 +22,10 @@ const StockPoolManager: React.FC = () => {
   const [selectedType, setSelectedType] = useState<'all' | 'holding' | 'potential'>('all');
   const [showForm, setShowForm] = useState(false);
   const [editingStock, setEditingStock] = useState<StockPool | null>(null);
+  
+  // 策略分析相关状态
+  const [showStrategyModal, setShowStrategyModal] = useState(false);
+  const [currentAnalysis, setCurrentAnalysis] = useState<StrategyAnalysisResponse | null>(null);
   
   // 分页状态
   const [currentPage, setCurrentPage] = useState(1);
@@ -85,6 +91,22 @@ const StockPoolManager: React.FC = () => {
   const handleCloseForm = () => {
     setShowForm(false);
     setEditingStock(null);
+  };
+
+  // 策略分析处理函数
+  const handleStrategyAnalysisComplete = (analysis: StrategyAnalysisResponse) => {
+    setCurrentAnalysis(analysis);
+    setShowStrategyModal(true);
+  };
+
+  const handleStrategyAnalysisError = (error: string) => {
+    console.error('策略分析失败:', error);
+    // 这里可以添加错误提示
+  };
+
+  const handleCloseStrategyModal = () => {
+    setShowStrategyModal(false);
+    setCurrentAnalysis(null);
   };
 
   return (
@@ -259,6 +281,16 @@ const StockPoolManager: React.FC = () => {
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
                       <div className="flex items-center justify-end gap-2">
+                        {/* 策略分析按钮 - 仅对持仓股票显示 */}
+                        {stock.pool_type === 'holding' && stock.id && (
+                          <StrategyAnalysisButton
+                            stockPoolId={stock.id}
+                            stockName={stock.stock_name}
+                            stockCode={stock.stock_code}
+                            onAnalysisComplete={handleStrategyAnalysisComplete}
+                            onError={handleStrategyAnalysisError}
+                          />
+                        )}
                         <button
                           onClick={() => handleEditStock(stock)}
                           className="text-blue-600 hover:text-blue-800 p-1 hover:bg-blue-50 rounded transition-colors"
@@ -329,6 +361,16 @@ const StockPoolManager: React.FC = () => {
           stock={editingStock}
           onSubmit={editingStock ? handleUpdateStock : handleCreateStock}
           onCancel={handleCloseForm}
+        />
+      )}
+
+      {/* 策略分析模态框 */}
+      {showStrategyModal && currentAnalysis && (
+        <StrategyModal
+          isOpen={showStrategyModal}
+          onClose={handleCloseStrategyModal}
+          analysis={currentAnalysis}
+          stockPoolId={currentAnalysis.stock_pool_id}
         />
       )}
     </div>
