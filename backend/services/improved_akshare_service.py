@@ -368,40 +368,32 @@ class ImprovedAkShareService:
         market: str = "A"
     ) -> Optional[StockRealtimeData]:
         """
-        增强版股票实时数据获取，支持多数据源备份
+        增强版股票实时数据获取，优先使用高效的单股查询
         """
-        logger.info(f"🔄 获取 {symbol} ({market}) 实时数据（多源备份）...")
+        logger.info(f"🔄 获取 {symbol} ({market}) 实时数据...")
         
-        # 定义数据源优先级
+        # 优先使用效率最高的数据源（避免全市场数据下载）
         if market.upper() == "A":
+            # A股：优先使用东方财富个股信息（最快，无需下载全市场数据）
             priority_sources = [
-                DataSource.SINA_A,         # 优先使用新浪A股（测试可用）
-                DataSource.INDIVIDUAL_EM,   # 备用：东方财富个股信息
-                DataSource.EASTMONEY_A,    # 最后尝试：东方财富A股
+                DataSource.INDIVIDUAL_EM,   # 首选：东方财富个股信息（单股查询）
+                DataSource.MOCK,           # 备选：模拟数据（兜底）
             ]
         else:  # HK
+            # 港股：暂时只使用模拟数据（避免全市场下载）
             priority_sources = [
-                DataSource.SINA_HK,        # 优先使用新浪港股（测试可用）
-                DataSource.EASTMONEY_HK,   # 备用：东方财富港股
+                DataSource.MOCK,           # 港股暂时只使用模拟数据
             ]
         
         # 按优先级尝试获取数据
         for source in priority_sources:
-            source_status = self.data_source_status.get(source)
-            
-            # 跳过已知不可用的数据源（除非很久没检查了）
-            if (source_status and 
-                not source_status.available and 
-                (datetime.now() - source_status.last_check).seconds < 300):  # 5分钟内检查过且不可用
-                continue
-            
             try:
-                logger.info(f"  📡 尝试数据源: {source.value}")
+                logger.info(f"  📡 使用数据源: {source.value}")
                 data = await self._get_realtime_data_from_source(symbol, market, source)
                 
                 if data:
-                    logger.info(f"  ✅ 从 {source.value} 获取数据成功 - 价格: {data.current_price}")
-                    # 更新数据源状态为可用
+                    logger.info(f"  ✅ 获取成功 - 价格: {data.current_price}")
+                    # 静默更新数据源状态（不记录详细日志）
                     self.data_source_status[source] = DataSourceStatus(
                         source=source,
                         available=True,
@@ -410,8 +402,8 @@ class ImprovedAkShareService:
                     return data
                     
             except Exception as e:
-                logger.warning(f"  ❌ 数据源 {source.value} 失败: {str(e)[:100]}")
-                # 更新数据源状态为不可用
+                logger.debug(f"  数据源 {source.value} 失败: {str(e)[:50]}")
+                # 静默记录失败状态
                 self.data_source_status[source] = DataSourceStatus(
                     source=source,
                     available=False,
@@ -420,7 +412,7 @@ class ImprovedAkShareService:
                 )
         
         # 所有数据源都失败，使用模拟数据
-        logger.info(f"📊 所有数据源失败，生成 {symbol} 模拟数据...")
+        logger.info(f"📊 生成 {symbol} 模拟数据...")
         mock_data = self._generate_mock_data(symbol)
         return mock_data
     

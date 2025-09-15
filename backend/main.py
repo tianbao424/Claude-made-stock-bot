@@ -23,6 +23,7 @@ from services.akshare_service import akshare_service
 from services.improved_akshare_service import improved_akshare_service
 from services.optimized_data_service import get_optimized_data_service
 from services.strategy_service import StrategyDataCollector, AIStrategyGenerator
+from services.data_sync_scheduler import get_data_sync_scheduler
 
 load_dotenv()
 
@@ -369,6 +370,9 @@ def strategy_analysis_to_dict(strategy: 'StrategyAnalysis') -> Dict:
 bot = WebStockAnalysisBot()
 manager = ConnectionManager()
 
+# 数据同步调度器
+data_scheduler = get_data_sync_scheduler(bot.db_manager)
+
 @app.on_event("startup")
 async def startup_event():
     logger.info("🚀 启动AI股票聊天助手...")
@@ -377,9 +381,23 @@ async def startup_event():
         logger.info("✅ Stock bot initialized successfully")
     else:
         logger.error("❌ Failed to connect to MCP server")
+    
+    # 启动数据同步调度器
+    try:
+        data_scheduler.start_scheduler()
+        logger.info("🗓️ 数据同步调度器已启动")
+    except Exception as e:
+        logger.error(f"❌ 数据同步调度器启动失败: {e}")
 
 @app.on_event("shutdown")
 async def shutdown_event():
+    # 停止数据同步调度器
+    try:
+        data_scheduler.stop_scheduler()
+        logger.info("⏹️ 数据同步调度器已停止")
+    except Exception as e:
+        logger.error(f"❌ 停止数据同步调度器失败: {e}")
+    
     await bot.cleanup()
 
 @app.get("/", response_class=HTMLResponse)
@@ -577,17 +595,36 @@ async def get_stock_realtime(symbol: str):
         raise HTTPException(status_code=500, detail=str(e))
 
 @app.get("/api/data-sources/status")
-async def get_data_sources_status():
+async def get_data_sources_status(force_check: bool = False):
     """获取数据源状态"""
     try:
-        # 检查所有数据源状态
-        await improved_akshare_service.check_all_data_sources()
+        # 只有在明确要求时才重新检查所有数据源
+        if force_check:
+            await improved_akshare_service.check_all_data_sources()
+        
+        # 获取当前状态（可能是缓存的）
         status_summary = improved_akshare_service.get_data_source_summary()
         
         return ApiResponse(
             success=True,
             data=status_summary,
             message="数据源状态获取成功"
+        )
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.post("/api/data-sources/check")
+async def check_data_sources():
+    """主动检查所有数据源状态"""
+    try:
+        # 强制检查所有数据源状态
+        await improved_akshare_service.check_all_data_sources()
+        status_summary = improved_akshare_service.get_data_source_summary()
+        
+        return ApiResponse(
+            success=True,
+            data=status_summary,
+            message="数据源状态检查完成"
         )
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
@@ -1048,13 +1085,97 @@ async def get_strategy_analysis(strategy_id: int):
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
+# ===== 数据同步管理API =====
+
+@app.get("/api/data-sync/status")
+async def get_data_sync_status():
+    """获取数据同步调度器状态"""
+    try:
+        status = data_scheduler.get_scheduler_status()
+        return ApiResponse(
+            success=True,
+            data=status,
+            message="获取数据同步状态成功"
+        )
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.post("/api/data-sync/manual/{task_name}")
+async def manual_data_sync(task_name: str):
+    """手动触发数据同步任务"""
+    try:
+        result = await data_scheduler.manual_sync(task_name)
+        
+        return ApiResponse(
+            success=result.success,
+            data={
+                "task_name": task_name,
+                "duration_seconds": result.duration_seconds,
+                "records_updated": result.records_updated,
+                "timestamp": result.timestamp.isoformat() if result.timestamp else None
+            },
+            message=result.message
+        )
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.put("/api/data-sync/config/{task_name}")
+async def update_sync_task_config(task_name: str, enabled: bool):
+    """更新同步任务配置"""
+    try:
+        data_scheduler.update_task_config(task_name, enabled)
+        
+        return ApiResponse(
+            success=True,
+            data={"task_name": task_name, "enabled": enabled},
+            message=f"任务配置更新成功: {task_name}"
+        )
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.post("/api/data-sync/rebuild-index")
+async def rebuild_optimized_index():
+    """重新构建优化索引"""
+    try:
+        optimized_service = get_optimized_data_service()
+        
+        # 从stock_info表读取所有数据
+        stocks = bot.db_manager.get_all_stock_info()
+        
+        # 转换为字典格式
+        stocks_data = []
+        for stock in stocks:
+            stocks_data.append({
+                'symbol': stock.symbol,
+                'name': stock.name,
+                'short_name': stock.short_name or stock.name,
+                'market': stock.market,
+                'industry': stock.industry or '其他'
+            })
+        
+        # 批量导入到优化索引
+        imported_count = await optimized_service.bulk_import_stocks(stocks_data)
+        
+        return ApiResponse(
+            success=True,
+            data={
+                "imported_count": imported_count,
+                "total_stocks": len(stocks_data),
+                "timestamp": datetime.now().isoformat()
+            },
+            message=f"优化索引重建完成，导入 {imported_count} 只股票"
+        )
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
 @app.get("/health")
 async def health_check():
     return {
         "status": "healthy",
         "timestamp": datetime.now().isoformat(),
         "mcp_connected": bot.session is not None,
-        "strategy_service_ready": bot.strategy_data_collector is not None and bot.ai_strategy_generator is not None
+        "strategy_service_ready": bot.strategy_data_collector is not None and bot.ai_strategy_generator is not None,
+        "data_sync_running": data_scheduler.running if data_scheduler else False
     }
 
 if __name__ == "__main__":

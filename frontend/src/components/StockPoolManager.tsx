@@ -27,9 +27,9 @@ const StockPoolManager: React.FC = () => {
   const [showStrategyModal, setShowStrategyModal] = useState(false);
   const [currentAnalysis, setCurrentAnalysis] = useState<StrategyAnalysisResponse | null>(null);
   
-  // 分页状态
-  const [currentPage, setCurrentPage] = useState(1);
-  const [itemsPerPage] = useState(5);
+  // 移除分页，显示所有股票
+  // const [currentPage, setCurrentPage] = useState(1);
+  // const [itemsPerPage] = useState(10);
 
   // 筛选股票池
   const filteredStocks = React.useMemo(() => {
@@ -42,15 +42,15 @@ const StockPoolManager: React.FC = () => {
     return filtered;
   }, [stockPools, searchTerm, selectedType, searchStockPools]);
 
-  // 分页计算
-  const totalPages = Math.ceil(filteredStocks.length / itemsPerPage);
-  const startIndex = (currentPage - 1) * itemsPerPage;
-  const paginatedStocks = filteredStocks.slice(startIndex, startIndex + itemsPerPage);
+  // 移除分页计算，直接显示所有筛选后的股票
+  // const totalPages = Math.ceil(filteredStocks.length / itemsPerPage);
+  // const startIndex = (currentPage - 1) * itemsPerPage;
+  // const paginatedStocks = filteredStocks.slice(startIndex, startIndex + itemsPerPage);
 
   // 重置页码当筛选条件改变时
-  React.useEffect(() => {
-    setCurrentPage(1);
-  }, [searchTerm, selectedType]);
+  // React.useEffect(() => {
+  //   setCurrentPage(1);
+  // }, [searchTerm, selectedType]);
 
   const handleCreateStock = async (stockData: Omit<StockPool, 'id' | 'created_at' | 'updated_at'>) => {
     try {
@@ -110,14 +110,14 @@ const StockPoolManager: React.FC = () => {
   };
 
   return (
-    <div className="p-6 max-w-7xl mx-auto">
-      <div className="mb-8">
+    <div className="h-screen flex flex-col p-4 lg:p-6 max-w-7xl mx-auto">
+      <div className="mb-6 flex-shrink-0">
         <h1 className="text-3xl font-bold text-gray-900 mb-2">股票池管理</h1>
         <p className="text-gray-600">管理您的持仓股票和潜在投资标的</p>
       </div>
 
       {/* 控制栏 */}
-      <div className="mb-6 flex flex-col sm:flex-row gap-4 items-start sm:items-center justify-between">
+      <div className="mb-4 flex flex-col sm:flex-row gap-4 items-start sm:items-center justify-between flex-shrink-0">
         <div className="flex flex-col sm:flex-row gap-4 flex-1">
           {/* 搜索框 */}
           <div className="relative flex-1 max-w-md">
@@ -154,7 +154,7 @@ const StockPoolManager: React.FC = () => {
       </div>
 
       {/* 统计信息 */}
-      <div className="mb-6 grid grid-cols-1 sm:grid-cols-3 gap-4">
+      <div className="mb-4 grid grid-cols-1 sm:grid-cols-3 gap-4 flex-shrink-0">
         <div className="bg-blue-50 rounded-lg p-4">
           <div className="text-2xl font-bold text-blue-600">{stockPools.length}</div>
           <div className="text-blue-800">总股票数</div>
@@ -175,30 +175,27 @@ const StockPoolManager: React.FC = () => {
 
       {/* 错误提示 */}
       {error && (
-        <div className="mb-4 p-4 bg-red-100 border border-red-400 text-red-700 rounded-lg">
+        <div className="mb-4 p-4 bg-red-100 border border-red-400 text-red-700 rounded-lg flex-shrink-0">
           {error}
         </div>
       )}
 
       {/* 股票表格 */}
       {loading ? (
-        <div className="flex justify-center items-center py-12">
+        <div className="flex-1 flex justify-center items-center">
           <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
         </div>
       ) : filteredStocks.length > 0 ? (
-        <div className="bg-white rounded-lg shadow-sm border overflow-hidden">
-          {/* 分页信息 */}
-          <div className="px-6 py-3 bg-gray-50 border-b text-sm text-gray-600 flex items-center justify-between">
+        <div className="flex-1 bg-white rounded-lg shadow-sm border overflow-hidden flex flex-col">
+          {/* 股票信息 */}
+          <div className="px-6 py-3 bg-gray-50 border-b text-sm text-gray-600 flex-shrink-0">
             <span>共 {filteredStocks.length} 只股票</span>
-            {totalPages > 1 && (
-              <span>第 {currentPage} 页，共 {totalPages} 页</span>
-            )}
           </div>
           
           {/* 表格 */}
-          <div className="overflow-x-auto">
+          <div className="flex-1 overflow-x-auto overflow-y-auto">
             <table className="w-full">
-              <thead className="bg-gray-50">
+              <thead className="bg-gray-50 sticky top-0 z-10">
                 <tr>
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                     股票信息
@@ -221,9 +218,9 @@ const StockPoolManager: React.FC = () => {
                 </tr>
               </thead>
               <tbody className="bg-white divide-y divide-gray-200">
-                {paginatedStocks.map((stock) => (
+                {filteredStocks.map((stock) => (
                   <tr key={stock.id} className="hover:bg-gray-50 transition-colors">
-                    <td className="px-6 py-4 whitespace-nowrap">
+                    <td className="px-6 py-3 whitespace-nowrap">
                       <div className="flex items-center">
                         <div>
                           <div className="text-sm font-medium text-gray-900">{stock.stock_name}</div>
@@ -231,7 +228,7 @@ const StockPoolManager: React.FC = () => {
                         </div>
                       </div>
                     </td>
-                    <td className="px-6 py-4 whitespace-nowrap">
+                    <td className="px-6 py-3 whitespace-nowrap">
                       <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${
                         stock.pool_type === 'holding' 
                           ? 'bg-green-100 text-green-800' 
@@ -240,7 +237,7 @@ const StockPoolManager: React.FC = () => {
                         {stock.pool_type === 'holding' ? '持仓' : '关注'}
                       </span>
                     </td>
-                    <td className="px-6 py-4 whitespace-nowrap">
+                    <td className="px-6 py-3 whitespace-nowrap">
                       {stock.pool_type === 'holding' ? (
                         <div className="text-sm">
                           <div className="text-gray-900">股数: {stock.shares || 0}</div>
@@ -279,7 +276,7 @@ const StockPoolManager: React.FC = () => {
                         )}
                       </div>
                     </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
+                    <td className="px-6 py-3 whitespace-nowrap text-right text-sm font-medium">
                       <div className="flex items-center justify-end gap-2">
                         {/* 策略分析按钮 - 仅对持仓股票显示 */}
                         {stock.pool_type === 'holding' && stock.id && (
@@ -312,37 +309,9 @@ const StockPoolManager: React.FC = () => {
               </tbody>
             </table>
           </div>
-
-          {/* 分页控件 */}
-          {totalPages > 1 && (
-            <div className="px-6 py-4 border-t bg-gray-50 flex items-center justify-between">
-              <div className="text-sm text-gray-700">
-                显示第 {startIndex + 1}-{Math.min(startIndex + itemsPerPage, filteredStocks.length)} 项，共 {filteredStocks.length} 项
-              </div>
-              <div className="flex items-center gap-2">
-                <button
-                  onClick={() => setCurrentPage(prev => Math.max(1, prev - 1))}
-                  disabled={currentPage === 1}
-                  className="px-3 py-2 text-sm border border-gray-300 rounded-lg disabled:opacity-50 disabled:cursor-not-allowed hover:bg-gray-100 transition-colors"
-                >
-                  上一页
-                </button>
-                <span className="text-sm text-gray-600">
-                  {currentPage} / {totalPages}
-                </span>
-                <button
-                  onClick={() => setCurrentPage(prev => Math.min(totalPages, prev + 1))}
-                  disabled={currentPage === totalPages}
-                  className="px-3 py-2 text-sm border border-gray-300 rounded-lg disabled:opacity-50 disabled:cursor-not-allowed hover:bg-gray-100 transition-colors"
-                >
-                  下一页
-                </button>
-              </div>
-            </div>
-          )}
         </div>
       ) : (
-        <div className="text-center py-12">
+        <div className="flex-1 flex flex-col items-center justify-center">
           <div className="text-gray-500 text-lg mb-4">
             {searchTerm || selectedType !== 'all' ? '没有找到匹配的股票' : '还没有添加股票'}
           </div>

@@ -620,6 +620,47 @@ class DatabaseManager:
         except Exception as e:
             return None
     
+    def get_all_stock_info(self) -> List[StockInfo]:
+        """获取所有股票信息"""
+        try:
+            with sqlite3.connect(self.db_path) as conn:
+                cursor = conn.cursor()
+                
+                cursor.execute('''
+                    SELECT id, symbol, name, short_name, market, industry, pinyin, sector,
+                           market_cap, pe_ratio, pb_ratio, dividend_yield, listing_date,
+                           is_active, created_at, updated_at
+                    FROM stock_info 
+                    WHERE is_active = 1
+                    ORDER BY symbol
+                ''')
+                
+                stocks = []
+                for row in cursor.fetchall():
+                    stocks.append(StockInfo(
+                        id=row[0],
+                        symbol=row[1],
+                        name=row[2],
+                        short_name=row[3],
+                        market=row[4],
+                        industry=row[5],
+                        pinyin=row[6],
+                        sector=row[7],
+                        market_cap=row[8],
+                        pe_ratio=row[9],
+                        pb_ratio=row[10],
+                        dividend_yield=row[11],
+                        listing_date=row[12],
+                        is_active=bool(row[13]),
+                        created_at=row[14],
+                        updated_at=row[15]
+                    ))
+                
+                return stocks
+                
+        except Exception as e:
+            return []
+    
     # ===== 策略分析管理方法 =====
     
     def save_strategy_analysis(self, strategy: GeneratedStrategy, pool_id: int, analysis_data: StrategyAnalysisData) -> Optional[int]:

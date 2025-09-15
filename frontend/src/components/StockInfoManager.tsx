@@ -365,7 +365,7 @@ const StockInfoManager: React.FC = () => {
           </p>
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mt-6">
             <div className="text-center">
-              <div className="text-2xl font-bold text-blue-600">{stats ? stats.total_stocks.toLocaleString() : '4620+'}</div>
+              <div className="text-2xl font-bold text-blue-600">{stats ? stats.total_stocks.toLocaleString() : '9144+'}</div>
               <div className="text-sm text-gray-600">支持股票</div>
             </div>
             <div className="text-center">
