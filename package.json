@@ -8,9 +8,10 @@
     "test": "tests"
   },
   "scripts": {
-    "dev": "concurrently --names \"BACKEND,FRONTEND\" --prefix-colors \"blue,green\" \"npm run backend\" \"npm run frontend\"",
+    "dev": "npm run stop && concurrently --names \"BACKEND,FRONTEND\" --prefix-colors \"blue,green\" \"npm run backend\" \"npm run frontend\"",
     "backend": "python3 backend/main.py",
     "frontend": "cd frontend && npm run dev",
+    "stop": "lsof -ti:8001 | xargs kill -9 2>/dev/null; lsof -ti:3000 | xargs kill -9 2>/dev/null; lsof -ti:3001 | xargs kill -9 2>/dev/null; lsof -ti:3002 | xargs kill -9 2>/dev/null; echo 'Stopped existing services'",
     "install": "npm install && cd frontend && npm install",
     "build": "cd frontend && npm run build"
   },

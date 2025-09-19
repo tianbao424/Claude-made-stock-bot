@@ -1,16 +1,17 @@
-# 🤖 AI股票聊天助手 - 全栈金融分析系统
+# 🤖 AI股票聊天助手 - 智能投资分析平台
 
 <div align="center">
 
-![Version](https://img.shields.io/badge/version-v2.0.0-blue.svg)
+![Version](https://img.shields.io/badge/version-v2.1.0-blue.svg)
 ![License](https://img.shields.io/badge/license-MIT-green.svg)
-![React](https://img.shields.io/badge/React-19+-61DAFB.svg)
+![React](https://img.shields.io/badge/React-18+-61DAFB.svg)
 ![FastAPI](https://img.shields.io/badge/FastAPI-0.104+-009688.svg)
 ![TypeScript](https://img.shields.io/badge/TypeScript-5.0+-3178C6.svg)
+![Python](https://img.shields.io/badge/Python-3.9+-3776AB.svg)
 
-**现代化股票分析助手，集成AI智能问答与专业股票池管理**
+**基于AI的现代化股票投资分析平台，集成智能策略生成与专业股票管理**
 
-[🚀 快速开始](#-快速开始) • [📊 功能特性](#-功能特性) • [🏗️ 技术架构](#️-技术架构) • [📱 界面展示](#-界面展示)
+[🚀 快速开始](#-快速开始) • [✨ 核心功能](#-核心功能) • [🏗️ 技术架构](#️-技术架构) • [📊 功能展示](#-功能展示)
 
 </div>
 
@@ -18,27 +19,27 @@
 
 ## 📋 目录
 
-- [✨ 项目概述](#-项目概述)
+- [🎯 项目概述](#-项目概述)
 - [🚀 快速开始](#-快速开始)
-- [📊 功能特性](#-功能特性)
+- [✨ 核心功能](#-核心功能)
 - [🏗️ 技术架构](#️-技术架构)
-- [📱 界面展示](#-界面展示)
-- [🛠️ 开发指南](#️-开发指南)
-- [📈 数据源说明](#-数据源说明)
-- [🔧 配置说明](#-配置说明)
-- [🚀 部署指南](#-部署指南)
+- [📊 功能展示](#-功能展示)
+- [🔧 安装部署](#-安装部署)
+- [📝 API文档](#-api文档)
+- [💡 使用指南](#-使用指南)
 - [🤝 贡献指南](#-贡献指南)
 
-## ✨ 项目概述
+## 🎯 项目概述
 
-AI股票聊天助手是一个基于 **React 19 + FastAPI** 的现代化全栈金融分析系统。系统集成了实时AI智能问答、专业股票池管理、实时行情展示等功能，为个人投资者和金融分析师提供一站式股票分析工具。
+AI股票聊天助手是一个基于 **FastAPI + React** 的现代化AI驱动股票投资分析平台。系统通过MCP协议集成AkShare数据源，结合大语言模型，为用户提供智能化的股票投资分析、策略生成和投资组合管理服务。
 
-### 🎯 核心价值
+### 🌟 核心价值
 
-- **🧠 智能分析**：集成大语言模型，支持自然语言股票查询和分析
-- **📊 专业数据**：集成AkShare数据源，支持A股、港股实时行情
-- **💼 投资管理**：完整的股票池管理系统，支持持仓和关注列表
-- **🎨 现代界面**：响应式设计，完美支持桌面和移动端
+- **🧠 AI驱动分析**：基于Qwen-Coder-Plus模型的智能投资策略生成
+- **📊 实时数据**：集成AkShare数据源，支持A股、港股实时行情
+- **🎯 智能筛选**：多维度股票筛选算法，发现投资机会
+- **💼 专业管理**：完整的投资组合和股票池管理系统
+- **🔄 自动化**：智能数据同步和性能监控系统
 
 ## 🚀 快速开始
 
@@ -55,70 +56,89 @@ AI股票聊天助手是一个基于 **React 19 + FastAPI** 的现代化全栈金
 git clone <repository-url>
 cd "Claude made stock bot"
 
-# 2. 安装后端依赖
-cd backend
+# 2. 安装所有依赖
+npm install
 pip install -r requirements.txt
 
-# 3. 安装前端依赖
-cd ../frontend
-npm install
-
-# 4. 一键启动所有服务
-cd ..
-./start_optimized.sh
+# 3. 一键启动前后端服务
+npm run dev
 ```
 
 ### 🌐 访问系统
 
-启动成功后，系统将自动运行在：
-
-- **前端界面**：http://localhost:3005 (或自动分配的端口)
+- **前端界面**：http://localhost:3000
 - **后端API**：http://localhost:8001
 - **API文档**：http://localhost:8001/docs
-- **健康检查**：http://localhost:8001/health
 
-## 📊 功能特性
+## ✨ 核心功能
 
-### 🎯 核心功能模块
+### 🤖 AI智能分析引擎
 
-#### 1. 💬 AI智能问答
-- **实时对话**：基于WebSocket的实时AI对话体验
-- **股票分析**：支持自然语言查询股票信息和技术分析
-- **智能识别**：自动识别股票名称并转换为标准代码
-- **多数据源**：集成历史数据、财务报表、新闻资讯等
+#### 💬 实时智能问答
+- **WebSocket实时通信**：毫秒级响应的AI对话体验
+- **MCP数据集成**：实时调用AkShare专业金融数据
+- **多维度分析**：技术面、基本面、新闻资讯综合分析
+- **自然语言理解**：支持中文股票名称智能识别
 
-#### 2. 📈 股票信息库
-- **海量数据**：支持 **4600+** 只A股和港股
-- **智能搜索**：支持股票代码、名称、拼音多维度搜索
-- **实时行情**：集成AkShare实时数据，30秒自动刷新
-- **专业展示**：涵盖价格、交易量、估值指标等完整信息
+#### 🧠 AI投资策略生成系统
+- **实时数据收集**：策略生成前自动获取最新股价和指标
+- **智能分析引擎**：基于Qwen-Coder-Plus模型的深度分析
+- **多维评估体系**：
+  - 📊 综合评分（1-10分制）
+  - ⚠️ 风险等级评估（低/中/高）
+  - 💹 操作建议（买入/持有/减仓/卖出）
+  - 🎯 目标价位区间预测
+  - 📋 具体行动计划制定
+- **历史策略追踪**：完整的策略分析历史记录和对比
 
-#### 3. 💼 股票池管理
-- **投资组合**：支持持仓股票和关注列表分类管理
-- **标签系统**：自定义标签，灵活分类股票
-- **批量操作**：支持批量添加、编辑、删除操作
-- **数据统计**：投资组合统计分析和可视化
+### 📊 股票数据管理
 
-#### 4. 🎨 用户体验
-- **响应式设计**：完美适配桌面、平板、手机
-- **现代UI**：基于Tailwind CSS的现代化界面设计
-- **实时更新**：自动数据刷新和状态同步
-- **离线支持**：SQLite本地存储，支持离线查看
+#### 🔍 智能股票筛选系统
+- **强势股票识别**：自动识别连续上涨的强势股票
+- **自定义筛选条件**：
+  - 连续上涨天数设置
+  - 最小涨幅阈值配置
+  - 成交量过滤器
+  - 市场分类选择
+- **实时筛选执行**：支持手动触发和定时自动筛选
+- **可视化结果展示**：专业的表格展示和分页浏览
 
-### ⭐ 特色功能
+#### 🗂️ 股票信息数据库
+- **海量数据支持**：涵盖A股、港股4600+只股票
+- **智能搜索引擎**：支持股票代码、名称、拼音多维搜索
+- **实时行情更新**：30秒自动刷新最新价格
+- **专业数据展示**：价格、交易量、估值指标等15+核心指标
 
-#### 📊 专业股票详情页
-- **实时价格**：大字体价格显示，涨跌幅一目了然
-- **基础数据**：昨收、今开、最高、最低，紧凑清晰展示
-- **交易指标**：成交量、成交额、振幅、换手率
-- **估值分析**：市盈率、市净率、总市值、每股净资产
-- **自动刷新**：30秒智能刷新，支持手动刷新控制
+### 💼 投资组合管理
 
-#### 🔍 智能搜索体验
-- **多维匹配**：支持股票代码(600519)、中文名称(贵州茅台)、拼音搜索
-- **即时搜索**：300ms防抖，流畅的搜索体验
-- **结果筛选**：按市场(沪深/港股)筛选搜索结果
-- **分页展示**：高效的分页数据加载
+#### 📈 股票池管理系统
+- **持仓股票管理**：
+  - 完整的持股数量、成本价、现价跟踪
+  - 实时市值计算和盈亏分析
+  - 灵活的标签分类系统
+  - 详细的备注和历史记录
+- **潜在标的池**：关注股票的添加、分类和管理
+- **批量操作支持**：高效的批量添加、编辑、删除功能
+
+#### 📊 策略分析历史
+- **完整记录追踪**：每次策略分析的详细记录
+- **历史对比分析**：不同时期策略建议的对比
+- **投资决策支持**：基于历史数据的决策参考
+
+### ⚡ 自动化系统
+
+#### ⏰ 数据同步调度器
+- **智能定时调度**：
+  - 每日股票基础信息自动同步
+  - 每周全量数据更新
+  - 实时数据源健康检查
+- **市场时间感知**：自动识别交易日和非交易日
+- **错误恢复机制**：自动重试和异常处理
+
+#### 📊 性能监控系统
+- **系统性能监控**：API响应时间、数据库性能分析
+- **资源使用统计**：系统资源占用监控和优化建议
+- **自动性能测试**：定期性能基准测试和优化
 
 ## 🏗️ 技术架构
 
@@ -126,26 +146,33 @@ cd ..
 
 ```mermaid
 graph TB
-    subgraph "前端层"
-        A[React 19 + TypeScript]
-        B[Tailwind CSS]
-        C[Vite 6 构建]
+    subgraph "用户界面层"
+        A[React 18 + TypeScript]
+        B[Tailwind CSS UI]
+        C[Vite 构建工具]
     end
     
     subgraph "通信层"
         D[REST API]
-        E[WebSocket]
+        E[WebSocket 实时通信]
     end
     
-    subgraph "后端层"
-        F[FastAPI]
-        G[MCP 协议]
-        H[OpenAI API]
+    subgraph "业务逻辑层"
+        F[FastAPI 框架]
+        G[AI策略引擎]
+        H[股票筛选算法]
+        I[数据同步调度器]
     end
     
-    subgraph "数据层"
-        I[SQLite 数据库]
-        J[AkShare 数据源]
+    subgraph "数据访问层"
+        J[MCP 协议集成]
+        K[AkShare 数据源]
+        L[SQLite 数据库]
+    end
+    
+    subgraph "AI服务层"
+        M[Qwen-Coder-Plus 模型]
+        N[OpenAI Compatible API]
     end
     
     A --> D
@@ -156,205 +183,111 @@ graph TB
     F --> H
     F --> I
     F --> J
+    J --> K
+    F --> L
+    G --> M
+    G --> N
 ```
 
 ### 🔧 技术栈详情
 
 #### 前端技术栈
-- **React 19** - 最新的前端框架，支持并发特性
-- **TypeScript 5.0+** - 类型安全的JavaScript超集
-- **Tailwind CSS 4.0+** - 原子化CSS框架，现代化UI设计
-- **Vite 6** - 极速的现代化构建工具
-- **Lucide React** - 精美的SVG图标库
+- **React 18** - 现代化前端框架，支持并发特性
+- **TypeScript 5.0+** - 端到端类型安全
+- **Tailwind CSS** - 原子化CSS框架
+- **Vite** - 极速构建工具
+- **Lucide React** - 现代化图标库
 
 #### 后端技术栈
-- **FastAPI 0.104+** - 现代、高性能的Python Web框架
-- **WebSocket** - 实时双向通信支持
+- **FastAPI 0.104+** - 高性能异步Web框架
+- **WebSocket** - 实时双向通信
 - **SQLite** - 轻量级关系型数据库
-- **AkShare** - 专业的金融数据接口
 - **MCP (Model Context Protocol)** - AI模型上下文协议
+- **AkShare** - 专业金融数据接口
+- **Schedule** - 定时任务调度
+
+#### AI技术栈
+- **Qwen-Coder-Plus** - 阿里云大语言模型
+- **OpenAI Compatible API** - 标准化AI接口
+- **实时数据融合** - AI分析与实时数据结合
 
 ### 📁 项目结构
 
 ```
 Claude made stock bot/
-├── 📁 backend/                 # 后端代码
-│   ├── 📁 services/            # 业务服务层
-│   │   ├── akshare_service.py  # AkShare数据服务
-│   │   └── stock_data.py       # 股票数据服务
-│   ├── database.py             # 数据库管理
-│   └── main.py                 # FastAPI主应用
-├── 📁 frontend/                # 前端代码
-│   ├── 📁 src/
-│   │   ├── 📁 components/      # React组件
-│   │   │   ├── StockDetailModal.tsx    # 股票详情弹窗
-│   │   │   ├── StockInfoManager.tsx    # 股票信息管理
-│   │   │   ├── StockPoolManager.tsx    # 股票池管理
-│   │   │   └── ChatInterface.tsx       # AI聊天界面
-│   │   ├── 📁 services/        # 前端服务
-│   │   │   └── api.ts          # API接口封装
-│   │   └── App.tsx             # 主应用组件
-├── 📁 config/                  # 配置文件
-├── 📄 start_optimized.sh       # 一键启动脚本
-├── 📄 requirements.txt         # Python依赖
-├── 📄 package.json            # Node.js依赖
-└── 📄 README.md               # 项目文档
+├── 📁 backend/                           # 后端服务
+│   ├── 📄 main.py                        # FastAPI主应用
+│   ├── 📄 database.py                    # 数据库管理
+│   └── 📁 services/                      # 业务服务层
+│       ├── 📄 strategy_service.py        # AI策略分析服务
+│       ├── 📄 stock_screening_service.py # 股票筛选服务
+│       ├── 📄 akshare_service.py         # AkShare数据服务
+│       ├── 📄 improved_akshare_service.py # 优化数据服务
+│       └── 📄 data_sync_scheduler.py     # 数据同步调度
+├── 📁 frontend/                          # 前端应用
+│   └── 📁 src/
+│       ├── 📄 App.tsx                    # 主应用组件
+│       ├── 📁 components/                # React组件
+│       │   ├── 📄 ChatInterface.tsx      # AI聊天界面
+│       │   ├── 📄 StockPoolManager.tsx   # 股票池管理
+│       │   ├── 📄 StockScreeningDashboard.tsx # 股票筛选面板
+│       │   ├── 📄 StrategyModal.tsx      # 策略分析展示
+│       │   └── 📄 PerformanceMonitor.tsx # 性能监控
+│       ├── 📁 hooks/                     # 自定义Hooks
+│       ├── 📁 services/                  # 前端服务
+│       └── 📁 types/                     # TypeScript类型
+├── 📄 package.json                       # 项目配置
+├── 📄 requirements.txt                   # Python依赖
+└── 📄 stock_pool.db                      # SQLite数据库
 ```
 
-## 📱 界面展示
+## 📊 功能展示
 
 ### 🏠 主界面
-- **侧边栏导航**：清晰的功能模块划分
-- **响应式布局**：完美适配不同屏幕尺寸
-- **现代化设计**：简洁美观的用户界面
+- **直观导航**：清晰的功能模块分布
+- **响应式设计**：完美适配各种设备
+- **实时状态**：系统状态和连接状态显示
 
-### 💬 AI聊天界面
-- **实时对话**：流畅的AI对话体验
-- **智能分析**：专业的股票分析回复
-- **连接状态**：实时显示连接状态
+### 🤖 AI策略分析界面
+- **全屏分析展示**：专业的策略分析报告
+- **实时数据更新**：分析前自动更新最新价格
+- **多维度评估**：评分、风险、建议全方位展示
+- **历史策略对比**：策略分析历史记录追踪
 
-### 📊 股票详情页
-- **专业布局**：金融级数据展示
-- **实时更新**：30秒自动刷新机制
-- **完整信息**：涵盖价格、交易、估值等15+核心指标
+### 🔍 股票筛选面板
+- **灵活筛选条件**：可自定义的筛选参数
+- **实时筛选执行**：手动触发筛选功能
+- **可视化结果**：专业的表格展示和分页
+- **筛选历史管理**：历史筛选记录查看
 
-### 🔍 股票搜索
-- **智能匹配**：多维度搜索支持
-- **即时结果**：实时搜索反馈
-- **市场筛选**：支持按交易所筛选
+### 💼 股票池管理
+- **持仓管理**：详细的持股信息跟踪
+- **盈亏分析**：实时盈亏计算和展示
+- **标签分类**：灵活的股票分类管理
+- **批量操作**：高效的批量管理功能
 
-## 🛠️ 开发指南
+## 🔧 安装部署
 
-### 🔧 本地开发
+### 🛠️ 开发环境
 
-#### 1. 后端开发
+#### 后端开发
 ```bash
 cd backend
-# 安装依赖
 pip install -r requirements.txt
-
-# 启动开发服务器
 uvicorn main:app --host 0.0.0.0 --port 8001 --reload
 ```
 
-#### 2. 前端开发
+#### 前端开发
 ```bash
 cd frontend
-# 安装依赖
 npm install
-
-# 启动开发服务器
 npm run dev
 ```
 
-### 📝 API接口文档
+### 🐳 生产部署
 
-#### REST API
-- `GET /api/stocks/search` - 股票搜索
-- `GET /api/stocks/info/{symbol}` - 股票详情
-- `GET /api/stocks/realtime/{symbol}` - 实时行情
-- `GET /api/stock-pools` - 获取股票池
-- `POST /api/stock-pools` - 创建股票池
-- `PUT /api/stock-pools/{id}` - 更新股票池
-- `DELETE /api/stock-pools/{id}` - 删除股票池
-
-#### WebSocket API
-- `/ws` - AI聊天WebSocket连接
-
-### 🎯 数据模型
-
-#### 股票信息模型
-```typescript
-interface StockInfo {
-  symbol: string;      // 股票代码
-  name: string;        // 股票名称
-  short_name: string;  // 简称
-  market: string;      // 市场(SH/SZ/HK)
-  industry: string;    // 行业
-  sector?: string;     // 板块
-  market_cap?: number; // 市值
-  pe_ratio?: number;   // 市盈率
-  pb_ratio?: number;   // 市净率
-}
-```
-
-#### 实时行情模型
-```typescript
-interface RealtimeStockData {
-  symbol: string;
-  current_price: number;
-  change_amount: number;
-  change_percent: number;
-  volume: number;
-  turnover: number;
-  open_price: number;
-  high_price: number;
-  low_price: number;
-  prev_close: number;
-  timestamp: string;
-}
-```
-
-## 📈 数据源说明
-
-### 🔌 AkShare集成
-- **数据覆盖**：支持沪深A股、港股实时行情
-- **数据类型**：股票基础信息、实时价格、历史数据、财务数据
-- **更新频率**：实时数据30秒更新，历史数据日更新
-- **容错机制**：数据获取失败时提供模拟数据支持
-
-### 📊 数据质量
-- **数据源**：专业金融数据提供商
-- **准确性**：实时同步交易所数据
-- **完整性**：涵盖基础信息、交易数据、财务指标
-- **时效性**：毫秒级数据更新
-
-## 🔧 配置说明
-
-### 📋 环境变量配置
-
-创建 `.env` 文件：
-```env
-# AI配置
-BASE_URL=你的API基础URL
-API_KEY=你的API密钥
-MODEL=你的模型名称
-
-# 数据库配置
-DATABASE_URL=sqlite:///stock_pool.db
-
-# 服务配置
-BACKEND_HOST=0.0.0.0
-BACKEND_PORT=8001
-FRONTEND_PORT=3005
-```
-
-### ⚙️ 系统配置
-
-#### AkShare配置
-```python
-# backend/services/akshare_service.py
-class AkShareService:
-    def __init__(self):
-        # 配置数据源参数
-        self.update_interval = 30  # 更新间隔(秒)
-        self.retry_count = 3       # 重试次数
-        self.timeout = 10          # 超时时间
-```
-
-#### 前端配置
-```typescript
-// frontend/src/services/api.ts
-const API_BASE_URL = 'http://localhost:8001/api';
-const WEBSOCKET_URL = 'ws://localhost:8001/ws';
-```
-
-## 🚀 部署指南
-
-### 🐳 Docker部署
-
+#### Docker部署
 ```dockerfile
-# Dockerfile示例
 FROM node:18-alpine AS frontend
 WORKDIR /app/frontend
 COPY frontend/ .
@@ -369,88 +302,154 @@ EXPOSE 8001
 CMD ["uvicorn", "backend.main:app", "--host", "0.0.0.0", "--port", "8001"]
 ```
 
-### ☁️ 云服务部署
+#### 环境变量配置
+```env
+# AI模型配置
+BASE_URL=你的API基础URL
+API_KEY=你的API密钥
+MODEL=qwen-coder-plus
 
-#### 方案一：Vercel + Railway
-- **前端**：部署到Vercel
-- **后端**：部署到Railway
-- **数据库**：SQLite文件存储
+# 数据库配置
+DATABASE_PATH=stock_pool.db
 
-#### 方案二：云服务器
-- **服务器**：阿里云/腾讯云ECS
-- **反向代理**：Nginx
-- **进程管理**：PM2/Supervisor
+# 服务配置
+SERVER_HOST=0.0.0.0
+SERVER_PORT=8001
+```
 
-### 🔄 生产环境优化
+## 📝 API文档
 
-```bash
-# 生产环境启动
-# 后端
-gunicorn backend.main:app -w 4 -k uvicorn.workers.UvicornWorker
+### 核心API端点
 
-# 前端构建
-cd frontend && npm run build
+#### 股票池管理
+- `GET /api/stock-pools` - 获取股票池列表
+- `POST /api/stock-pools` - 创建股票池条目
+- `PUT /api/stock-pools/{id}` - 更新股票池条目
+- `DELETE /api/stock-pools/{id}` - 删除股票池条目
 
-# Nginx配置
-server {
-    listen 80;
-    location / {
-        root /path/to/frontend/dist;
-        try_files $uri $uri/ /index.html;
-    }
-    location /api {
-        proxy_pass http://127.0.0.1:8001;
-    }
-    location /ws {
-        proxy_pass http://127.0.0.1:8001;
-        proxy_http_version 1.1;
-        proxy_set_header Upgrade $http_upgrade;
-        proxy_set_header Connection "upgrade";
-    }
+#### AI策略分析
+- `POST /api/strategy/generate/{stock_pool_id}` - 生成投资策略
+- `GET /api/strategy/history/{stock_pool_id}` - 获取策略历史
+- `GET /api/strategy/{strategy_id}` - 获取策略详情
+
+#### 股票筛选
+- `POST /api/screening/manual-trigger` - 手动触发筛选
+- `GET /api/screening/latest-results` - 获取最新筛选结果
+- `POST /api/screening/init-historical-data` - 初始化历史数据
+
+#### 股票信息
+- `GET /api/stocks/search` - 股票搜索
+- `GET /api/stocks/realtime/{symbol}` - 实时行情
+- `GET /api/data-sources/status` - 数据源状态
+
+#### WebSocket
+- `/ws` - AI聊天WebSocket连接
+
+### 数据模型
+
+#### 股票池模型
+```typescript
+interface StockPool {
+  id?: number;
+  stock_code: string;
+  stock_name: string;
+  pool_type: 'holding' | 'potential';
+  shares: number;
+  avg_cost: number;
+  current_price: number;
+  market_value: number;
+  tags: string[];
+  notes: string;
+  created_at: string;
+  updated_at: string;
 }
 ```
 
+#### AI策略分析模型
+```typescript
+interface StrategyAnalysis {
+  id: number;
+  stock_pool_id: number;
+  comprehensive_score: number;
+  risk_level: 'low' | 'medium' | 'high';
+  action_recommendation: 'buy' | 'hold' | 'reduce' | 'sell';
+  target_price_min: number;
+  target_price_max: number;
+  analysis_summary: string;
+  technical_analysis: string;
+  fundamental_analysis: string;
+  market_context: string;
+  key_metrics: any;
+  risk_warnings: string[];
+  action_plan: string[];
+  analysis_date: string;
+}
+```
+
+## 💡 使用指南
+
+### 🚀 快速上手
+
+1. **启动系统**：运行 `npm run dev` 启动前后端服务
+2. **股票池管理**：在股票池页面添加你的持仓股票
+3. **AI策略分析**：点击"策略分析"按钮获取AI投资建议
+4. **股票筛选**：使用筛选功能发现投资机会
+5. **AI聊天**：与AI助手进行股票相关问答
+
+### 📊 功能使用
+
+#### AI策略分析使用流程
+1. 在股票池中添加持仓股票（包含股数和成本价）
+2. 点击股票行的"策略分析"按钮
+3. 系统自动获取最新价格和技术指标
+4. AI模型生成详细的投资策略建议
+5. 查看分析结果和具体操作建议
+
+#### 股票筛选使用流程
+1. 设置筛选条件（连续天数、涨幅阈值等）
+2. 点击"手动筛选"执行筛选
+3. 查看筛选结果和股票列表
+4. 可将感兴趣的股票添加到股票池
+
+### 🔧 高级功能
+
+- **自动数据同步**：系统自动维护股票数据更新
+- **性能监控**：实时监控系统性能和优化建议
+- **历史数据管理**：支持历史数据回填和管理
+- **批量操作**：支持股票池的批量管理操作
+
 ## 🤝 贡献指南
 
-### 🎯 贡献方式
-1. **Bug报告**：通过Issues报告问题
-2. **功能建议**：提出新功能需求
-3. **代码贡献**：提交Pull Request
-4. **文档改进**：完善项目文档
-
-### 📝 开发规范
+### 开发规范
 - **代码风格**：使用ESLint和Prettier
 - **提交规范**：遵循Conventional Commits
-- **测试要求**：新功能需要添加相应测试
-- **文档更新**：代码变更需要更新相关文档
+- **类型安全**：充分利用TypeScript类型系统
+- **测试覆盖**：重要功能需要添加测试
 
-### 🛠️ 开发流程
+### 贡献流程
 ```bash
-# 1. Fork项目
+# 1. Fork并克隆项目
 git clone <your-fork-url>
 
 # 2. 创建功能分支
 git checkout -b feature/your-feature
 
 # 3. 开发和测试
+npm run dev
 npm test
 
 # 4. 提交代码
 git commit -m "feat: add your feature"
 
-# 5. 推送分支
-git push origin feature/your-feature
-
-# 6. 创建Pull Request
+# 5. 创建Pull Request
 ```
 
 ---
 
-## 📞 联系我们
+## 📞 联系信息
 
-- **GitHub Issues**：[报告问题](https://github.com/your-repo/issues)
-- **讨论区**：[参与讨论](https://github.com/your-repo/discussions)
-- **邮箱**：your-email@example.com
+- **GitHub Issues**：[报告问题和建议](https://github.com/your-repo/issues)
+- **讨论区**：[技术讨论和交流](https://github.com/your-repo/discussions)
 
 ## 📄 许可证
 
@@ -462,6 +461,6 @@ git push origin feature/your-feature
 
 **⭐ 如果这个项目对您有帮助，请给我们一个Star！**
 
-Made with ❤️ by AI股票助手团队
+Made with ❤️ by AI股票助手开发团队
 
 </div>

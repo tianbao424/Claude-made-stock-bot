@@ -430,9 +430,18 @@ class StockScreeningService:
             with sqlite3.connect(self.db_manager.db_path) as conn:
                 cursor = conn.cursor()
                 
+                # 先删除当天同类型的旧结果
+                cursor.execute('''
+                    DELETE FROM stock_screening 
+                    WHERE screening_date = ? AND screening_type = ?
+                ''', (screening_date, criteria.screening_type))
+                
+                logger.info(f"🗑️ 清理了 {cursor.rowcount} 条当天旧的筛选结果")
+                
+                # 插入新的筛选结果
                 for result in results:
                     cursor.execute('''
-                        INSERT OR REPLACE INTO stock_screening
+                        INSERT INTO stock_screening
                         (stock_code, stock_name, market, screening_date, screening_type,
                          criteria_met, consecutive_days, avg_rise_percent, total_volume, 
                          avg_volume, created_at)

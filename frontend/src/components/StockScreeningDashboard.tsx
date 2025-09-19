@@ -97,10 +97,11 @@ const StockScreeningDashboard: React.FC = () => {
       
       if (data.success) {
         setMessage('筛选任务执行完成，正在刷新结果...');
-        // 等待2秒后刷新结果
+        // 立即刷新一次，然后等待5秒后再次刷新确保数据同步
+        fetchLatestResults();
         setTimeout(() => {
           fetchLatestResults();
-        }, 2000);
+        }, 5000);
       } else {
         setMessage('手动触发筛选失败');
       }
