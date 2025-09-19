@@ -13,6 +13,7 @@ import time as time_module
 
 from services.akshare_service import akshare_service
 from services.improved_akshare_service import improved_akshare_service
+from services.stock_screening_service import get_stock_screening_service, ScreeningCriteria
 from database import DatabaseManager
 from utils.market_hours import (
     isWeekday, isHoliday, isAnyMarketOpen, 
@@ -73,6 +74,18 @@ class DataSyncScheduler:
             'cache_cleanup': SyncTask(
                 name='cache_cleanup',
                 description='缓存清理',
+                frequency='daily',
+                enabled=True
+            ),
+            'daily_data_collection': SyncTask(
+                name='daily_data_collection',
+                description='每日股票涨跌数据收集',
+                frequency='daily',
+                enabled=True
+            ),
+            'strong_rise_screening': SyncTask(
+                name='strong_rise_screening',
+                description='强势上涨股票筛选',
                 frequency='daily',
                 enabled=True
             )
@@ -152,6 +165,16 @@ class DataSyncScheduler:
             self._conditional_health_check
         ).tag('post_hk_market_health')
         
+        # 每日17:00 收集股票涨跌数据 (在收盘后进行)
+        schedule.every().day.at("17:00").do(
+            self._conditional_daily_data_collection
+        ).tag('daily_data_collection')
+        
+        # 每日18:00 执行股票筛选 (在数据收集后进行)
+        schedule.every().day.at("18:00").do(
+            self._conditional_stock_screening
+        ).tag('stock_screening')
+        
         logger.info("📅 定时任务设置完成")
     
     def _run_scheduler(self):
@@ -186,6 +209,44 @@ class DataSyncScheduler:
                 # 如果没有事件循环，创建新的
                 asyncio.run(self._run_sync_task('data_source_health'))
     
+    def _conditional_daily_data_collection(self):
+        """根据市场状态决定是否执行每日数据收集"""
+        from utils.market_hours import getMarketStatusSummary
+        
+        market_status = getMarketStatusSummary()
+        
+        # 只在交易日执行数据收集
+        if market_status['isWeekday'] and not market_status['isHoliday']:
+            # 使用asyncio在同步上下文中运行异步任务
+            import asyncio
+            try:
+                loop = asyncio.get_event_loop()
+                if loop.is_running():
+                    asyncio.create_task(self._run_sync_task('daily_data_collection'))
+                else:
+                    loop.run_until_complete(self._run_sync_task('daily_data_collection'))
+            except RuntimeError:
+                asyncio.run(self._run_sync_task('daily_data_collection'))
+    
+    def _conditional_stock_screening(self):
+        """根据市场状态决定是否执行股票筛选"""
+        from utils.market_hours import getMarketStatusSummary
+        
+        market_status = getMarketStatusSummary()
+        
+        # 只在交易日执行股票筛选
+        if market_status['isWeekday'] and not market_status['isHoliday']:
+            # 使用asyncio在同步上下文中运行异步任务
+            import asyncio
+            try:
+                loop = asyncio.get_event_loop()
+                if loop.is_running():
+                    asyncio.create_task(self._run_sync_task('strong_rise_screening'))
+                else:
+                    loop.run_until_complete(self._run_sync_task('strong_rise_screening'))
+            except RuntimeError:
+                asyncio.run(self._run_sync_task('strong_rise_screening'))
+    
     async def _run_sync_task(self, task_name: str) -> SyncResult:
         """运行指定的同步任务"""
         if task_name not in self.sync_tasks:
@@ -216,6 +277,10 @@ class DataSyncScheduler:
                 result = await self._check_data_source_health()
             elif task_name == 'cache_cleanup':
                 result = await self._cleanup_cache()
+            elif task_name == 'daily_data_collection':
+                result = await self._collect_daily_stock_data()
+            elif task_name == 'strong_rise_screening':
+                result = await self._screen_strong_rise_stocks()
             else:
                 result = SyncResult(
                     success=False,
@@ -345,6 +410,90 @@ class DataSyncScheduler:
             return SyncResult(
                 success=False,
                 message=f"缓存清理失败: {str(e)}"
+            )
+    
+    async def _collect_daily_stock_data(self) -> SyncResult:
+        """收集每日股票涨跌数据"""
+        try:
+            # 获取股票筛选服务实例
+            screening_service = get_stock_screening_service(self.db_manager)
+            
+            from datetime import datetime, timedelta
+            
+            # 为了支持连续涨幅分析，需要收集最近几天的数据
+            # 收集最近5个工作日的数据（确保有足够数据进行3天连续分析）
+            total_collected = 0
+            today = datetime.now()
+            
+            for i in range(1, 8):  # 最多往前查7天，确保覆盖5个工作日
+                check_date = (today - timedelta(days=i)).strftime('%Y-%m-%d')
+                
+                # 检查是否已存在该日期的数据
+                import sqlite3
+                with sqlite3.connect(self.db_manager.db_path) as conn:
+                    cursor = conn.cursor()
+                    cursor.execute(
+                        'SELECT COUNT(*) FROM daily_stock_changes WHERE trade_date = ?',
+                        (check_date,)
+                    )
+                    existing_count = cursor.fetchone()[0]
+                
+                # 如果该日期数据较少或不存在，则收集数据
+                if existing_count < 100:  # 假设正常情况下应该有更多股票数据
+                    try:
+                        collected_count = await screening_service.collect_daily_data(check_date)
+                        total_collected += collected_count
+                        logger.info(f"📊 收集 {check_date} 的数据: {collected_count} 只股票")
+                    except Exception as e:
+                        logger.warning(f"⚠️ 收集 {check_date} 数据失败: {e}")
+                        continue
+                else:
+                    logger.info(f"✅ {check_date} 数据已存在，跳过收集")
+            
+            return SyncResult(
+                success=True,
+                message=f"历史数据收集完成，总共收集了 {total_collected} 条数据记录",
+                records_updated=total_collected
+            )
+            
+        except Exception as e:
+            return SyncResult(
+                success=False,
+                message=f"历史数据收集失败: {str(e)}"
+            )
+    
+    async def _screen_strong_rise_stocks(self, custom_criteria: Optional[ScreeningCriteria] = None) -> SyncResult:
+        """筛选强势上涨股票"""
+        try:
+            # 获取股票筛选服务实例
+            screening_service = get_stock_screening_service(self.db_manager)
+            
+            # 设置筛选条件：使用传入的条件，否则使用默认条件
+            if custom_criteria:
+                criteria = custom_criteria
+            else:
+                # 默认筛选条件：连续3天涨幅超过7%
+                criteria = ScreeningCriteria(
+                    screening_type='strong_rise_3d',
+                    min_consecutive_days=3,
+                    min_rise_percent=7.0,
+                    min_volume=0,
+                    market_filter=['SH', 'SZ']  # 目前只筛选A股
+                )
+            
+            # 执行筛选
+            results = await screening_service.screen_strong_rise_stocks(criteria)
+            
+            return SyncResult(
+                success=True,
+                message=f"强势股票筛选完成，找到 {len(results)} 只符合条件的股票",
+                records_updated=len(results)
+            )
+            
+        except Exception as e:
+            return SyncResult(
+                success=False,
+                message=f"强势股票筛选失败: {str(e)}"
             )
     
     def get_scheduler_status(self) -> Dict[str, Any]:

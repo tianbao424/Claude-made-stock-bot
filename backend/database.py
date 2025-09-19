@@ -139,6 +139,38 @@ class StrategyAnalysis:
     confidence_level: float = 0.0
     created_at: str = ""
 
+@dataclass
+class StockScreening:
+    """股票筛选记录"""
+    id: Optional[int] = None
+    stock_code: str = ""
+    stock_name: str = ""
+    market: str = ""
+    screening_date: str = ""
+    screening_type: str = ""  # 'strong_rise_3d', 'strong_fall_3d', etc.
+    criteria_met: str = ""    # JSON格式存储筛选条件详情
+    consecutive_days: int = 0
+    avg_rise_percent: float = 0.0
+    total_volume: int = 0
+    avg_volume: int = 0
+    created_at: str = ""
+
+@dataclass 
+class DailyStockChange:
+    """每日股票涨跌数据"""
+    id: Optional[int] = None
+    stock_code: str = ""
+    trade_date: str = ""
+    change_percent: float = 0.0
+    close_price: float = 0.0
+    open_price: float = 0.0
+    high_price: float = 0.0
+    low_price: float = 0.0
+    volume: int = 0
+    turnover: float = 0.0
+    market: str = ""
+    created_at: str = ""
+
 class DatabaseManager:
     def __init__(self, db_path: str = None):
         if db_path is None:
@@ -236,6 +268,44 @@ class DatabaseManager:
                 )
             ''')
             
+            # 创建股票筛选记录表
+            cursor.execute('''
+                CREATE TABLE IF NOT EXISTS stock_screening (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    stock_code TEXT NOT NULL,
+                    stock_name TEXT NOT NULL,
+                    market TEXT NOT NULL,
+                    screening_date DATE NOT NULL,
+                    screening_type TEXT NOT NULL, -- 'strong_rise_3d', 'strong_fall_3d', etc.
+                    criteria_met TEXT NOT NULL,   -- JSON格式存储筛选条件详情
+                    consecutive_days INTEGER,
+                    avg_rise_percent REAL,
+                    total_volume INTEGER DEFAULT 0,
+                    avg_volume INTEGER DEFAULT 0,
+                    created_at TEXT NOT NULL,
+                    UNIQUE(stock_code, screening_date, screening_type)
+                )
+            ''')
+            
+            # 创建每日涨跌数据缓存表
+            cursor.execute('''
+                CREATE TABLE IF NOT EXISTS daily_stock_changes (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    stock_code TEXT NOT NULL,
+                    trade_date DATE NOT NULL,
+                    change_percent REAL NOT NULL,
+                    close_price REAL,
+                    open_price REAL,
+                    high_price REAL,
+                    low_price REAL,
+                    volume INTEGER,
+                    turnover REAL,
+                    market TEXT NOT NULL,
+                    created_at TEXT NOT NULL,
+                    UNIQUE(stock_code, trade_date)
+                )
+            ''')
+            
             # 创建搜索索引
             cursor.execute('CREATE INDEX IF NOT EXISTS idx_stock_name ON stock_info(name)')
             cursor.execute('CREATE INDEX IF NOT EXISTS idx_stock_pinyin ON stock_info(pinyin)')
@@ -243,6 +313,14 @@ class DatabaseManager:
             cursor.execute('CREATE INDEX IF NOT EXISTS idx_stock_symbol ON stock_info(symbol)')
             cursor.execute('CREATE INDEX IF NOT EXISTS idx_strategy_stock_code ON strategy_analysis(stock_code)')
             cursor.execute('CREATE INDEX IF NOT EXISTS idx_strategy_date ON strategy_analysis(analysis_date)')
+            
+            # 创建筛选相关索引
+            cursor.execute('CREATE INDEX IF NOT EXISTS idx_screening_date ON stock_screening(screening_date)')
+            cursor.execute('CREATE INDEX IF NOT EXISTS idx_screening_type ON stock_screening(screening_type)')
+            cursor.execute('CREATE INDEX IF NOT EXISTS idx_screening_code ON stock_screening(stock_code)')
+            cursor.execute('CREATE INDEX IF NOT EXISTS idx_daily_changes_date ON daily_stock_changes(trade_date)')
+            cursor.execute('CREATE INDEX IF NOT EXISTS idx_daily_changes_code ON daily_stock_changes(stock_code)')
+            cursor.execute('CREATE INDEX IF NOT EXISTS idx_daily_changes_code_date ON daily_stock_changes(stock_code, trade_date)')
             
             conn.commit()
             logger.info("✅ Database initialized successfully")

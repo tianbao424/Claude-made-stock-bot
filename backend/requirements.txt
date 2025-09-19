@@ -7,3 +7,4 @@ mcp>=1.13.1
 schedule>=1.2.0
 pandas>=2.0.0
 akshare>=1.12.0
+psutil>=5.9.0

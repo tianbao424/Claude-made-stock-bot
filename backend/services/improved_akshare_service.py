@@ -245,14 +245,22 @@ class ImprovedAkShareService:
                     )
                     
             elif source == DataSource.SINA_HK and market.upper() == "HK":
-                # 新浪港股数据
+                # 新浪港股数据（需下载全市场数据，较慢）
+                logger.info(f"  ⏳ 下载港股全市场数据中...")
                 data = self.ak.stock_hk_spot()
-                # 港股代码处理
-                search_symbol = symbol.lstrip('0') if len(symbol) == 5 else symbol
+                
+                if data is None or data.empty:
+                    logger.warning(f"  ❌ 新浪港股数据为空")
+                    return None
+                
+                # 港股代码处理：API返回的是完整5位代码（带前导零），直接使用原代码查找
+                search_symbol = symbol  # 直接使用原始代码，如 "02543"
+                logger.info(f"  🔍 查找港股代码: {search_symbol}")
                 stock_data = data[data['代码'].astype(str) == search_symbol]
                 
                 if not stock_data.empty:
                     row = stock_data.iloc[0]
+                    logger.info(f"  ✅ 找到港股数据: {row.get('中文名称', '')}")
                     return StockRealtimeData(
                         symbol=symbol,
                         name=str(row.get('中文名称', '')),
@@ -271,6 +279,8 @@ class ImprovedAkShareService:
                         timestamp=datetime.now().isoformat(),
                         data_source=source
                     )
+                else:
+                    logger.warning(f"  ❌ 未找到港股 {search_symbol} 的数据")
                     
             elif source == DataSource.INDIVIDUAL_EM:
                 # 东方财富个股信息
@@ -380,10 +390,20 @@ class ImprovedAkShareService:
                 DataSource.MOCK,           # 备选：模拟数据（兜底）
             ]
         else:  # HK
-            # 港股：暂时只使用模拟数据（避免全市场下载）
-            priority_sources = [
-                DataSource.MOCK,           # 港股暂时只使用模拟数据
-            ]
+            # 港股：由于需要下载全市场数据较慢，提供选择性支持
+            # 生产环境可配置为优先使用真实数据
+            use_real_hk_data = True  # 可配置项：是否使用真实港股数据
+            
+            if use_real_hk_data:
+                priority_sources = [
+                    DataSource.SINA_HK,        # 首选：新浪港股数据（需下载全市场）
+                    DataSource.EASTMONEY_HK,   # 备选：东方财富港股
+                    DataSource.MOCK,           # 兜底：模拟数据
+                ]
+            else:
+                priority_sources = [
+                    DataSource.MOCK,           # 仅模拟数据（快速响应）
+                ]
         
         # 按优先级尝试获取数据
         for source in priority_sources:

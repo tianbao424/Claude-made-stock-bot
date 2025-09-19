@@ -1,11 +1,15 @@
 import React, { useState } from 'react';
-import { BarChart3, MessageSquare, Settings, Menu, X, Database } from 'lucide-react';
+import { BarChart3, MessageSquare, Settings, Menu, X, Database, Filter, Clock, Activity } from 'lucide-react';
 import StockPoolManager from './components/StockPoolManager';
 import ChatInterface from './components/ChatInterface';
 import StockInfoManager from './components/StockInfoManager';
+import StockScreeningDashboard from './components/StockScreeningDashboard';
+import ScreeningHistory from './components/ScreeningHistory';
+import ScreeningConfig from './components/ScreeningConfig';
+import PerformanceMonitor from './components/PerformanceMonitor';
 import './App.css';
 
-type TabType = 'chat' | 'pool' | 'stockinfo' | 'settings';
+type TabType = 'chat' | 'pool' | 'stockinfo' | 'screening' | 'history' | 'settings' | 'performance';
 
 const App: React.FC = () => {
   const [activeTab, setActiveTab] = useState<TabType>('chat');
@@ -31,15 +35,28 @@ const App: React.FC = () => {
       component: <StockInfoManager />,
     },
     {
+      id: 'screening' as TabType,
+      name: '股票甄选',
+      icon: Filter,
+      component: <StockScreeningDashboard />,
+    },
+    {
+      id: 'history' as TabType,
+      name: '筛选历史',
+      icon: Clock,
+      component: <ScreeningHistory />,
+    },
+    {
       id: 'settings' as TabType,
-      name: '设置',
+      name: '筛选配置',
       icon: Settings,
-      component: (
-        <div className="p-6">
-          <h1 className="text-2xl font-bold text-gray-900 mb-4">系统设置</h1>
-          <p className="text-gray-600">设置功能正在开发中...</p>
-        </div>
-      ),
+      component: <ScreeningConfig />,
+    },
+    {
+      id: 'performance' as TabType,
+      name: '性能监控',
+      icon: Activity,
+      component: <PerformanceMonitor />,
     },
   ];
 
