@@ -29,6 +29,12 @@ export const strategyApi = axios.create({
   timeout: 60000, // 策略分析超时60秒
 });
 
+// 为深度分析创建专门的API实例，使用更长的超时时间
+export const deepAnalysisApi = axios.create({
+  baseURL: API_BASE_URL,
+  timeout: 120000, // 深度分析超时120秒
+});
+
 // 股票池API
 export const stockPoolAPI = {
   // 获取所有股票池
@@ -166,5 +172,142 @@ export const strategyAPI = {
       console.error('获取策略分析详情失败:', error);
       return null;
     }
+  }
+};
+
+// 深度分析API接口定义
+export interface DeepAnalysisRequest {
+  stock_codes: string[];
+  save_results?: boolean;
+}
+
+export interface DeepAnalysisResult {
+  stock_code: string;
+  stock_name: string;
+  analysis_date: string;
+  overall_score: number;
+  investment_grade: string;
+  recommendation: string;
+  risk_level: string;
+  is_low_volatility_breakout: boolean;
+  is_volume_price_coordinated: boolean;
+  is_worthy_of_attention: boolean;
+  volatility_analysis: {
+    sideways_period_days: number;
+    has_breakout: boolean;
+    breakout_direction: string;
+    volatility_score: number;
+    pattern_quality: string;
+  };
+  volume_analysis: {
+    has_volume_breakout: boolean;
+    volume_score: number;
+    money_flow_direction: string;
+    price_volume_trend: string;
+  };
+  entry_suggestions: string[];
+  position_size_suggestion: string;
+  holding_period_suggestion: string;
+}
+
+export interface AutoPoolConfig {
+  min_overall_score: number;
+  min_volatility_score: number;
+  min_volume_score: number;
+  require_low_volatility_breakout: boolean;
+  require_volume_coordination: boolean;
+  min_sideways_days: number;
+  allowed_investment_grades: string[];
+  max_risk_level: string;
+  auto_add_enabled: boolean;
+  avoid_duplicates: boolean;
+  max_auto_additions_per_day: number;
+}
+
+export interface AutoPoolStats {
+  date: string;
+  daily_additions_used: number;
+  daily_quota_remaining: number;
+  auto_add_enabled: boolean;
+  config: AutoPoolConfig;
+}
+
+export interface ProcessingReport {
+  total_analyzed: number;
+  qualified_stocks: number;
+  new_qualified_stocks: number;
+  added_to_pool: number;
+  daily_additions_used: number;
+  daily_quota_remaining: number;
+  qualified_stock_details: any[];
+  added_stock_details: any[];
+}
+
+// 深度分析API
+export const deepAnalysisAPI = {
+  // 执行深度分析
+  analyze: async (request: DeepAnalysisRequest): Promise<DeepAnalysisResult[]> => {
+    const response = await deepAnalysisApi.post<ApiResponse<DeepAnalysisResult[]>>('/deep-analysis/analyze', request);
+    if (!response.data.success || !response.data.data) {
+      throw new Error(response.data.message || '深度分析失败');
+    }
+    return response.data.data;
+  },
+
+  // 获取分析结果
+  getResults: async (stockCode?: string, limit: number = 50): Promise<any[]> => {
+    const params: any = { limit };
+    if (stockCode) {
+      params.stock_code = stockCode;
+    }
+    
+    const response = await api.get<ApiResponse<any[]>>('/deep-analysis/results', { params });
+    return response.data.data || [];
+  },
+
+  // 获取值得关注的股票
+  getWorthyStocks: async (limit: number = 20): Promise<any[]> => {
+    const response = await api.get<ApiResponse<any[]>>('/deep-analysis/worthy-stocks', {
+      params: { limit }
+    });
+    return response.data.data || [];
+  }
+};
+
+// 自动池管理API
+export const autoPoolAPI = {
+  // 处理筛选结果
+  processScreening: async (): Promise<ProcessingReport> => {
+    const response = await api.post<ApiResponse<ProcessingReport>>('/auto-pool/process-screening');
+    if (!response.data.success || !response.data.data) {
+      throw new Error(response.data.message || '处理筛选结果失败');
+    }
+    return response.data.data;
+  },
+
+  // 获取配置
+  getConfig: async (): Promise<AutoPoolStats> => {
+    const response = await api.get<ApiResponse<AutoPoolStats>>('/auto-pool/config');
+    if (!response.data.success || !response.data.data) {
+      throw new Error(response.data.message || '获取配置失败');
+    }
+    return response.data.data;
+  },
+
+  // 更新配置
+  updateConfig: async (config: AutoPoolConfig): Promise<AutoPoolStats> => {
+    const response = await api.put<ApiResponse<AutoPoolStats>>('/auto-pool/config', config);
+    if (!response.data.success || !response.data.data) {
+      throw new Error(response.data.message || '更新配置失败');
+    }
+    return response.data.data;
+  },
+
+  // 获取处理记录
+  getRecords: async (days: number = 7): Promise<any[]> => {
+    const response = await api.get<ApiResponse<any[]>>('/auto-pool/records', {
+      params: { days }
+    });
+    return response.data.data || [];
   }
 };

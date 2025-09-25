@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
-import { Play, Filter, TrendingUp, Calendar, BarChart3, RefreshCw, AlertCircle } from 'lucide-react';
+import { Play, Filter, TrendingUp, Calendar, BarChart3, RefreshCw, AlertCircle, Target, Info } from 'lucide-react';
 import Pagination from './Pagination';
+import { deepAnalysisAPI, autoPoolAPI } from '../services/api';
 
 interface ScreeningResult {
   id?: number;
@@ -43,6 +44,11 @@ const StockScreeningDashboard: React.FC = () => {
     market_filter: ['SH', 'SZ']
   });
   const [message, setMessage] = useState<string>('');
+  
+  // 深度分析相关状态
+  const [deepAnalysisLoading, setDeepAnalysisLoading] = useState<string[]>([]);
+  const [autoPoolProcessing, setAutoPoolProcessing] = useState(false);
+  const [showAnalysisInfo, setShowAnalysisInfo] = useState(false);
   
   // 分页相关状态
   const [currentPage, setCurrentPage] = useState(1);
@@ -190,22 +196,97 @@ const StockScreeningDashboard: React.FC = () => {
     };
   }, []);
 
+  // 深度分析单只股票
+  const handleSingleDeepAnalysis = async (stockCode: string) => {
+    setDeepAnalysisLoading(prev => [...prev, stockCode]);
+    try {
+      await deepAnalysisAPI.analyze({
+        stock_codes: [stockCode],
+        save_results: true
+      });
+      setMessage(`股票 ${stockCode} 深度分析完成`);
+    } catch (error) {
+      console.error('深度分析失败:', error);
+      setMessage(`股票 ${stockCode} 深度分析失败`);
+    } finally {
+      setDeepAnalysisLoading(prev => prev.filter(code => code !== stockCode));
+    }
+  };
+
+  // 批量深度分析
+  const handleBatchDeepAnalysis = async () => {
+    if (!latestResults?.results || latestResults.results.length === 0) {
+      setMessage('没有筛选结果可以分析');
+      return;
+    }
+
+    setDeepAnalysisLoading(prev => [...prev, 'batch']);
+    try {
+      const stockCodes = latestResults.results.map(result => result.stock_code);
+      await deepAnalysisAPI.analyze({
+        stock_codes: stockCodes,
+        save_results: true
+      });
+      setMessage(`批量深度分析完成，共分析 ${stockCodes.length} 只股票`);
+    } catch (error) {
+      console.error('批量深度分析失败:', error);
+      setMessage('批量深度分析失败');
+    } finally {
+      setDeepAnalysisLoading(prev => prev.filter(code => code !== 'batch'));
+    }
+  };
+
+  // 自动处理筛选结果（深度分析+自动添加）
+  const handleAutoProcessScreening = async () => {
+    setAutoPoolProcessing(true);
+    try {
+      const result = await autoPoolAPI.processScreening();
+      setMessage(`自动处理完成！分析了 ${result.total_analyzed} 只股票，添加了 ${result.added_to_pool} 只到关注池`);
+    } catch (error) {
+      console.error('自动处理失败:', error);
+      setMessage('自动处理筛选结果失败');
+    } finally {
+      setAutoPoolProcessing(false);
+    }
+  };
+
   // 初始加载
   useEffect(() => {
     fetchLatestResults();
   }, []);
 
   return (
-    <div className="h-screen flex flex-col p-4 lg:p-6 max-w-7xl mx-auto">
+    <>
+      <style>{`
+        .custom-scrollbar::-webkit-scrollbar {
+          width: 8px;
+          height: 8px;
+        }
+        .custom-scrollbar::-webkit-scrollbar-track {
+          background: #f1f5f9;
+          border-radius: 4px;
+        }
+        .custom-scrollbar::-webkit-scrollbar-thumb {
+          background: #94a3b8;
+          border-radius: 4px;
+        }
+        .custom-scrollbar::-webkit-scrollbar-thumb:hover {
+          background: #64748b;
+        }
+        .custom-scrollbar::-webkit-scrollbar-corner {
+          background: #f1f5f9;
+        }
+      `}</style>
+      <div className="h-screen flex flex-col p-3 lg:p-4 max-w-7xl mx-auto">
       {/* 头部 */}
-      <div className="flex-shrink-0 mb-6">
+      <div className="flex-shrink-0 mb-4">
         <div className="flex items-center justify-between">
           <div>
             <h1 className="text-2xl font-bold text-gray-900 flex items-center gap-2">
               <Filter className="w-7 h-7 text-blue-600" />
               股票甄选
             </h1>
-            <p className="text-gray-600 mt-1">智能筛选强势上涨股票</p>
+            <p className="text-gray-600 mt-1">智能筛选强势上涨股票 + 深度技术分析</p>
           </div>
           
           <div className="flex gap-3">
@@ -216,6 +297,24 @@ const StockScreeningDashboard: React.FC = () => {
             >
               <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />
               刷新结果
+            </button>
+            
+            <button
+              onClick={handleAutoProcessScreening}
+              disabled={autoPoolProcessing}
+              className="flex items-center gap-2 px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+            >
+              <Target className={`w-4 h-4 ${autoPoolProcessing ? 'animate-spin' : ''}`} />
+              {autoPoolProcessing ? '智能处理中...' : '智能分析'}
+            </button>
+            
+            <button
+              onClick={handleBatchDeepAnalysis}
+              disabled={deepAnalysisLoading.includes('batch') || !latestResults?.results?.length}
+              className="flex items-center gap-2 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+            >
+              <TrendingUp className={`w-4 h-4 ${deepAnalysisLoading.includes('batch') ? 'animate-spin' : ''}`} />
+              {deepAnalysisLoading.includes('batch') ? '深度分析中...' : '批量分析'}
             </button>
             
             <button
@@ -240,8 +339,8 @@ const StockScreeningDashboard: React.FC = () => {
       </div>
 
       {/* 筛选条件设置 */}
-      <div className="flex-shrink-0 bg-white rounded-lg shadow-sm border p-4 mb-6">
-        <h2 className="text-lg font-semibold text-gray-900 mb-4 flex items-center gap-2">
+      <div className="flex-shrink-0 bg-white rounded-lg shadow-sm border p-3 mb-4">
+        <h2 className="text-base font-semibold text-gray-900 mb-3 flex items-center gap-2">
           <BarChart3 className="w-5 h-5 text-green-600" />
           筛选条件
         </h2>
@@ -317,19 +416,44 @@ const StockScreeningDashboard: React.FC = () => {
 
       {/* 消息提示 */}
       {message && (
-        <div className="flex-shrink-0 mb-4">
-          <div className="bg-blue-50 border border-blue-200 rounded-lg p-3 flex items-center gap-2">
+        <div className="flex-shrink-0 mb-2">
+          <div className="bg-blue-50 border border-blue-200 rounded-lg p-2 flex items-center gap-2">
             <AlertCircle className="w-4 h-4 text-blue-600 flex-shrink-0" />
             <span className="text-blue-800 text-sm">{message}</span>
           </div>
         </div>
       )}
 
+      {/* 深度分析功能说明 - 可折叠 */}
+      <div className="flex-shrink-0 mb-2">
+        <div className="bg-purple-50 border border-purple-200 rounded-lg">
+          <button
+            onClick={() => setShowAnalysisInfo(!showAnalysisInfo)}
+            className="w-full p-2 flex items-center justify-between hover:bg-purple-100 transition-colors rounded-lg"
+          >
+            <div className="flex items-center gap-2">
+              <Target className="w-4 h-4 text-purple-600" />
+              <span className="text-sm font-medium text-purple-800">深度分析功能</span>
+            </div>
+            <Info className={`w-4 h-4 text-purple-600 transform transition-transform ${showAnalysisInfo ? 'rotate-180' : ''}`} />
+          </button>
+          {showAnalysisInfo && (
+            <div className="px-2 pb-2">
+              <div className="text-xs text-purple-700 space-y-1">
+                <div>• <span className="font-medium">智能分析</span>：自动识别低波动突破模式并添加到关注池</div>
+                <div>• <span className="font-medium">批量分析</span>：对所有筛选结果进行深度技术分析</div>
+                <div>• <span className="font-medium">单股分析</span>：点击表格中的"深度分析"按钮分析单只股票</div>
+              </div>
+            </div>
+          )}
+        </div>
+      </div>
+
       {/* 筛选结果 */}
-      <div className="flex-1 bg-white rounded-lg shadow-sm border overflow-hidden">
-        <div className="p-4 border-b bg-gray-50">
+      <div className="flex-1 bg-white rounded-lg shadow-sm border overflow-hidden flex flex-col">
+        <div className="p-3 border-b bg-gray-50 flex-shrink-0">
           <div className="flex items-center justify-between">
-            <h2 className="text-lg font-semibold text-gray-900 flex items-center gap-2">
+            <h2 className="text-base font-semibold text-gray-900 flex items-center gap-2">
               <TrendingUp className="w-5 h-5 text-red-600" />
               筛选结果
             </h2>
@@ -342,7 +466,7 @@ const StockScreeningDashboard: React.FC = () => {
           </div>
         </div>
 
-        <div className="flex-1 overflow-auto">
+        <div className="flex-1 overflow-x-auto overflow-y-auto">
           {loading ? (
             <div className="flex items-center justify-center h-64">
               <div className="text-center">
@@ -351,62 +475,75 @@ const StockScreeningDashboard: React.FC = () => {
               </div>
             </div>
           ) : latestResults?.results && latestResults.results.length > 0 ? (
-            <div className="overflow-x-auto">
+            <div className="custom-scrollbar">
               <table className="w-full">
                 <thead className="bg-gray-50 sticky top-0 z-10">
                   <tr>
-                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                       股票代码
                     </th>
-                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                       股票名称
                     </th>
-                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                       市场
                     </th>
-                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                       连续天数
                     </th>
-                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                       平均涨幅
                     </th>
-                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                       平均成交量
+                    </th>
+                    <th className="px-3 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">
+                      深度分析
                     </th>
                   </tr>
                 </thead>
                 <tbody className="bg-white divide-y divide-gray-200">
                   {currentPageData.map((result, index) => (
                     <tr key={result.stock_code || index} className="hover:bg-gray-50">
-                      <td className="px-4 py-3 whitespace-nowrap">
+                      <td className="px-3 py-3 whitespace-nowrap">
                         <span className="text-sm font-medium text-blue-600">
                           {result.stock_code}
                         </span>
                       </td>
-                      <td className="px-4 py-3 whitespace-nowrap">
+                      <td className="px-3 py-3 whitespace-nowrap">
                         <span className="text-sm text-gray-900">
                           {result.stock_name}
                         </span>
                       </td>
-                      <td className="px-4 py-3 whitespace-nowrap">
+                      <td className="px-3 py-3 whitespace-nowrap">
                         <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800">
                           {result.market}
                         </span>
                       </td>
-                      <td className="px-4 py-3 whitespace-nowrap">
+                      <td className="px-3 py-3 whitespace-nowrap">
                         <span className="text-sm text-gray-900">
                           {result.consecutive_days} 天
                         </span>
                       </td>
-                      <td className="px-4 py-3 whitespace-nowrap">
+                      <td className="px-3 py-3 whitespace-nowrap">
                         <span className="text-sm font-medium text-red-600">
                           +{result.avg_rise_percent.toFixed(2)}%
                         </span>
                       </td>
-                      <td className="px-4 py-3 whitespace-nowrap">
+                      <td className="px-3 py-3 whitespace-nowrap">
                         <span className="text-sm text-gray-900">
                           {(result.avg_volume / 10000).toFixed(2)}万
                         </span>
+                      </td>
+                      <td className="px-3 py-2 whitespace-nowrap text-center">
+                        <button
+                          onClick={() => handleSingleDeepAnalysis(result.stock_code)}
+                          disabled={deepAnalysisLoading.includes(result.stock_code)}
+                          className="inline-flex items-center gap-1 px-3 py-1 text-xs font-medium text-purple-600 bg-purple-100 rounded-full hover:bg-purple-200 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                        >
+                          <Target className={`w-3 h-3 ${deepAnalysisLoading.includes(result.stock_code) ? 'animate-spin' : ''}`} />
+                          {deepAnalysisLoading.includes(result.stock_code) ? '分析中' : '深度分析'}
+                        </button>
                       </td>
                     </tr>
                   ))}
@@ -433,67 +570,57 @@ const StockScreeningDashboard: React.FC = () => {
             </div>
           )}
         </div>
+
+        {/* 底部统计信息 */}
+        {latestResults?.results && latestResults.results.length > 0 && (
+          <div className="flex-shrink-0 p-3 bg-gray-50 border-t text-sm text-gray-600">
+            <div className="flex items-center justify-between">
+              <span>
+                共找到 <span className="font-medium text-gray-900">{latestResults.results.length}</span> 只符合条件的股票
+              </span>
+              <span>
+                筛选条件：连续 {criteria.min_consecutive_days} 天涨幅超过 {criteria.min_rise_percent}%
+              </span>
+            </div>
+          </div>
+        )}
       </div>
       
       {/* 分页控件 - 独立显示 */}
       {latestResults?.results && latestResults.results.length > 0 && (
-        <div style={{
-          backgroundColor: 'white',
-          borderTop: '1px solid #e5e7eb',
-          padding: '16px 24px',
-          marginTop: '0'
-        }}>
-          <div style={{ 
-            display: 'flex', 
-            justifyContent: 'space-between', 
-            alignItems: 'center',
-            flexWrap: 'wrap',
-            gap: '16px'
-          }}>
+        <div className="flex-shrink-0 mt-2 bg-white rounded-lg shadow-sm border p-3">
+          <div className="flex items-center justify-between flex-wrap gap-4">
             {/* 左侧：每页条数和统计信息 */}
-            <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                <label style={{ fontSize: '14px', color: '#374151' }}>每页显示</label>
+            <div className="flex items-center gap-4">
+              <div className="flex items-center gap-2">
+                <label className="text-sm text-gray-700">每页显示</label>
                 <select
                   value={pageSize}
                   onChange={(e) => {
                     setPageSize(Number(e.target.value));
                     setCurrentPage(1);
                   }}
-                  style={{
-                    padding: '4px 8px',
-                    border: '1px solid #d1d5db',
-                    borderRadius: '6px',
-                    fontSize: '14px'
-                  }}
+                  className="px-2 py-1 border border-gray-300 rounded text-sm"
                 >
                   <option value={10}>10</option>
                   <option value={20}>20</option>
                   <option value={50}>50</option>
                   <option value={100}>100</option>
                 </select>
-                <span style={{ fontSize: '14px', color: '#374151' }}>条</span>
+                <span className="text-sm text-gray-700">条</span>
               </div>
               
-              <div style={{ fontSize: '14px', color: '#6b7280' }}>
+              <div className="text-sm text-gray-600">
                 显示第 {(currentPage - 1) * pageSize + 1}-{Math.min(currentPage * pageSize, totalItems)} 条，共 {totalItems} 条
               </div>
             </div>
 
             {/* 右侧：分页按钮 */}
-            <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+            <div className="flex items-center gap-1">
               <button
                 onClick={() => setCurrentPage(Math.max(1, currentPage - 1))}
                 disabled={currentPage === 1}
-                style={{
-                  padding: '8px 12px',
-                  backgroundColor: currentPage === 1 ? '#f3f4f6' : 'white',
-                  color: currentPage === 1 ? '#9ca3af' : '#374151',
-                  border: '1px solid #d1d5db',
-                  borderRadius: '6px 0 0 6px',
-                  cursor: currentPage === 1 ? 'not-allowed' : 'pointer',
-                  fontSize: '14px'
-                }}
+                className="px-3 py-1 text-sm border border-gray-300 rounded-l bg-white hover:bg-gray-50 disabled:bg-gray-100 disabled:text-gray-400 disabled:cursor-not-allowed"
               >
                 上一页
               </button>
@@ -502,16 +629,11 @@ const StockScreeningDashboard: React.FC = () => {
                 <button
                   key={pageNum}
                   onClick={() => setCurrentPage(pageNum)}
-                  style={{
-                    padding: '8px 12px',
-                    backgroundColor: pageNum === currentPage ? '#3b82f6' : 'white',
-                    color: pageNum === currentPage ? 'white' : '#374151',
-                    border: '1px solid #d1d5db',
-                    borderLeft: '0',
-                    cursor: 'pointer',
-                    fontSize: '14px',
-                    fontWeight: pageNum === currentPage ? '600' : '400'
-                  }}
+                  className={`px-3 py-1 text-sm border-t border-b border-r border-gray-300 ${
+                    pageNum === currentPage
+                      ? 'bg-blue-600 text-white border-blue-600'
+                      : 'bg-white hover:bg-gray-50'
+                  }`}
                 >
                   {pageNum}
                 </button>
@@ -520,16 +642,7 @@ const StockScreeningDashboard: React.FC = () => {
               <button
                 onClick={() => setCurrentPage(Math.min(totalPages, currentPage + 1))}
                 disabled={currentPage >= totalPages}
-                style={{
-                  padding: '8px 12px',
-                  backgroundColor: currentPage >= totalPages ? '#f3f4f6' : 'white',
-                  color: currentPage >= totalPages ? '#9ca3af' : '#374151',
-                  border: '1px solid #d1d5db',
-                  borderLeft: '0',
-                  borderRadius: '0 6px 6px 0',
-                  cursor: currentPage >= totalPages ? 'not-allowed' : 'pointer',
-                  fontSize: '14px'
-                }}
+                className="px-3 py-1 text-sm border border-gray-300 rounded-r bg-white hover:bg-gray-50 disabled:bg-gray-100 disabled:text-gray-400 disabled:cursor-not-allowed"
               >
                 下一页
               </button>
@@ -538,20 +651,8 @@ const StockScreeningDashboard: React.FC = () => {
         </div>
       )}
 
-      {/* 底部统计信息 */}
-      {latestResults?.results && latestResults.results.length > 0 && (
-        <div className="flex-shrink-0 mt-4 p-4 bg-gray-50 rounded-lg">
-          <div className="flex items-center justify-between text-sm text-gray-600">
-            <span>
-              共找到 <span className="font-medium text-gray-900">{latestResults.results.length}</span> 只符合条件的股票
-            </span>
-            <span>
-              筛选条件：连续 {criteria.min_consecutive_days} 天涨幅超过 {criteria.min_rise_percent}%
-            </span>
-          </div>
-        </div>
-      )}
-    </div>
+      </div>
+    </>
   );
 };
 

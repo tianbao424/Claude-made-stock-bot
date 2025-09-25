@@ -2245,6 +2245,711 @@ npm run install
 npm run build
 ```
 
+## 🔬 深度分析算法实现详解
+
+### 💡 算法架构总览
+
+深度分析系统是项目的核心技术创新，采用多维度量化分析方法，通过波动性分析、成交量分析和智能评分机制，系统性识别具有投资价值的股票机会。
+
+#### 🏗️ 核心组件架构
+```
+StockDeepAnalysisService (主控制器)
+├── VolatilityAnalyzer (波动性分析器)     - 权重60%
+├── VolumeAnalyzer (成交量分析器)         - 权重40%  
+├── AutoPoolManager (自动股票池管理器)    - 智能筛选
+└── DatabaseManager (数据存储层)         - 结果持久化
+```
+
+### 📊 波动性分析算法 (VolatilityAnalyzer)
+
+#### 核心策略：低波动横盘突破识别
+```python
+class VolatilityAnalyzer:
+    """波动性分析引擎 - 专注识别横盘整理和突破信号"""
+    
+    def __init__(self):
+        self.sideways_threshold = 0.20      # 横盘波动阈值20%
+        self.min_sideways_days = 15         # 最少横盘15天
+        self.breakout_threshold = 0.02      # 突破确认2%
+        self.confirmation_days = 2          # 突破确认天数
+```
+
+#### 横盘整理检测算法
+```python
+def _detect_sideways_consolidation(self, price_data: List[PriceData]) -> Dict:
+    """滑动窗口检测横盘整理"""
+    
+    for i in range(len(price_data) - self.min_sideways_days):
+        window = price_data[i:i + self.min_sideways_days]
+        
+        # 计算价格波动率
+        max_price = max(data.close for data in window)
+        min_price = min(data.close for data in window)
+        volatility = (max_price - min_price) / min_price
+        
+        if volatility <= self.sideways_threshold:
+            # 检测到横盘整理
+            consolidation_period = {
+                'start_date': window[0].date,
+                'end_date': window[-1].date,
+                'days': len(window),
+                'volatility': volatility,
+                'support_level': min_price,
+                'resistance_level': max_price
+            }
+            return consolidation_period
+    
+    return None
+```
+
+#### 突破信号检测算法
+```python
+def _detect_breakout_signals(self, price_data: List[PriceData], 
+                           support_level: float, 
+                           resistance_level: float) -> Dict:
+    """突破信号识别"""
+    
+    for i in range(len(price_data) - self.confirmation_days):
+        current_price = price_data[i].close
+        
+        # 向上突破检测
+        if current_price > resistance_level * (1 + self.breakout_threshold):
+            # 确认机制：连续2天维持突破
+            confirmed = all(
+                price_data[i + j].close > resistance_level 
+                for j in range(self.confirmation_days)
+            )
+            
+            if confirmed:
+                return {
+                    'direction': 'upward',
+                    'breakout_date': price_data[i].date,
+                    'breakout_price': current_price,
+                    'strength': (current_price - resistance_level) / resistance_level
+                }
+        
+        # 向下突破检测（类似逻辑）
+        elif current_price < support_level * (1 - self.breakout_threshold):
+            # 向下突破逻辑...
+            pass
+    
+    return None
+```
+
+#### 波动性评分机制 (10分制)
+```python
+def _calculate_volatility_score(self, analysis_result: Dict) -> float:
+    """波动性综合评分算法"""
+    
+    score = 0.0
+    
+    # 1. 横盘质量评分 (4分) - 40%权重
+    if analysis_result.get('sideways_consolidation'):
+        consolidation = analysis_result['sideways_consolidation']
+        
+        # 时间因子：横盘时间越长分数越高
+        time_score = min(consolidation['days'] / 60, 1.0) * 2
+        
+        # 稳定性因子：波动越小分数越高  
+        stability_score = max(0, (20 - consolidation['volatility'] * 100) / 20) * 2
+        
+        score += time_score + stability_score
+    
+    # 2. 突破信号评分 (3分) - 30%权重
+    if analysis_result.get('breakout_signal'):
+        breakout = analysis_result['breakout_signal']
+        if breakout['direction'] == 'upward':
+            score += 3.0 * min(breakout['strength'] / 0.05, 1.0)  # 最高3分
+        elif breakout['direction'] == 'downward':
+            score -= 2.0  # 向下突破扣分
+    
+    # 3. 历史波动率评分 (2分) - 20%权重
+    historical_vol = analysis_result.get('historical_volatility', 0)
+    if 10 <= historical_vol <= 30:      # 适中波动率
+        score += 2.0
+    elif historical_vol < 10:           # 低波动率
+        score += 1.0
+    
+    # 4. 价格稳定性评分 (1分) - 10%权重
+    price_volatility = analysis_result.get('price_volatility', 0)
+    if price_volatility <= 25:
+        score += 1.0
+    
+    return round(min(score, 10.0), 1)
+```
+
+### 📈 成交量分析算法 (VolumeAnalyzer)
+
+#### 核心分析维度
+```python
+class VolumeAnalyzer:
+    """成交量分析引擎 - 分析量价关系和资金流向"""
+    
+    def __init__(self):
+        self.volume_breakout_threshold = 2.0    # 成交量突破2倍
+        self.high_volume_threshold = 1.5        # 高成交量1.5倍
+        self.correlation_window = 20            # 相关性计算窗口
+        self.min_correlation = 0.3              # 最小相关性阈值
+```
+
+#### 成交量突破检测
+```python
+def _detect_volume_breakout(self, volume_data: List[VolumeData]) -> Dict:
+    """成交量突破检测算法"""
+    
+    # 计算30日平均成交量
+    avg_volume_30d = sum(data.volume for data in volume_data[-30:]) / 30
+    
+    recent_volume = volume_data[-1].volume
+    volume_ratio = recent_volume / avg_volume_30d
+    
+    # 突破检测
+    if volume_ratio >= self.volume_breakout_threshold:
+        # 检查持续性
+        consecutive_days = 0
+        for i in range(len(volume_data) - 1, -1, -1):
+            if volume_data[i].volume >= avg_volume_30d * self.high_volume_threshold:
+                consecutive_days += 1
+            else:
+                break
+        
+        return {
+            'has_breakout': True,
+            'breakout_ratio': volume_ratio,
+            'consecutive_days': consecutive_days,
+            'avg_volume_30d': avg_volume_30d
+        }
+    
+    return {'has_breakout': False}
+```
+
+#### 量价关系分析
+```python
+def _analyze_price_volume_correlation(self, 
+                                    price_data: List[PriceData],
+                                    volume_data: List[VolumeData]) -> Dict:
+    """量价相关性分析"""
+    
+    # 计算价格变化率和成交量变化率
+    price_changes = []
+    volume_changes = []
+    
+    for i in range(1, len(price_data)):
+        price_change = (price_data[i].close - price_data[i-1].close) / price_data[i-1].close
+        volume_change = (volume_data[i].volume - volume_data[i-1].volume) / volume_data[i-1].volume
+        
+        price_changes.append(price_change)
+        volume_changes.append(volume_change)
+    
+    # 皮尔逊相关系数计算
+    correlation = self._calculate_correlation(price_changes, volume_changes)
+    
+    # 量价关系判定
+    if correlation >= self.min_correlation:
+        if correlation > 0:
+            trend = 'bullish'    # 量价齐升
+        else:
+            trend = 'bearish'    # 量价齐跌
+    else:
+        trend = 'divergence'     # 量价背离
+    
+    return {
+        'correlation': correlation,
+        'price_volume_trend': trend,
+        'is_coordinated': abs(correlation) >= self.min_correlation
+    }
+```
+
+#### 资金流向分析 (A/D Line)
+```python
+def _analyze_money_flow(self, price_data: List[PriceData]) -> Dict:
+    """累积分布线分析 - 判断资金流向"""
+    
+    ad_line = 0
+    ad_values = []
+    
+    for data in price_data:
+        # 资金流量乘数
+        if data.high != data.low:
+            money_flow_multiplier = ((data.close - data.low) - (data.high - data.close)) / (data.high - data.low)
+        else:
+            money_flow_multiplier = 0
+        
+        # 资金流量
+        money_flow_volume = money_flow_multiplier * data.volume
+        ad_line += money_flow_volume
+        ad_values.append(ad_line)
+    
+    # 趋势判断
+    recent_avg = sum(ad_values[-10:]) / 10      # 近10日均值
+    earlier_avg = sum(ad_values[-30:-10]) / 20  # 前20日均值
+    
+    if recent_avg > earlier_avg * 1.05:
+        direction = 'inflow'     # 资金流入
+    elif recent_avg < earlier_avg * 0.95:
+        direction = 'outflow'    # 资金流出
+    else:
+        direction = 'balanced'   # 平衡
+    
+    return {
+        'money_flow_direction': direction,
+        'ad_line_trend': 'up' if ad_values[-1] > ad_values[-10] else 'down',
+        'flow_strength': abs((recent_avg - earlier_avg) / earlier_avg)
+    }
+```
+
+#### 成交量评分机制 (10分制)
+```python
+def _calculate_volume_score(self, analysis_result: Dict) -> float:
+    """成交量综合评分算法"""
+    
+    score = 0.0
+    
+    # 1. 成交量突破评分 (3分) - 30%权重
+    if analysis_result.get('volume_breakout', {}).get('has_breakout'):
+        breakout = analysis_result['volume_breakout']
+        # 突破强度评分
+        strength_score = min(breakout['breakout_ratio'] / 3, 1.0) * 2
+        # 持续性评分
+        persistence_score = min(breakout['consecutive_days'] / 5, 1.0) * 1
+        score += strength_score + persistence_score
+    
+    # 2. 量价关系评分 (2.5分) - 25%权重
+    correlation_analysis = analysis_result.get('price_volume_correlation', {})
+    if correlation_analysis.get('price_volume_trend') == 'bullish':
+        score += 2.5
+    elif correlation_analysis.get('price_volume_trend') == 'divergence':
+        score -= 1.0
+    
+    # 3. 资金流向评分 (2.5分) - 25%权重
+    money_flow = analysis_result.get('money_flow', {})
+    if money_flow.get('money_flow_direction') == 'inflow':
+        flow_strength = money_flow.get('flow_strength', 0)
+        score += 2.5 * min(flow_strength / 0.1, 1.0)
+    elif money_flow.get('money_flow_direction') == 'outflow':
+        score -= 1.5
+    
+    # 4. 成交量形态评分 (2分) - 20%权重
+    # 根据成交量形态特征评分...
+    
+    return round(min(score, 10.0), 1)
+```
+
+### 🎯 综合深度分析服务 (StockDeepAnalysisService)
+
+#### 综合评估算法
+```python
+class StockDeepAnalysisService:
+    """深度分析主控制器"""
+    
+    def __init__(self):
+        self.volatility_analyzer = VolatilityAnalyzer()
+        self.volume_analyzer = VolumeAnalyzer()
+        self.auto_pool_manager = AutoPoolManager()
+        self.volatility_weight = 0.6    # 波动性权重60%
+        self.volume_weight = 0.4        # 成交量权重40%
+    
+    async def analyze_stock(self, stock_code: str) -> DeepAnalysisResult:
+        """执行股票深度分析"""
+        
+        # 1. 数据收集
+        price_data = await self._collect_price_data(stock_code)
+        volume_data = await self._collect_volume_data(stock_code)
+        
+        # 2. 并发分析
+        volatility_result = await self.volatility_analyzer.analyze(price_data)
+        volume_result = await self.volume_analyzer.analyze(price_data, volume_data)
+        
+        # 3. 综合评估
+        overall_score = (
+            volatility_result.volatility_score * self.volatility_weight +
+            volume_result.volume_score * self.volume_weight
+        )
+        
+        # 4. 投资等级划分
+        investment_grade = self._determine_investment_grade(overall_score)
+        
+        # 5. 关键特征识别
+        key_features = self._identify_key_features(volatility_result, volume_result)
+        
+        # 6. 风险评估
+        risk_level, risk_factors = self._assess_risk_level(volatility_result, volume_result)
+        
+        # 7. 投资建议生成
+        recommendation = self._generate_recommendation(overall_score, risk_level)
+        
+        return DeepAnalysisResult(
+            stock_code=stock_code,
+            overall_score=overall_score,
+            investment_grade=investment_grade,
+            volatility_analysis=volatility_result,
+            volume_analysis=volume_result,
+            key_features=key_features,
+            risk_level=risk_level,
+            recommendation=recommendation
+        )
+```
+
+#### 投资等级划分算法
+```python
+def _determine_investment_grade(self, overall_score: float) -> str:
+    """投资等级智能划分"""
+    
+    if overall_score >= 8.5:
+        return 'A'      # 强烈推荐 - 优质投资机会
+    elif overall_score >= 7.0:
+        return 'B'      # 推荐 - 较好投资机会
+    elif overall_score >= 5.5:
+        return 'C'      # 观察 - 谨慎关注
+    else:
+        return 'D'      # 回避 - 不建议投资
+```
+
+#### 关键特征识别算法
+```python
+def _identify_key_features(self, volatility_result: Dict, volume_result: Dict) -> Dict:
+    """关键投资特征识别"""
+    
+    # 低波动突破特征
+    is_low_volatility_breakout = (
+        volatility_result.get('sideways_consolidation') and
+        volatility_result.get('breakout_signal', {}).get('direction') == 'upward' and
+        volatility_result.get('sideways_period_days', 0) >= 20
+    )
+    
+    # 量价配合特征
+    is_volume_price_coordinated = (
+        volume_result.get('volume_breakout', {}).get('has_breakout') and
+        volume_result.get('price_volume_correlation', {}).get('price_volume_trend') == 'bullish' and
+        volume_result.get('money_flow', {}).get('money_flow_direction') == 'inflow'
+    )
+    
+    # 值得关注判定
+    is_worthy_of_attention = (
+        is_low_volatility_breakout or 
+        is_volume_price_coordinated or
+        volatility_result.get('volatility_score', 0) >= 7.0 or
+        volume_result.get('volume_score', 0) >= 7.0
+    )
+    
+    return {
+        'is_low_volatility_breakout': is_low_volatility_breakout,
+        'is_volume_price_coordinated': is_volume_price_coordinated,
+        'is_worthy_of_attention': is_worthy_of_attention
+    }
+```
+
+### ⚙️ 自动股票池管理算法 (AutoPoolManager)
+
+#### 智能筛选配置
+```python
+@dataclass
+class AutoPoolConfig:
+    """自动池管理配置"""
+    min_overall_score: float = 6.0                    # 最低综合评分
+    min_volatility_score: float = 6.5                 # 最低波动性评分
+    min_volume_score: float = 5.5                     # 最低成交量评分
+    require_low_volatility_breakout: bool = True      # 必须低波动突破
+    require_volume_coordination: bool = True          # 必须量价配合
+    min_sideways_days: int = 20                       # 最少横盘天数
+    allowed_investment_grades: List[str] = ['A', 'B'] # 允许投资等级
+    max_risk_level: str = "medium"                    # 最高风险等级
+    max_auto_additions_per_day: int = 10              # 每日最大添加数量
+    avoid_duplicates: bool = True                     # 避免重复添加
+    auto_add_enabled: bool = True                     # 自动添加开关
+```
+
+#### 多重筛选算法
+```python
+def _filter_qualified_stocks(self, analysis_results: List[DeepAnalysisResult]) -> List[DeepAnalysisResult]:
+    """多重条件筛选算法"""
+    
+    qualified_stocks = []
+    
+    for result in analysis_results:
+        # 基础评分检查
+        if not (result.overall_score >= self.config.min_overall_score and
+                result.volatility_analysis.volatility_score >= self.config.min_volatility_score and
+                result.volume_analysis.volume_score >= self.config.min_volume_score):
+            continue
+        
+        # 投资等级检查
+        if result.investment_grade not in self.config.allowed_investment_grades:
+            continue
+        
+        # 风险等级检查
+        if not self._is_risk_level_acceptable(result.risk_level):
+            continue
+        
+        # 特征要求检查
+        if self.config.require_low_volatility_breakout:
+            if not (result.key_features.is_low_volatility_breakout and
+                    result.volatility_analysis.sideways_period_days >= self.config.min_sideways_days):
+                continue
+        
+        if self.config.require_volume_coordination:
+            if not result.key_features.is_volume_price_coordinated:
+                continue
+        
+        # 重复性检查
+        if self.config.avoid_duplicates:
+            if await self._is_already_in_pool(result.stock_code):
+                continue
+        
+        qualified_stocks.append(result)
+    
+    return qualified_stocks
+```
+
+### 🔍 风险评估算法
+
+#### 多维度风险因子识别
+```python
+def _assess_risk_level(self, volatility_result: Dict, volume_result: Dict) -> Tuple[str, List[str]]:
+    """综合风险评估算法"""
+    
+    risk_factors = []
+    risk_score = 0
+    
+    # 1. 波动性风险因子
+    historical_vol = volatility_result.get('historical_volatility', 0)
+    if historical_vol > 40:
+        risk_factors.append("历史波动率过高(>40%)")
+        risk_score += 2
+    elif historical_vol > 30:
+        risk_factors.append("波动率偏高(30-40%)")
+        risk_score += 1
+    
+    # 2. 量价背离风险
+    correlation = volume_result.get('price_volume_correlation', {})
+    if correlation.get('price_volume_trend') == 'divergence':
+        risk_factors.append("存在量价背离信号")
+        risk_score += 2
+    
+    # 3. 资金流向风险
+    money_flow = volume_result.get('money_flow', {})
+    if money_flow.get('money_flow_direction') == 'outflow':
+        risk_factors.append("资金流出明显")
+        risk_score += 2
+        
+        # 流出强度加权
+        flow_strength = money_flow.get('flow_strength', 0)
+        if flow_strength > 0.1:
+            risk_factors.append("大量资金流出")
+            risk_score += 1
+    
+    # 4. 突破失败风险
+    breakout = volatility_result.get('breakout_signal', {})
+    if breakout.get('direction') == 'downward':
+        risk_factors.append("向下突破风险")
+        risk_score += 3
+    
+    # 5. 成交量异常风险
+    volume_breakout = volume_result.get('volume_breakout', {})
+    if volume_breakout.get('breakout_ratio', 0) > 5:
+        risk_factors.append("成交量异常放大")
+        risk_score += 1
+    
+    # 风险等级划分
+    if risk_score <= 2:
+        risk_level = 'low'       # 低风险
+    elif risk_score <= 4:
+        risk_level = 'medium'    # 中等风险
+    else:
+        risk_level = 'high'      # 高风险
+    
+    return risk_level, risk_factors
+```
+
+### 💡 投资建议生成算法
+
+#### 智能建议生成
+```python
+def _generate_investment_suggestions(self, analysis_result: DeepAnalysisResult) -> Dict:
+    """智能投资建议生成"""
+    
+    suggestions = {
+        'position_size': self._suggest_position_size(analysis_result),
+        'holding_period': self._suggest_holding_period(analysis_result),
+        'entry_points': self._suggest_entry_points(analysis_result),
+        'risk_management': self._suggest_risk_management(analysis_result)
+    }
+    
+    return suggestions
+
+def _suggest_position_size(self, result: DeepAnalysisResult) -> str:
+    """仓位建议算法"""
+    
+    score = result.overall_score
+    risk = result.risk_level
+    
+    if score >= 8.5 and risk == 'low':
+        return "可考虑中等仓位(20-30%)"
+    elif score >= 7.0 and risk in ['low', 'medium']:
+        return "建议小仓位试探(10-20%)"
+    elif score >= 6.0:
+        return "建议轻仓观察(5-10%)"
+    else:
+        return "建议观察，暂不建仓"
+
+def _suggest_holding_period(self, result: DeepAnalysisResult) -> str:
+    """持有期建议算法"""
+    
+    volatility = result.volatility_analysis
+    volume = result.volume_analysis
+    
+    if (volatility.get('sideways_consolidation') and 
+        volatility.get('breakout_signal', {}).get('direction') == 'upward'):
+        return "中长期持有(3-6个月)"
+    elif (volume.get('volume_breakout', {}).get('has_breakout') and
+          volume.get('volume_breakout', {}).get('consecutive_days', 0) >= 3):
+        return "短中期持有(1-3个月)"
+    else:
+        return "短期观察(2-4周)"
+```
+
+### 📊 数据库设计
+
+#### 深度分析结果表结构
+```sql
+CREATE TABLE deep_analysis_results (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    stock_code TEXT NOT NULL,
+    stock_name TEXT NOT NULL,
+    analysis_date DATE NOT NULL,
+    
+    -- 波动性分析结果
+    historical_volatility REAL,                 -- 历史波动率
+    sideways_period_days INTEGER,              -- 横盘天数
+    is_sideways_consolidation INTEGER,         -- 是否横盘整理
+    has_breakout INTEGER,                      -- 是否突破
+    breakout_direction TEXT,                   -- 突破方向
+    volatility_score REAL,                    -- 波动性评分
+    pattern_quality TEXT,                     -- 模式质量
+    
+    -- 成交量分析结果
+    avg_volume_30d INTEGER,                   -- 30日平均成交量
+    volume_ratio REAL,                        -- 成交量倍数
+    has_volume_breakout INTEGER,              -- 成交量突破
+    volume_price_correlation REAL,            -- 量价相关性
+    money_flow_direction TEXT,                -- 资金流向
+    volume_score REAL,                        -- 成交量评分
+    
+    -- 综合评估结果
+    overall_score REAL,                       -- 综合评分
+    investment_grade TEXT,                    -- 投资等级
+    recommendation TEXT,                      -- 推荐建议
+    is_low_volatility_breakout INTEGER,      -- 低波动突破
+    is_volume_price_coordinated INTEGER,     -- 量价配合
+    is_worthy_of_attention INTEGER,          -- 值得关注
+    risk_level TEXT,                         -- 风险等级
+    
+    -- 投资建议
+    position_size_suggestion TEXT,           -- 仓位建议
+    holding_period_suggestion TEXT,          -- 持有期建议
+    entry_suggestions TEXT,                  -- 入场建议(JSON)
+    
+    created_at TEXT NOT NULL,
+    INDEX idx_stock_code (stock_code),
+    INDEX idx_analysis_date (analysis_date),
+    INDEX idx_investment_grade (investment_grade),
+    INDEX idx_overall_score (overall_score)
+);
+```
+
+### 🎯 算法优化特性
+
+#### 性能优化策略
+```python
+# 1. 并发分析处理
+async def batch_analyze_stocks(self, stock_codes: List[str]) -> List[DeepAnalysisResult]:
+    """批量并发分析"""
+    
+    analysis_tasks = []
+    batch_size = 20  # 控制并发数量
+    
+    for i in range(0, len(stock_codes), batch_size):
+        batch = stock_codes[i:i + batch_size]
+        for stock_code in batch:
+            task = self.analyze_stock(stock_code)
+            analysis_tasks.append(task)
+    
+    results = await asyncio.gather(*analysis_tasks, return_exceptions=True)
+    return [r for r in results if isinstance(r, DeepAnalysisResult)]
+
+# 2. 数据缓存机制
+class DataCache:
+    """90天历史数据缓存"""
+    
+    def __init__(self):
+        self.cache = {}
+        self.cache_duration = 3600  # 1小时缓存
+    
+    async def get_cached_data(self, stock_code: str) -> Optional[List[PriceData]]:
+        """获取缓存数据"""
+        cache_key = f"price_data_{stock_code}"
+        if cache_key in self.cache:
+            data, timestamp = self.cache[cache_key]
+            if time.time() - timestamp < self.cache_duration:
+                return data
+        return None
+```
+
+### 📈 算法有效性指标
+
+#### 评分体系总结
+```python
+# 波动性评分权重分配 (总分10分)
+横盘质量评分:    4分 (40%) - 时间因子 + 稳定性因子
+突破信号评分:    3分 (30%) - 方向 + 强度
+历史波动率评分:  2分 (20%) - 适中波动率偏好
+价格稳定性评分:  1分 (10%) - 相对稳定性
+
+# 成交量评分权重分配 (总分10分)  
+成交量突破评分:  3分 (30%) - 突破强度 + 持续性
+量价关系评分:    2.5分 (25%) - 配合度 + 相关性
+资金流向评分:    2.5分 (25%) - 流向 + 强度
+成交量形态评分:  2分 (20%) - 形态特征
+
+# 综合评分计算
+总评分 = 波动性评分 × 60% + 成交量评分 × 40%
+
+# 投资等级标准
+A级: 8.5+ 分 (强烈推荐)
+B级: 7.0-8.4 分 (推荐)  
+C级: 5.5-6.9 分 (观察)
+D级: <5.5 分 (回避)
+```
+
+#### 关键阈值配置
+```python
+# 核心参数设置
+算法参数配置 = {
+    "横盘检测": {
+        "波动阈值": "20%",
+        "最小天数": "15天",
+        "检测窗口": "滑动窗口"
+    },
+    "突破确认": {
+        "突破幅度": "2%",
+        "确认天数": "2天", 
+        "强度评估": "基于突破幅度"
+    },
+    "成交量分析": {
+        "突破倍数": "2.0倍",
+        "高量阈值": "1.5倍",
+        "相关性阈值": "0.3"
+    },
+    "风险控制": {
+        "高波动率": ">40%",
+        "资金流出": "<-5%",
+        "量价背离": "相关性<0.3"
+    }
+}
+```
+
+这套深度分析算法通过多维度技术分析、智能量化评分和自动化管理，为股票投资提供了系统性的决策支持。算法特别专注于识别低风险、高潜力的横盘突破投资机会，结合严格的风险控制机制，为投资者提供科学、可靠的投资建议。
+
 ### 故障排除指南
 
 #### 端口冲突问题

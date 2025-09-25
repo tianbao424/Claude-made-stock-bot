@@ -26,6 +26,8 @@ from services.strategy_service import StrategyDataCollector, AIStrategyGenerator
 from services.data_sync_scheduler import get_data_sync_scheduler
 from services.stock_screening_service import get_stock_screening_service, ScreeningCriteria
 from services.data_sync_scheduler import SyncResult
+from services.stock_deep_analysis_service import StockDeepAnalysisService
+from services.auto_pool_manager import AutoPoolManager, AutoPoolConfig
 
 load_dotenv()
 
@@ -64,6 +66,10 @@ class WebStockAnalysisBot:
         # 初始化策略分析服务（将在连接MCP后初始化）
         self.strategy_data_collector = None
         self.ai_strategy_generator = None
+        
+        # 初始化深度分析服务
+        self.deep_analysis_service = None
+        self.auto_pool_manager = None
 
     async def connect_to_server(self) -> bool:
         try:
@@ -92,6 +98,11 @@ class WebStockAnalysisBot:
             self.strategy_data_collector = StrategyDataCollector(self.session)
             self.ai_strategy_generator = AIStrategyGenerator(self.client)
             logger.info("🤖 策略分析服务初始化完成")
+            
+            # 初始化深度分析服务
+            self.deep_analysis_service = StockDeepAnalysisService(self.db_manager)
+            self.auto_pool_manager = AutoPoolManager(self.db_manager, self.deep_analysis_service)
+            logger.info("📊 深度分析和自动池管理服务初始化完成")
             
             return True
             
@@ -1649,6 +1660,233 @@ async def clear_cache():
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
+# ===== 深度分析API端点 =====
+
+class DeepAnalysisRequest(BaseModel):
+    stock_codes: List[str] = Field(..., description="股票代码列表")
+    save_results: bool = Field(default=True, description="是否保存分析结果到数据库")
+
+class AutoPoolConfigRequest(BaseModel):
+    min_overall_score: float = Field(default=6.0, ge=0, le=10)
+    min_volatility_score: float = Field(default=6.5, ge=0, le=10)
+    min_volume_score: float = Field(default=5.5, ge=0, le=10)
+    require_low_volatility_breakout: bool = Field(default=True)
+    require_volume_coordination: bool = Field(default=True)
+    min_sideways_days: int = Field(default=20, ge=5, le=200)
+    allowed_investment_grades: List[str] = Field(default=['A', 'B'])
+    max_risk_level: str = Field(default="medium")
+    auto_add_enabled: bool = Field(default=True)
+    avoid_duplicates: bool = Field(default=True)
+    max_auto_additions_per_day: int = Field(default=10, ge=1, le=100)
+
+@app.post("/api/deep-analysis/analyze")
+async def analyze_stocks_deeply(request: DeepAnalysisRequest):
+    """对指定股票进行深度分析"""
+    try:
+        if not bot.deep_analysis_service:
+            raise HTTPException(status_code=503, detail="深度分析服务未初始化")
+        
+        # 转换股票代码为筛选结果格式
+        screening_results = []
+        for stock_code in request.stock_codes:
+            # 尝试从数据库获取股票信息
+            stock_info = bot.db_manager.get_stock_info_by_symbol(stock_code)
+            stock_name = stock_info.name if stock_info else f"股票{stock_code}"
+            
+            screening_results.append({
+                'stock_code': stock_code,
+                'stock_name': stock_name
+            })
+        
+        # 执行深度分析
+        analysis_results = await bot.deep_analysis_service.analyze_screening_stocks(screening_results)
+        
+        # 保存结果到数据库
+        if request.save_results:
+            saved_count = 0
+            for result in analysis_results:
+                saved_id = bot.db_manager.save_deep_analysis_result(result)
+                if saved_id:
+                    saved_count += 1
+            logger.info(f"📊 保存了 {saved_count}/{len(analysis_results)} 个深度分析结果")
+        
+        # 转换为API响应格式
+        response_data = []
+        for result in analysis_results:
+            response_data.append({
+                "stock_code": result.stock_code,
+                "stock_name": result.stock_name,
+                "analysis_date": result.analysis_date,
+                "overall_score": result.overall_score,
+                "investment_grade": result.investment_grade,
+                "recommendation": result.recommendation,
+                "risk_level": result.risk_level,
+                "is_low_volatility_breakout": result.is_low_volatility_breakout,
+                "is_volume_price_coordinated": result.is_volume_price_coordinated,
+                "is_worthy_of_attention": result.is_worthy_of_attention,
+                "volatility_analysis": {
+                    "sideways_period_days": result.volatility_analysis.sideways_period_days,
+                    "has_breakout": result.volatility_analysis.has_breakout,
+                    "breakout_direction": result.volatility_analysis.breakout_direction,
+                    "volatility_score": result.volatility_analysis.volatility_score,
+                    "pattern_quality": result.volatility_analysis.pattern_quality
+                },
+                "volume_analysis": {
+                    "has_volume_breakout": result.volume_analysis.has_volume_breakout,
+                    "volume_score": result.volume_analysis.volume_score,
+                    "money_flow_direction": result.volume_analysis.money_flow_direction,
+                    "price_volume_trend": result.volume_analysis.price_volume_trend
+                },
+                "entry_suggestions": result.entry_suggestions,
+                "position_size_suggestion": result.position_size_suggestion,
+                "holding_period_suggestion": result.holding_period_suggestion
+            })
+        
+        return ApiResponse(
+            success=True,
+            data=response_data,
+            message=f"成功分析 {len(analysis_results)} 只股票"
+        )
+        
+    except Exception as e:
+        logger.error(f"❌ 深度分析失败: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.get("/api/deep-analysis/results")
+async def get_deep_analysis_results(
+    stock_code: Optional[str] = Query(None, description="股票代码"),
+    limit: int = Query(50, ge=1, le=200, description="返回结果数量")
+):
+    """获取深度分析结果"""
+    try:
+        results = bot.db_manager.get_deep_analysis_results(stock_code, limit)
+        
+        return ApiResponse(
+            success=True,
+            data=results,
+            message=f"获取到 {len(results)} 条深度分析结果"
+        )
+        
+    except Exception as e:
+        logger.error(f"❌ 获取深度分析结果失败: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.get("/api/deep-analysis/worthy-stocks")
+async def get_worthy_of_attention_stocks(
+    limit: int = Query(20, ge=1, le=100, description="返回结果数量")
+):
+    """获取值得关注的股票"""
+    try:
+        stocks = bot.db_manager.get_worthy_of_attention_stocks(limit)
+        
+        return ApiResponse(
+            success=True,
+            data=stocks,
+            message=f"找到 {len(stocks)} 只值得关注的股票"
+        )
+        
+    except Exception as e:
+        logger.error(f"❌ 获取值得关注股票失败: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.post("/api/auto-pool/process-screening")
+async def process_screening_with_auto_pool():
+    """处理最新筛选结果并自动管理股票池"""
+    try:
+        if not bot.auto_pool_manager:
+            raise HTTPException(status_code=503, detail="自动池管理器未初始化")
+        
+        # 获取最新筛选结果
+        screening_service = get_stock_screening_service(bot.db_manager)
+        latest_results = screening_service.get_latest_screening_results()
+        
+        if not latest_results:
+            return ApiResponse(
+                success=True,
+                data={"message": "没有找到最新的筛选结果"},
+                message="没有数据需要处理"
+            )
+        
+        # 执行自动池管理
+        processing_report = await bot.auto_pool_manager.manual_screening_integration(latest_results)
+        
+        # 保存处理记录
+        config_snapshot = bot.auto_pool_manager.get_daily_statistics()
+        bot.db_manager.save_auto_pool_record(processing_report, config_snapshot)
+        
+        return ApiResponse(
+            success=True,
+            data=processing_report,
+            message=f"处理完成，添加了 {processing_report.get('added_to_pool', 0)} 只股票到关注池"
+        )
+        
+    except Exception as e:
+        logger.error(f"❌ 自动池管理处理失败: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.get("/api/auto-pool/config")
+async def get_auto_pool_config():
+    """获取自动池管理配置"""
+    try:
+        if not bot.auto_pool_manager:
+            raise HTTPException(status_code=503, detail="自动池管理器未初始化")
+        
+        stats = bot.auto_pool_manager.get_daily_statistics()
+        
+        return ApiResponse(
+            success=True,
+            data=stats,
+            message="获取配置成功"
+        )
+        
+    except Exception as e:
+        logger.error(f"❌ 获取自动池配置失败: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.put("/api/auto-pool/config")
+async def update_auto_pool_config(config: AutoPoolConfigRequest):
+    """更新自动池管理配置"""
+    try:
+        if not bot.auto_pool_manager:
+            raise HTTPException(status_code=503, detail="自动池管理器未初始化")
+        
+        # 转换为字典格式
+        config_dict = config.dict()
+        
+        # 更新配置
+        bot.auto_pool_manager.update_config_from_dict(config_dict)
+        
+        # 返回更新后的配置
+        updated_stats = bot.auto_pool_manager.get_daily_statistics()
+        
+        return ApiResponse(
+            success=True,
+            data=updated_stats,
+            message="配置更新成功"
+        )
+        
+    except Exception as e:
+        logger.error(f"❌ 更新自动池配置失败: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.get("/api/auto-pool/records")
+async def get_auto_pool_records(
+    days: int = Query(7, ge=1, le=30, description="查询天数")
+):
+    """获取自动池管理记录"""
+    try:
+        records = bot.db_manager.get_auto_pool_records(days)
+        
+        return ApiResponse(
+            success=True,
+            data=records,
+            message=f"获取到 {len(records)} 条管理记录"
+        )
+        
+    except Exception as e:
+        logger.error(f"❌ 获取自动池管理记录失败: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
 @app.get("/health")
 async def health_check():
     return {
@@ -1656,6 +1894,8 @@ async def health_check():
         "timestamp": datetime.now().isoformat(),
         "mcp_connected": bot.session is not None,
         "strategy_service_ready": bot.strategy_data_collector is not None and bot.ai_strategy_generator is not None,
+        "deep_analysis_service_ready": bot.deep_analysis_service is not None,
+        "auto_pool_manager_ready": bot.auto_pool_manager is not None,
         "data_sync_running": data_scheduler.running if data_scheduler else False
     }
 

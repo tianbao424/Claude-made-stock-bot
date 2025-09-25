@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { BarChart3, MessageSquare, Settings, Menu, X, Database, Filter, Clock, Activity } from 'lucide-react';
+import { BarChart3, MessageSquare, Settings, Menu, X, Database, Filter, Clock, Activity, TrendingUp } from 'lucide-react';
 import StockPoolManager from './components/StockPoolManager';
 import ChatInterface from './components/ChatInterface';
 import StockInfoManager from './components/StockInfoManager';
@@ -7,9 +7,10 @@ import StockScreeningDashboard from './components/StockScreeningDashboard';
 import ScreeningHistory from './components/ScreeningHistory';
 import ScreeningConfig from './components/ScreeningConfig';
 import PerformanceMonitor from './components/PerformanceMonitor';
+import DeepAnalysisDashboard from './components/DeepAnalysisDashboard';
 import './App.css';
 
-type TabType = 'chat' | 'pool' | 'stockinfo' | 'screening' | 'history' | 'settings' | 'performance';
+type TabType = 'chat' | 'pool' | 'stockinfo' | 'screening' | 'history' | 'settings' | 'performance' | 'deep-analysis';
 
 const App: React.FC = () => {
   const [activeTab, setActiveTab] = useState<TabType>('chat');
@@ -39,6 +40,12 @@ const App: React.FC = () => {
       name: '股票甄选',
       icon: Filter,
       component: <StockScreeningDashboard />,
+    },
+    {
+      id: 'deep-analysis' as TabType,
+      name: '深度分析',
+      icon: TrendingUp,
+      component: <DeepAnalysisDashboard />,
     },
     {
       id: 'history' as TabType,

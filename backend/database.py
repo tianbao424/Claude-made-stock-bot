@@ -189,7 +189,7 @@ class DatabaseManager:
             cursor.execute('''
                 CREATE TABLE IF NOT EXISTS stock_pool (
                     id INTEGER PRIMARY KEY AUTOINCREMENT,
-                    stock_code TEXT NOT NULL UNIQUE,
+                    stock_code TEXT NOT NULL,
                     stock_name TEXT NOT NULL,
                     pool_type TEXT NOT NULL CHECK(pool_type IN ('holding', 'potential')),
                     shares INTEGER DEFAULT 0,
@@ -199,7 +199,8 @@ class DatabaseManager:
                     notes TEXT DEFAULT '',
                     tags TEXT DEFAULT '',
                     created_at TEXT NOT NULL,
-                    updated_at TEXT NOT NULL
+                    updated_at TEXT NOT NULL,
+                    UNIQUE(stock_code, pool_type)
                 )
             ''')
             
@@ -306,6 +307,83 @@ class DatabaseManager:
                 )
             ''')
             
+            # 创建深度分析结果表
+            cursor.execute('''
+                CREATE TABLE IF NOT EXISTS deep_analysis_results (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    stock_code TEXT NOT NULL,
+                    stock_name TEXT NOT NULL,
+                    analysis_date DATE NOT NULL,
+                    
+                    -- 波动性分析结果
+                    historical_volatility REAL,
+                    price_volatility_percent REAL,
+                    sideways_period_days INTEGER,
+                    is_sideways_consolidation INTEGER,
+                    consolidation_start_date TEXT,
+                    consolidation_end_date TEXT,
+                    consolidation_price_range_min REAL,
+                    consolidation_price_range_max REAL,
+                    has_breakout INTEGER,
+                    breakout_date TEXT,
+                    breakout_price REAL,
+                    breakout_direction TEXT,
+                    volatility_score REAL,
+                    pattern_quality TEXT,
+                    
+                    -- 成交量分析结果
+                    avg_volume_30d INTEGER,
+                    avg_volume_60d INTEGER,
+                    current_volume INTEGER,
+                    volume_ratio REAL,
+                    has_volume_breakout INTEGER,
+                    breakout_volume_ratio REAL,
+                    consecutive_high_volume_days INTEGER,
+                    volume_price_correlation REAL,
+                    volume_price_divergence INTEGER,
+                    price_volume_trend TEXT,
+                    money_flow_direction TEXT,
+                    money_flow_intensity REAL,
+                    accumulation_distribution REAL,
+                    volume_pattern TEXT,
+                    volume_trend TEXT,
+                    volume_score REAL,
+                    volume_quality TEXT,
+                    
+                    -- 综合评估结果
+                    overall_score REAL,
+                    investment_grade TEXT,
+                    recommendation TEXT,
+                    is_low_volatility_breakout INTEGER,
+                    is_volume_price_coordinated INTEGER,
+                    is_worthy_of_attention INTEGER,
+                    risk_level TEXT,
+                    risk_factors TEXT, -- JSON
+                    entry_suggestions TEXT, -- JSON
+                    position_size_suggestion TEXT,
+                    holding_period_suggestion TEXT,
+                    
+                    created_at TEXT NOT NULL,
+                    UNIQUE(stock_code, analysis_date)
+                )
+            ''')
+            
+            # 创建自动池管理记录表
+            cursor.execute('''
+                CREATE TABLE IF NOT EXISTS auto_pool_records (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    processing_date DATE NOT NULL,
+                    total_analyzed INTEGER,
+                    qualified_stocks INTEGER,
+                    new_qualified_stocks INTEGER,
+                    added_to_pool INTEGER,
+                    daily_additions_used INTEGER,
+                    processing_details TEXT, -- JSON
+                    config_snapshot TEXT, -- JSON
+                    created_at TEXT NOT NULL
+                )
+            ''')
+            
             # 创建搜索索引
             cursor.execute('CREATE INDEX IF NOT EXISTS idx_stock_name ON stock_info(name)')
             cursor.execute('CREATE INDEX IF NOT EXISTS idx_stock_pinyin ON stock_info(pinyin)')
@@ -321,6 +399,13 @@ class DatabaseManager:
             cursor.execute('CREATE INDEX IF NOT EXISTS idx_daily_changes_date ON daily_stock_changes(trade_date)')
             cursor.execute('CREATE INDEX IF NOT EXISTS idx_daily_changes_code ON daily_stock_changes(stock_code)')
             cursor.execute('CREATE INDEX IF NOT EXISTS idx_daily_changes_code_date ON daily_stock_changes(stock_code, trade_date)')
+            
+            # 创建深度分析索引
+            cursor.execute('CREATE INDEX IF NOT EXISTS idx_deep_analysis_code ON deep_analysis_results(stock_code)')
+            cursor.execute('CREATE INDEX IF NOT EXISTS idx_deep_analysis_date ON deep_analysis_results(analysis_date)')
+            cursor.execute('CREATE INDEX IF NOT EXISTS idx_deep_analysis_score ON deep_analysis_results(overall_score)')
+            cursor.execute('CREATE INDEX IF NOT EXISTS idx_deep_analysis_worthy ON deep_analysis_results(is_worthy_of_attention)')
+            cursor.execute('CREATE INDEX IF NOT EXISTS idx_auto_pool_date ON auto_pool_records(processing_date)')
             
             conn.commit()
             logger.info("✅ Database initialized successfully")
@@ -352,8 +437,11 @@ class DatabaseManager:
                 conn.commit()
                 return stock_id
                 
-        except sqlite3.IntegrityError:
-            raise ValueError(f"股票 {stock.stock_code} 已存在于股票池中")
+        except sqlite3.IntegrityError as e:
+            if "UNIQUE constraint failed" in str(e):
+                raise ValueError(f"股票 {stock.stock_code} 在{stock.pool_type}池中已存在")
+            else:
+                raise ValueError(f"股票 {stock.stock_code} 添加失败: 数据完整性错误")
         except Exception as e:
             raise Exception(f"添加股票失败: {str(e)}")
     
@@ -851,6 +939,246 @@ class DatabaseManager:
             confidence_level=row[24],
             created_at=row[25]
         )
+    
+    # ===== 深度分析结果管理方法 =====
+    
+    def save_deep_analysis_result(self, analysis_result) -> Optional[int]:
+        """保存深度分析结果"""
+        try:
+            with sqlite3.connect(self.db_path) as conn:
+                cursor = conn.cursor()
+                
+                now = datetime.now().isoformat()
+                
+                cursor.execute('''
+                    INSERT OR REPLACE INTO deep_analysis_results 
+                    (stock_code, stock_name, analysis_date,
+                     historical_volatility, price_volatility_percent, sideways_period_days,
+                     is_sideways_consolidation, consolidation_start_date, consolidation_end_date,
+                     consolidation_price_range_min, consolidation_price_range_max,
+                     has_breakout, breakout_date, breakout_price, breakout_direction,
+                     volatility_score, pattern_quality,
+                     avg_volume_30d, avg_volume_60d, current_volume, volume_ratio,
+                     has_volume_breakout, breakout_volume_ratio, consecutive_high_volume_days,
+                     volume_price_correlation, volume_price_divergence, price_volume_trend,
+                     money_flow_direction, money_flow_intensity, accumulation_distribution,
+                     volume_pattern, volume_trend, volume_score, volume_quality,
+                     overall_score, investment_grade, recommendation,
+                     is_low_volatility_breakout, is_volume_price_coordinated, is_worthy_of_attention,
+                     risk_level, risk_factors, entry_suggestions,
+                     position_size_suggestion, holding_period_suggestion, created_at)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                ''', (
+                    analysis_result.stock_code,
+                    analysis_result.stock_name,
+                    analysis_result.analysis_date,
+                    
+                    # 波动性分析结果
+                    analysis_result.volatility_analysis.historical_volatility,
+                    analysis_result.volatility_analysis.price_volatility_percent,
+                    analysis_result.volatility_analysis.sideways_period_days,
+                    1 if analysis_result.volatility_analysis.is_sideways_consolidation else 0,
+                    analysis_result.volatility_analysis.consolidation_start_date,
+                    analysis_result.volatility_analysis.consolidation_end_date,
+                    analysis_result.volatility_analysis.consolidation_price_range[0],
+                    analysis_result.volatility_analysis.consolidation_price_range[1],
+                    1 if analysis_result.volatility_analysis.has_breakout else 0,
+                    analysis_result.volatility_analysis.breakout_date,
+                    analysis_result.volatility_analysis.breakout_price,
+                    analysis_result.volatility_analysis.breakout_direction,
+                    analysis_result.volatility_analysis.volatility_score,
+                    analysis_result.volatility_analysis.pattern_quality,
+                    
+                    # 成交量分析结果
+                    analysis_result.volume_analysis.avg_volume_30d,
+                    analysis_result.volume_analysis.avg_volume_60d,
+                    analysis_result.volume_analysis.current_volume,
+                    analysis_result.volume_analysis.volume_ratio,
+                    1 if analysis_result.volume_analysis.has_volume_breakout else 0,
+                    analysis_result.volume_analysis.breakout_volume_ratio,
+                    analysis_result.volume_analysis.consecutive_high_volume_days,
+                    analysis_result.volume_analysis.volume_price_correlation,
+                    1 if analysis_result.volume_analysis.volume_price_divergence else 0,
+                    analysis_result.volume_analysis.price_volume_trend,
+                    analysis_result.volume_analysis.money_flow_direction,
+                    analysis_result.volume_analysis.money_flow_intensity,
+                    analysis_result.volume_analysis.accumulation_distribution,
+                    analysis_result.volume_analysis.volume_pattern,
+                    analysis_result.volume_analysis.volume_trend,
+                    analysis_result.volume_analysis.volume_score,
+                    analysis_result.volume_analysis.volume_quality,
+                    
+                    # 综合评估结果
+                    analysis_result.overall_score,
+                    analysis_result.investment_grade,
+                    analysis_result.recommendation,
+                    1 if analysis_result.is_low_volatility_breakout else 0,
+                    1 if analysis_result.is_volume_price_coordinated else 0,
+                    1 if analysis_result.is_worthy_of_attention else 0,
+                    analysis_result.risk_level,
+                    json.dumps(analysis_result.risk_factors),
+                    json.dumps(analysis_result.entry_suggestions),
+                    analysis_result.position_size_suggestion,
+                    analysis_result.holding_period_suggestion,
+                    now
+                ))
+                
+                analysis_id = cursor.lastrowid
+                conn.commit()
+                return analysis_id
+                
+        except Exception as e:
+            logger.error(f"保存深度分析结果失败: {e}")
+            return None
+    
+    def get_deep_analysis_results(self, stock_code: str = None, limit: int = 50) -> List[Dict]:
+        """获取深度分析结果"""
+        try:
+            with sqlite3.connect(self.db_path) as conn:
+                cursor = conn.cursor()
+                
+                if stock_code:
+                    cursor.execute('''
+                        SELECT * FROM deep_analysis_results 
+                        WHERE stock_code = ?
+                        ORDER BY analysis_date DESC
+                        LIMIT ?
+                    ''', (stock_code, limit))
+                else:
+                    cursor.execute('''
+                        SELECT * FROM deep_analysis_results 
+                        ORDER BY analysis_date DESC, overall_score DESC
+                        LIMIT ?
+                    ''', (limit,))
+                
+                columns = [desc[0] for desc in cursor.description]
+                results = []
+                
+                for row in cursor.fetchall():
+                    result = dict(zip(columns, row))
+                    # 反序列化JSON字段
+                    if result['risk_factors']:
+                        result['risk_factors'] = json.loads(result['risk_factors'])
+                    if result['entry_suggestions']:
+                        result['entry_suggestions'] = json.loads(result['entry_suggestions'])
+                    
+                    # 转换布尔值字段
+                    bool_fields = [
+                        'is_sideways_consolidation', 'has_breakout', 'has_volume_breakout',
+                        'volume_price_divergence', 'is_low_volatility_breakout',
+                        'is_volume_price_coordinated', 'is_worthy_of_attention'
+                    ]
+                    for field in bool_fields:
+                        if result[field] is not None:
+                            result[field] = bool(result[field])
+                    
+                    results.append(result)
+                
+                return results
+                
+        except Exception as e:
+            logger.error(f"获取深度分析结果失败: {e}")
+            return []
+    
+    def get_worthy_of_attention_stocks(self, limit: int = 20) -> List[Dict]:
+        """获取值得关注的股票"""
+        try:
+            with sqlite3.connect(self.db_path) as conn:
+                cursor = conn.cursor()
+                
+                cursor.execute('''
+                    SELECT stock_code, stock_name, analysis_date, overall_score, investment_grade,
+                           is_low_volatility_breakout, sideways_period_days, breakout_direction,
+                           volatility_score, volume_score, recommendation, risk_level
+                    FROM deep_analysis_results 
+                    WHERE is_worthy_of_attention = 1
+                    ORDER BY overall_score DESC, analysis_date DESC
+                    LIMIT ?
+                ''', (limit,))
+                
+                columns = [desc[0] for desc in cursor.description]
+                results = []
+                
+                for row in cursor.fetchall():
+                    result = dict(zip(columns, row))
+                    # 转换布尔值字段
+                    if result['is_low_volatility_breakout'] is not None:
+                        result['is_low_volatility_breakout'] = bool(result['is_low_volatility_breakout'])
+                    results.append(result)
+                
+                return results
+                
+        except Exception as e:
+            logger.error(f"获取值得关注股票失败: {e}")
+            return []
+    
+    def save_auto_pool_record(self, processing_report: Dict, config_snapshot: Dict) -> Optional[int]:
+        """保存自动股票池处理记录"""
+        try:
+            with sqlite3.connect(self.db_path) as conn:
+                cursor = conn.cursor()
+                
+                now = datetime.now().isoformat()
+                today = datetime.now().date().isoformat()
+                
+                cursor.execute('''
+                    INSERT INTO auto_pool_records 
+                    (processing_date, total_analyzed, qualified_stocks, new_qualified_stocks,
+                     added_to_pool, daily_additions_used, processing_details, config_snapshot, created_at)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                ''', (
+                    today,
+                    processing_report.get('total_analyzed', 0),
+                    processing_report.get('qualified_stocks', 0),
+                    processing_report.get('new_qualified_stocks', 0),
+                    processing_report.get('added_to_pool', 0),
+                    processing_report.get('daily_additions_used', 0),
+                    json.dumps(processing_report),
+                    json.dumps(config_snapshot),
+                    now
+                ))
+                
+                record_id = cursor.lastrowid
+                conn.commit()
+                return record_id
+                
+        except Exception as e:
+            logger.error(f"保存自动池管理记录失败: {e}")
+            return None
+    
+    def get_auto_pool_records(self, days: int = 7) -> List[Dict]:
+        """获取自动股票池管理记录"""
+        try:
+            with sqlite3.connect(self.db_path) as conn:
+                cursor = conn.cursor()
+                
+                cursor.execute('''
+                    SELECT * FROM auto_pool_records 
+                    WHERE processing_date >= date('now', '-{} days')
+                    ORDER BY processing_date DESC
+                '''.format(days))
+                
+                columns = [desc[0] for desc in cursor.description]
+                results = []
+                
+                for row in cursor.fetchall():
+                    result = dict(zip(columns, row))
+                    # 反序列化JSON字段
+                    if result['processing_details']:
+                        result['processing_details'] = json.loads(result['processing_details'])
+                    if result['config_snapshot']:
+                        result['config_snapshot'] = json.loads(result['config_snapshot'])
+                    results.append(result)
+                
+                return results
+                
+        except Exception as e:
+            logger.error(f"获取自动池管理记录失败: {e}")
+            return []
+    
+    def get_all_stock_pools(self) -> List[StockPool]:
+        """获取所有股票池条目（用于AutoPoolManager去重）"""
+        return self.get_stocks()
 
 # 全局数据库实例
 db_manager = DatabaseManager()
