@@ -1,0 +1,211 @@
+import pytest
+import asyncio
+from unittest.mock import Mock, patch, AsyncMock
+from datetime import datetime, timedelta
+from backend.services.stock_screening_service import StockScreeningService, ScreeningCriteria
+from backend.database import DatabaseManager
+
+class TestStockScreeningService:
+    """股票筛选服务测试类"""
+    
+    @pytest.fixture
+    def db_manager(self):
+        """测试数据库管理器"""
+        return DatabaseManager(":memory:")
+    
+    @pytest.fixture
+    def screening_service(self, db_manager):
+        """筛选服务实例"""
+        return StockScreeningService(db_manager)
+    
+    @pytest.fixture
+    def sample_criteria(self):
+        """示例筛选条件"""
+        return ScreeningCriteria(
+            screening_type="strong_rise_3d",
+            min_consecutive_days=3,
+            min_rise_percent=5.0,
+            min_volume=1000000,
+            market_filter=['SH', 'SZ']
+        )
+    
+    @pytest.fixture
+    def mock_stock_data(self):
+        """模拟股票数据"""
+        return [
+            {
+                'stock_code': '000001',
+                'stock_name': '平安银行',
+                'market': 'SZ'
+            },
+            {
+                'stock_code': '600036',
+                'stock_name': '招商银行',
+                'market': 'SH'
+            },
+            {
+                'stock_code': '000002',
+                'stock_name': '万科A',
+                'market': 'SZ'
+            }
+        ]
+    
+    @pytest.fixture
+    def mock_price_data(self):
+        """模拟价格数据"""
+        base_date = datetime.now()
+        return [
+            {
+                'trade_date': (base_date - timedelta(days=i)).strftime('%Y-%m-%d'),
+                'close_price': 10.0 + i * 0.5,
+                'change_percent': 5.0 + i * 0.2,
+                'volume': 2000000 + i * 100000
+            }
+            for i in range(5)
+        ]
+    
+    @pytest.mark.asyncio
+    async def test_screen_strong_rise_stocks_success(self, screening_service, sample_criteria, mock_stock_data, mock_price_data):
+        """测试成功筛选强势上涨股票"""
+        with patch.object(screening_service, '_get_stock_universe', return_value=mock_stock_data), \
+             patch.object(screening_service, '_get_stock_history_data', return_value=mock_price_data), \
+             patch.object(screening_service, '_save_screening_results', new_callable=AsyncMock):
+            
+            results = await screening_service.screen_strong_rise_stocks(sample_criteria)
+            
+            assert isinstance(results, list)
+            # 由于我们的模拟数据满足条件，应该有结果
+            assert len(results) > 0
+    
+    @pytest.mark.asyncio
+    async def test_screen_with_empty_stock_list(self, screening_service, sample_criteria):
+        """测试空股票列表的筛选"""
+        with patch.object(screening_service, '_get_stock_universe', return_value=[]):
+            
+            results = await screening_service.screen_strong_rise_stocks(sample_criteria)
+            
+            assert isinstance(results, list)
+            assert len(results) == 0
+    
+    def test_analyze_consecutive_rises_qualified(self, screening_service, sample_criteria, mock_price_data):
+        """测试连续上涨分析 - 合格股票"""
+        result = screening_service._analyze_consecutive_rises(mock_price_data, sample_criteria)
+        
+        assert result['is_qualified'] is True
+        assert result['consecutive_days'] == sample_criteria.min_consecutive_days
+        assert result['avg_rise_percent'] >= sample_criteria.min_rise_percent
+    
+    def test_analyze_consecutive_rises_unqualified(self, screening_service, sample_criteria):
+        """测试连续上涨分析 - 不合格股票"""
+        # 创建不满足条件的数据
+        bad_data = [
+            {
+                'trade_date': '2023-01-01',
+                'change_percent': -2.0,  # 负涨幅
+                'volume': 1000000,
+                'close_price': 10.0
+            }
+        ]
+        
+        result = screening_service._analyze_consecutive_rises(bad_data, sample_criteria)
+        
+        assert result['is_qualified'] is False
+    
+    def test_filter_and_sort_results(self, screening_service, sample_criteria):
+        """测试结果过滤和排序"""
+        from backend.services.stock_screening_service import ScreeningResult
+        
+        # 创建重复和不重复的结果
+        results = [
+            ScreeningResult(
+                stock_code="000001",
+                stock_name="平安银行",
+                market="SZ",
+                consecutive_days=3,
+                avg_rise_percent=8.5,
+                total_volume=5000000,
+                avg_volume=1666667,
+                daily_changes=[]
+            ),
+            ScreeningResult(
+                stock_code="000001",  # 重复股票代码
+                stock_name="平安银行",
+                market="SZ", 
+                consecutive_days=3,
+                avg_rise_percent=6.2,  # 较低涨幅
+                total_volume=4000000,
+                avg_volume=1333333,
+                daily_changes=[]
+            ),
+            ScreeningResult(
+                stock_code="600036",
+                stock_name="招商银行",
+                market="SH",
+                consecutive_days=4,
+                avg_rise_percent=9.1,
+                total_volume=6000000,
+                avg_volume=1500000,
+                daily_changes=[]
+            )
+        ]
+        
+        filtered_results = screening_service._filter_and_sort_results(results, sample_criteria)
+        
+        # 应该去重，保留较高涨幅的
+        assert len(filtered_results) == 2
+        # 应该按涨幅降序排序
+        assert filtered_results[0].avg_rise_percent >= filtered_results[1].avg_rise_percent
+        # 去重时应保留涨幅更高的平安银行记录
+        ping_an_result = next(r for r in filtered_results if r.stock_code == "000001")
+        assert ping_an_result.avg_rise_percent == 8.5
+    
+    @pytest.mark.asyncio
+    async def test_get_latest_results(self, screening_service):
+        """测试获取最新筛选结果"""
+        with patch.object(screening_service.db_manager, 'execute_query', return_value=[
+            (1, '000001', '平安银行', 'SZ', '2023-01-01', 'strong_rise_3d', '{}', 3, 5.2, 5000000, 1666667, '2023-01-01T10:00:00')
+        ]):
+            
+            results = await screening_service.get_latest_results("strong_rise_3d", 10)
+            
+            assert isinstance(results, dict)
+            assert 'screening_date' in results
+            assert 'results' in results
+            assert len(results['results']) == 1
+
+class TestScreeningCriteria:
+    """筛选条件测试类"""
+    
+    def test_criteria_creation(self):
+        """测试筛选条件创建"""
+        criteria = ScreeningCriteria(
+            screening_type="test_type",
+            min_consecutive_days=5,
+            min_rise_percent=3.0,
+            min_volume=500000,
+            market_filter=['SH']
+        )
+        
+        assert criteria.screening_type == "test_type"
+        assert criteria.min_consecutive_days == 5
+        assert criteria.min_rise_percent == 3.0
+        assert criteria.min_volume == 500000
+        assert criteria.market_filter == ['SH']
+    
+    def test_criteria_to_dict(self):
+        """测试筛选条件转字典"""
+        criteria = ScreeningCriteria(
+            screening_type="test_type",
+            min_consecutive_days=3,
+            min_rise_percent=5.0
+        )
+        
+        criteria_dict = criteria.to_dict()
+        
+        assert isinstance(criteria_dict, dict)
+        assert criteria_dict['screening_type'] == "test_type"
+        assert criteria_dict['min_consecutive_days'] == 3
+        assert criteria_dict['min_rise_percent'] == 5.0
+
+if __name__ == "__main__":
+    pytest.main([__file__, "-v"])

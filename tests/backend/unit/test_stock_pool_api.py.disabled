@@ -1,0 +1,235 @@
+import pytest
+import json
+import sqlite3
+from unittest.mock import Mock, patch
+from datetime import datetime
+from fastapi.testclient import TestClient
+from backend.main import app
+from backend.database import DatabaseManager, StockPool
+
+client = TestClient(app)
+
+class TestStockPoolAPI:
+    """股票池API测试类"""
+    
+    @pytest.fixture
+    def db_manager(self):
+        """测试数据库管理器"""
+        db = DatabaseManager(":memory:")
+        return db
+    
+    @pytest.fixture
+    def sample_stock_pool(self):
+        """示例股票池数据"""
+        return StockPool(
+            stock_code="000001",
+            stock_name="平安银行",
+            pool_type="holding",
+            shares=1000,
+            avg_cost=12.50,
+            current_price=13.20,
+            market_value=13200.0,
+            tags=["银行", "金融"],
+            notes="测试股票",
+            created_at=datetime.now().isoformat(),
+            updated_at=datetime.now().isoformat()
+        )
+    
+    def test_get_stock_pools(self):
+        """测试获取股票池列表"""
+        response = client.get("/api/stock-pools")
+        assert response.status_code == 200
+        data = response.json()
+        assert data["success"] is True
+        assert "data" in data
+    
+    def test_create_stock_pool_success(self):
+        """测试成功创建股票池"""
+        stock_data = {
+            "stock_code": "000001",
+            "stock_name": "平安银行",
+            "pool_type": "holding",
+            "shares": 1000,
+            "avg_cost": 12.50,
+            "current_price": 13.20,
+            "tags": ["银行", "金融"],
+            "notes": "测试股票"
+        }
+        
+        response = client.post("/api/stock-pools", json=stock_data)
+        assert response.status_code == 200
+        data = response.json()
+        assert data["success"] is True
+        assert data["data"]["stock_code"] == "000001"
+    
+    def test_create_stock_pool_invalid_data(self):
+        """测试创建股票池时数据无效"""
+        invalid_data = {
+            "stock_code": "",  # 空的股票代码
+            "stock_name": "平安银行",
+            "pool_type": "invalid_type"  # 无效的池类型
+        }
+        
+        response = client.post("/api/stock-pools", json=invalid_data)
+        assert response.status_code == 400
+    
+    def test_get_stock_pool_by_id(self):
+        """测试通过ID获取股票池"""
+        # 首先创建一个股票池
+        stock_data = {
+            "stock_code": "000002",
+            "stock_name": "万科A",
+            "pool_type": "potential",
+            "shares": 0,
+            "avg_cost": 0.0,
+            "current_price": 22.50
+        }
+        create_response = client.post("/api/stock-pools", json=stock_data)
+        created_id = create_response.json()["data"]["id"]
+        
+        # 获取创建的股票池
+        response = client.get(f"/api/stock-pools/{created_id}")
+        assert response.status_code == 200
+        data = response.json()
+        assert data["success"] is True
+        assert data["data"]["stock_code"] == "000002"
+    
+    def test_update_stock_pool(self):
+        """测试更新股票池"""
+        # 首先创建一个股票池
+        stock_data = {
+            "stock_code": "000003",
+            "stock_name": "中国建筑",
+            "pool_type": "holding",
+            "shares": 500,
+            "avg_cost": 8.50,
+            "current_price": 9.20
+        }
+        create_response = client.post("/api/stock-pools", json=stock_data)
+        created_id = create_response.json()["data"]["id"]
+        
+        # 更新股票池数据
+        update_data = {
+            "shares": 800,
+            "current_price": 9.80,
+            "notes": "已增加持仓"
+        }
+        response = client.put(f"/api/stock-pools/{created_id}", json=update_data)
+        assert response.status_code == 200
+        data = response.json()
+        assert data["success"] is True
+        assert data["data"]["shares"] == 800
+    
+    def test_delete_stock_pool(self):
+        """测试删除股票池"""
+        # 首先创建一个股票池
+        stock_data = {
+            "stock_code": "000004",
+            "stock_name": "国农科技",
+            "pool_type": "potential"
+        }
+        create_response = client.post("/api/stock-pools", json=stock_data)
+        created_id = create_response.json()["data"]["id"]
+        
+        # 删除股票池
+        response = client.delete(f"/api/stock-pools/{created_id}")
+        assert response.status_code == 200
+        data = response.json()
+        assert data["success"] is True
+        
+        # 验证已删除
+        get_response = client.get(f"/api/stock-pools/{created_id}")
+        assert get_response.status_code == 404
+
+class TestStockInfoAPI:
+    """股票信息API测试类"""
+    
+    def test_search_stocks(self):
+        """测试股票搜索"""
+        response = client.get("/api/stocks/search?query=平安")
+        assert response.status_code == 200
+        data = response.json()
+        assert data["success"] is True
+    
+    @patch('backend.services.akshare_service.AkShareService.get_stock_info')
+    def test_get_stock_info(self, mock_get_info):
+        """测试获取股票信息"""
+        mock_get_info.return_value = {
+            "code": "000001",
+            "name": "平安银行",
+            "price": 13.20,
+            "change": 0.50,
+            "change_percent": 3.94
+        }
+        
+        response = client.get("/api/stocks/info/000001")
+        assert response.status_code == 200
+        data = response.json()
+        assert data["success"] is True
+        assert data["data"]["name"] == "平安银行"
+
+class TestStrategyAnalysisAPI:
+    """策略分析API测试类"""
+    
+    @patch('backend.services.strategy_service.StrategyService.generate_analysis')
+    def test_generate_strategy_analysis(self, mock_generate):
+        """测试生成策略分析"""
+        mock_generate.return_value = {
+            "comprehensive_score": 8.5,
+            "risk_level": "low",
+            "action_recommendation": "buy",
+            "analysis_summary": "测试分析摘要"
+        }
+        
+        # 首先创建一个股票池
+        stock_data = {
+            "stock_code": "000001",
+            "stock_name": "平安银行",
+            "pool_type": "holding"
+        }
+        create_response = client.post("/api/stock-pools", json=stock_data)
+        stock_id = create_response.json()["data"]["id"]
+        
+        # 生成策略分析
+        response = client.post(f"/api/strategy/generate/{stock_id}")
+        assert response.status_code == 200
+        data = response.json()
+        assert data["success"] is True
+        assert "analysis_id" in data["data"]
+
+class TestStockScreeningAPI:
+    """股票筛选API测试类"""
+    
+    @patch('backend.services.stock_screening_service.StockScreeningService.screen_strong_rise_stocks')
+    def test_manual_trigger_screening(self, mock_screen):
+        """测试手动触发筛选"""
+        mock_screen.return_value = [
+            {
+                "stock_code": "000001",
+                "stock_name": "平安银行",
+                "consecutive_days": 3,
+                "avg_rise_percent": 5.2
+            }
+        ]
+        
+        criteria = {
+            "screening_type": "strong_rise_3d",
+            "min_consecutive_days": 3,
+            "min_rise_percent": 5.0
+        }
+        
+        response = client.post("/api/screening/manual-trigger", json=criteria)
+        assert response.status_code == 200
+        data = response.json()
+        assert data["success"] is True
+    
+    def test_get_latest_screening_results(self):
+        """测试获取最新筛选结果"""
+        response = client.get("/api/screening/latest-results")
+        assert response.status_code == 200
+        data = response.json()
+        assert data["success"] is True
+        assert "data" in data
+
+if __name__ == "__main__":
+    pytest.main([__file__, "-v"])

@@ -75,7 +75,11 @@ const StockScreeningDashboard: React.FC = () => {
       
       if (data.success) {
         setLatestResults(data.data);
-        setMessage(data.message);
+        if (data.data.screening_date) {
+          setMessage(`${data.message} - 数据日期: ${data.data.screening_date}`);
+        } else {
+          setMessage(data.message);
+        }
         resetPagination();
       } else {
         setMessage('获取筛选结果失败');
@@ -103,11 +107,11 @@ const StockScreeningDashboard: React.FC = () => {
       
       if (data.success) {
         setMessage('筛选任务执行完成，正在刷新结果...');
-        // 立即刷新一次，然后等待5秒后再次刷新确保数据同步
+        // 立即刷新一次，然后等待3秒后再次刷新确保数据同步
         fetchLatestResults();
         setTimeout(() => {
           fetchLatestResults();
-        }, 5000);
+        }, 3000);
       } else {
         setMessage('手动触发筛选失败');
       }
@@ -123,7 +127,7 @@ const StockScreeningDashboard: React.FC = () => {
   const handleInitHistoricalData = async () => {
     setInitDataLoading(true);
     try {
-      const response = await fetch('/api/screening/init-historical-data?days=7', {
+      const response = await fetch('/api/screening/init-historical-data?days_back=7', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -132,9 +136,13 @@ const StockScreeningDashboard: React.FC = () => {
       const data = await response.json();
       
       if (data.success) {
-        setMessage(`历史数据初始化完成，共收集 ${data.data.total_records} 条记录`);
+        setMessage(`历史数据初始化完成: ${data.message}`);
+        // 初始化成功后刷新筛选结果
+        setTimeout(() => {
+          fetchLatestResults();
+        }, 1000);
       } else {
-        setMessage('历史数据初始化失败');
+        setMessage(data.message || '历史数据初始化失败');
       }
     } catch (error) {
       console.error('历史数据初始化失败:', error);
@@ -158,11 +166,11 @@ const StockScreeningDashboard: React.FC = () => {
       const data = await response.json();
       
       if (data.success) {
-        // 将自定义筛选结果转换为最新结果格式
+        // 使用API返回的实际数据日期
         setLatestResults({
-          screening_date: new Date().toISOString().split('T')[0],
+          screening_date: data.data.screening_date,
           screening_type: criteria.screening_type,
-          results: data.data
+          results: data.data.results
         });
         setMessage(data.message);
         resetPagination();
@@ -413,6 +421,21 @@ const StockScreeningDashboard: React.FC = () => {
           </div>
         </div>
       </div>
+
+      {/* 数据新鲜度指示器 */}
+      {latestResults?.screening_date && (
+        <div className="flex-shrink-0 mb-2">
+          <div className="bg-green-50 border border-green-200 rounded-lg p-2 flex items-center gap-2">
+            <Calendar className="w-4 h-4 text-green-600 flex-shrink-0" />
+            <span className="text-green-800 text-sm font-medium">
+              数据日期: {latestResults.screening_date}
+            </span>
+            <span className="text-green-600 text-xs">
+              (基于最新可用的交易数据)
+            </span>
+          </div>
+        </div>
+      )}
 
       {/* 消息提示 */}
       {message && (

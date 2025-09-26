@@ -420,41 +420,55 @@ class DataSyncScheduler:
             
             from datetime import datetime, timedelta
             
-            # 为了支持连续涨幅分析，需要收集最近几天的数据
-            # 收集最近5个工作日的数据（确保有足够数据进行3天连续分析）
-            total_collected = 0
-            today = datetime.now()
+            # 检查是否需要初始化历史数据
+            import sqlite3
+            with sqlite3.connect(self.db_manager.db_path) as conn:
+                cursor = conn.cursor()
+                cursor.execute(
+                    'SELECT COUNT(DISTINCT trade_date) FROM daily_stock_changes'
+                )
+                days_with_data = cursor.fetchone()[0]
             
-            for i in range(1, 8):  # 最多往前查7天，确保覆盖5个工作日
-                check_date = (today - timedelta(days=i)).strftime('%Y-%m-%d')
+            # 如果历史数据不足，执行初始化
+            if days_with_data < 5:
+                logger.info("📊 历史数据不足，开始初始化...")
+                init_result = await screening_service.initialize_historical_data(days_back=7)
                 
-                # 检查是否已存在该日期的数据
-                import sqlite3
-                with sqlite3.connect(self.db_manager.db_path) as conn:
-                    cursor = conn.cursor()
-                    cursor.execute(
-                        'SELECT COUNT(*) FROM daily_stock_changes WHERE trade_date = ?',
-                        (check_date,)
-                    )
-                    existing_count = cursor.fetchone()[0]
-                
-                # 如果该日期数据较少或不存在，则收集数据
-                if existing_count < 100:  # 假设正常情况下应该有更多股票数据
-                    try:
-                        collected_count = await screening_service.collect_daily_data(check_date)
-                        total_collected += collected_count
-                        logger.info(f"📊 收集 {check_date} 的数据: {collected_count} 只股票")
-                    except Exception as e:
-                        logger.warning(f"⚠️ 收集 {check_date} 数据失败: {e}")
-                        continue
-                else:
-                    logger.info(f"✅ {check_date} 数据已存在，跳过收集")
+                return SyncResult(
+                    success=init_result['success_days'] > 0,
+                    message=f"历史数据初始化完成: {init_result['success_days']}天成功，{init_result['failed_days']}天失败，共{init_result['total_records']}条记录",
+                    records_updated=init_result['total_records']
+                )
             
-            return SyncResult(
-                success=True,
-                message=f"历史数据收集完成，总共收集了 {total_collected} 条数据记录",
-                records_updated=total_collected
-            )
+            # 正常的每日数据收集（只收集昨天的数据）
+            yesterday = (datetime.now() - timedelta(days=1)).strftime('%Y-%m-%d')
+            
+            # 检查昨天是否已有充足数据
+            with sqlite3.connect(self.db_manager.db_path) as conn:
+                cursor = conn.cursor()
+                cursor.execute(
+                    'SELECT COUNT(*) FROM daily_stock_changes WHERE trade_date = ?',
+                    (yesterday,)
+                )
+                existing_count = cursor.fetchone()[0]
+            
+            # 如果数据不足，则收集
+            if existing_count < 1000:  # 假设正常情况下应该有至少1000条数据
+                logger.info(f"📊 {yesterday} 数据不足（现有{existing_count}条），开始收集...")
+                collected_count = await screening_service.collect_daily_data(yesterday)
+                
+                return SyncResult(
+                    success=collected_count > 0,
+                    message=f"成功收集 {yesterday} 的数据: {collected_count} 条记录",
+                    records_updated=collected_count
+                )
+            else:
+                logger.info(f"✅ {yesterday} 已有充足数据（{existing_count}条），跳过收集")
+                return SyncResult(
+                    success=True,
+                    message=f"{yesterday} 数据已存在，共{existing_count}条记录",
+                    records_updated=0
+                )
             
         except Exception as e:
             return SyncResult(
@@ -482,12 +496,12 @@ class DataSyncScheduler:
                 )
             
             # 执行筛选
-            results = await screening_service.screen_strong_rise_stocks(criteria)
+            screening_response = await screening_service.screen_strong_rise_stocks(criteria)
             
             return SyncResult(
                 success=True,
-                message=f"强势股票筛选完成，找到 {len(results)} 只符合条件的股票",
-                records_updated=len(results)
+                message=f"强势股票筛选完成，找到 {screening_response.total_count} 只符合条件的股票 (数据日期: {screening_response.screening_date})",
+                records_updated=screening_response.total_count
             )
             
         except Exception as e:

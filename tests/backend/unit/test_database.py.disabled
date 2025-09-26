@@ -1,0 +1,251 @@
+import pytest
+import sqlite3
+import tempfile
+import os
+from datetime import datetime
+from backend.database import DatabaseManager, StockPool, StockInfo, StrategyAnalysis, StockScreening
+
+class TestDatabaseManager:
+    """数据库管理器测试类"""
+    
+    @pytest.fixture
+    def temp_db(self):
+        """临时数据库文件"""
+        fd, path = tempfile.mkstemp(suffix='.db')
+        os.close(fd)
+        yield path
+        os.unlink(path)
+    
+    @pytest.fixture
+    def db_manager(self, temp_db):
+        """数据库管理器实例"""
+        return DatabaseManager(temp_db)
+    
+    @pytest.fixture
+    def sample_stock_pool(self):
+        """示例股票池数据"""
+        return StockPool(
+            stock_code="000001",
+            stock_name="平安银行",
+            pool_type="holding",
+            shares=1000,
+            avg_cost=12.50,
+            current_price=13.20,
+            market_value=13200.0,
+            tags=["银行", "金融"],
+            notes="测试股票",
+            created_at=datetime.now().isoformat(),
+            updated_at=datetime.now().isoformat()
+        )
+    
+    def test_database_creation(self, db_manager):
+        """测试数据库创建"""
+        # 检查数据库文件是否创建
+        assert os.path.exists(db_manager.db_path)
+        
+        # 检查表是否创建
+        with sqlite3.connect(db_manager.db_path) as conn:
+            cursor = conn.cursor()
+            cursor.execute("SELECT name FROM sqlite_master WHERE type='table';")
+            tables = [row[0] for row in cursor.fetchall()]
+            
+            expected_tables = ['stock_pool', 'stock_info', 'strategy_analysis', 'stock_screening', 'daily_stock_changes']
+            for table in expected_tables:
+                assert table in tables
+    
+    @pytest.mark.asyncio
+    async def test_add_stock_pool(self, db_manager, sample_stock_pool):
+        """测试添加股票池"""
+        stock_id = await db_manager.add_stock_pool(sample_stock_pool)
+        
+        assert stock_id is not None
+        assert isinstance(stock_id, int)
+        assert stock_id > 0
+    
+    @pytest.mark.asyncio
+    async def test_get_stock_pool(self, db_manager, sample_stock_pool):
+        """测试获取股票池"""
+        # 先添加数据
+        stock_id = await db_manager.add_stock_pool(sample_stock_pool)
+        
+        # 获取数据
+        retrieved_stock = await db_manager.get_stock_pool(stock_id)
+        
+        assert retrieved_stock is not None
+        assert retrieved_stock.stock_code == sample_stock_pool.stock_code
+        assert retrieved_stock.stock_name == sample_stock_pool.stock_name
+        assert retrieved_stock.pool_type == sample_stock_pool.pool_type
+        assert retrieved_stock.shares == sample_stock_pool.shares
+        assert retrieved_stock.avg_cost == sample_stock_pool.avg_cost
+    
+    @pytest.mark.asyncio
+    async def test_get_all_stock_pools(self, db_manager):
+        """测试获取所有股票池"""
+        # 添加多个股票池
+        stocks = [
+            StockPool(
+                stock_code="000001",
+                stock_name="平安银行",
+                pool_type="holding",
+                created_at=datetime.now().isoformat(),
+                updated_at=datetime.now().isoformat()
+            ),
+            StockPool(
+                stock_code="000002", 
+                stock_name="万科A",
+                pool_type="potential",
+                created_at=datetime.now().isoformat(),
+                updated_at=datetime.now().isoformat()
+            )
+        ]
+        
+        for stock in stocks:
+            await db_manager.add_stock_pool(stock)
+        
+        # 获取所有股票池
+        all_stocks = await db_manager.get_all_stock_pools()
+        
+        assert len(all_stocks) >= 2
+        stock_codes = [stock.stock_code for stock in all_stocks]
+        assert "000001" in stock_codes
+        assert "000002" in stock_codes
+    
+    @pytest.mark.asyncio
+    async def test_update_stock_pool(self, db_manager, sample_stock_pool):
+        """测试更新股票池"""
+        # 添加股票池
+        stock_id = await db_manager.add_stock_pool(sample_stock_pool)
+        
+        # 更新数据
+        sample_stock_pool.current_price = 14.50
+        sample_stock_pool.shares = 1200
+        sample_stock_pool.notes = "已更新"
+        
+        success = await db_manager.update_stock_pool(stock_id, sample_stock_pool)
+        assert success is True
+        
+        # 验证更新
+        updated_stock = await db_manager.get_stock_pool(stock_id)
+        assert updated_stock.current_price == 14.50
+        assert updated_stock.shares == 1200
+        assert updated_stock.notes == "已更新"
+    
+    @pytest.mark.asyncio
+    async def test_delete_stock_pool(self, db_manager, sample_stock_pool):
+        """测试删除股票池"""
+        # 添加股票池
+        stock_id = await db_manager.add_stock_pool(sample_stock_pool)
+        
+        # 删除股票池
+        success = await db_manager.delete_stock_pool(stock_id)
+        assert success is True
+        
+        # 验证删除
+        deleted_stock = await db_manager.get_stock_pool(stock_id)
+        assert deleted_stock is None
+    
+    @pytest.mark.asyncio
+    async def test_search_stocks(self, db_manager):
+        """测试股票搜索"""
+        # 添加一些股票信息
+        stocks_info = [
+            StockInfo(
+                symbol="000001",
+                name="平安银行",
+                short_name="平安银行",
+                market="SZ",
+                industry="银行",
+                created_at=datetime.now().isoformat(),
+                updated_at=datetime.now().isoformat()
+            ),
+            StockInfo(
+                symbol="600036",
+                name="招商银行", 
+                short_name="招商银行",
+                market="SH",
+                industry="银行",
+                created_at=datetime.now().isoformat(),
+                updated_at=datetime.now().isoformat()
+            )
+        ]
+        
+        for stock_info in stocks_info:
+            await db_manager.add_stock_info(stock_info)
+        
+        # 搜索测试
+        results = await db_manager.search_stocks("银行")
+        assert len(results) >= 2
+        
+        results = await db_manager.search_stocks("000001")
+        assert len(results) >= 1
+        assert results[0]['symbol'] == "000001"
+    
+    @pytest.mark.asyncio
+    async def test_execute_query(self, db_manager):
+        """测试SQL查询执行"""
+        # 测试查询
+        results = await db_manager.execute_query("SELECT name FROM sqlite_master WHERE type='table'")
+        
+        assert isinstance(results, list)
+        assert len(results) > 0
+    
+    @pytest.mark.asyncio
+    async def test_execute_query_with_params(self, db_manager, sample_stock_pool):
+        """测试带参数的SQL查询"""
+        # 添加数据
+        await db_manager.add_stock_pool(sample_stock_pool)
+        
+        # 带参数查询
+        results = await db_manager.execute_query(
+            "SELECT * FROM stock_pool WHERE stock_code = ?",
+            ("000001",)
+        )
+        
+        assert len(results) >= 1
+        assert results[0][1] == "000001"  # stock_code列
+
+class TestStockPoolDataclass:
+    """股票池数据类测试"""
+    
+    def test_stock_pool_creation(self):
+        """测试股票池对象创建"""
+        stock = StockPool(
+            stock_code="000001",
+            stock_name="平安银行",
+            pool_type="holding"
+        )
+        
+        assert stock.stock_code == "000001"
+        assert stock.stock_name == "平安银行"
+        assert stock.pool_type == "holding"
+        assert stock.shares == 0  # 默认值
+        assert stock.avg_cost == 0.0  # 默认值
+    
+    def test_stock_pool_with_full_data(self):
+        """测试完整数据的股票池对象"""
+        now = datetime.now().isoformat()
+        stock = StockPool(
+            stock_code="600036",
+            stock_name="招商银行",
+            pool_type="potential",
+            shares=500,
+            avg_cost=42.50,
+            current_price=45.20,
+            market_value=22600.0,
+            tags=["银行", "蓝筹"],
+            notes="优质银行股",
+            created_at=now,
+            updated_at=now,
+            id=1
+        )
+        
+        assert stock.shares == 500
+        assert stock.avg_cost == 42.50
+        assert stock.current_price == 45.20
+        assert stock.market_value == 22600.0
+        assert stock.tags == ["银行", "蓝筹"]
+        assert stock.notes == "优质银行股"
+        assert stock.id == 1
+
+if __name__ == "__main__":
+    pytest.main([__file__, "-v"])

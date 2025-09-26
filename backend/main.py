@@ -1243,11 +1243,11 @@ async def screen_stocks(request: StockScreeningRequest):
         )
         
         # 执行筛选
-        results = await screening_service.screen_strong_rise_stocks(criteria, request.screening_date)
+        screening_response = await screening_service.screen_strong_rise_stocks(criteria, request.screening_date)
         
         # 转换为响应格式
         response_data = []
-        for result in results:
+        for result in screening_response.results:
             response_data.append({
                 "stock_code": result.stock_code,
                 "stock_name": result.stock_name,
@@ -1261,8 +1261,12 @@ async def screen_stocks(request: StockScreeningRequest):
         
         return ApiResponse(
             success=True,
-            data=response_data,
-            message=f"筛选完成，找到 {len(results)} 只符合条件的股票"
+            data={
+                "results": response_data,
+                "screening_date": screening_response.screening_date,
+                "total_count": screening_response.total_count
+            },
+            message=f"筛选完成，找到 {screening_response.total_count} 只符合条件的股票 (数据日期: {screening_response.screening_date})"
         )
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
@@ -1369,12 +1373,12 @@ async def manual_trigger_screening(request: Optional[StockScreeningRequest] = No
             
             # 手动触发筛选（使用自定义条件）
             screening_service = get_stock_screening_service(bot.db_manager)
-            results = await screening_service.screen_strong_rise_stocks(criteria)
+            screening_response = await screening_service.screen_strong_rise_stocks(criteria)
             
             result_screening = SyncResult(
                 success=True,
-                message=f"自定义筛选完成，找到 {len(results)} 只符合条件的股票",
-                records_updated=len(results)
+                message=f"自定义筛选完成，找到 {screening_response.total_count} 只符合条件的股票 (数据日期: {screening_response.screening_date})",
+                records_updated=screening_response.total_count
             )
         else:
             # 使用默认条件筛选
@@ -1400,33 +1404,20 @@ async def manual_trigger_screening(request: Optional[StockScreeningRequest] = No
         raise HTTPException(status_code=500, detail=str(e))
 
 @app.post("/api/screening/init-historical-data")
-async def init_historical_data(days: int = Query(7)):
-    """初始化历史数据（用于首次使用或数据缺失时）"""
+async def init_historical_data(days_back: int = Query(7, ge=1, le=30)):
+    """初始化历史数据（批量收集多天全市场数据）"""
     try:
         screening_service = get_stock_screening_service(bot.db_manager)
         
-        from datetime import datetime, timedelta
-        total_collected = 0
+        logger.info(f"🚀 API触发历史数据初始化，回溯 {days_back} 天...")
         
-        # 收集最近N天的历史数据
-        for i in range(1, days + 1):
-            trade_date = (datetime.now() - timedelta(days=i)).strftime('%Y-%m-%d')
-            
-            try:
-                collected_count = await screening_service.collect_daily_data(trade_date)
-                total_collected += collected_count
-                logger.info(f"📊 初始化 {trade_date} 数据: {collected_count} 条记录")
-            except Exception as e:
-                logger.warning(f"⚠️ 初始化 {trade_date} 数据失败: {e}")
-                continue
+        # 使用新的初始化方法
+        result = await screening_service.initialize_historical_data(days_back=days_back)
         
         return ApiResponse(
-            success=True,
-            data={
-                "days_processed": days,
-                "total_records": total_collected
-            },
-            message=f"历史数据初始化完成，共收集 {total_collected} 条记录"
+            success=result['success_days'] > 0,
+            data=result,
+            message=f"历史数据初始化完成: {result['success_days']}天成功，{result['failed_days']}天失败，共{result['total_records']}条记录"
         )
         
     except Exception as e:
