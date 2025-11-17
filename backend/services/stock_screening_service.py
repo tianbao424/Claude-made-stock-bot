@@ -14,7 +14,7 @@ import os
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from database import DatabaseManager, StockScreening, DailyStockChange
-from services.akshare_service import akshare_service
+from services.unified_tencent_collector import get_unified_collector
 
 logger = logging.getLogger(__name__)
 
@@ -46,7 +46,11 @@ class ScreeningResult:
     avg_rise_percent: float
     total_volume: int
     avg_volume: int
-    daily_changes: List[Dict]  # 每日涨跌详情
+    close_price: float
+    turnover_rate: float = None
+    market_cap: float = 0.0  # 市值(亿元)
+    pe_ratio: float = 0.0    # 市盈率
+    daily_changes: List[Dict] = None  # 每日涨跌详情
 
 @dataclass
 class ScreeningResponse:
@@ -63,37 +67,33 @@ class StockScreeningService:
         
     async def collect_daily_data(self, trade_date: str = None) -> int:
         """
-        收集指定日期的股票涨跌数据
+        收集指定日期的股票数据（使用统一腾讯采集器）
         
         Args:
-            trade_date: 交易日期，格式YYYY-MM-DD，默认为前一个交易日
+            trade_date: 交易日期，格式YYYY-MM-DD，默认为智能判断的目标日期
             
         Returns:
             收集到的股票数量
         """
-        if trade_date is None:
-            # 默认收集前一个交易日数据
-            trade_date = (datetime.now() - timedelta(days=1)).strftime('%Y-%m-%d')
-        
-        logger.info(f"🔄 开始收集 {trade_date} 的股票涨跌数据...")
-        
-        collected_count = 0
+        logger.info(f"🔄 开始使用统一腾讯采集器收集股票数据...")
         
         try:
-            # 获取A股数据
-            a_stocks_data = await self._collect_a_stock_data(trade_date)
-            collected_count += await self._save_daily_changes(a_stocks_data, trade_date)
+            # 使用统一腾讯采集器
+            unified_collector = get_unified_collector(self.db_manager)
+            result = await unified_collector.collect_daily_stock_data(trade_date)
             
-            # 获取港股数据（如果需要）
-            # hk_stocks_data = await self._collect_hk_stock_data(trade_date)
-            # collected_count += await self._save_daily_changes(hk_stocks_data, trade_date)
-            
-            logger.info(f"✅ 完成数据收集，共收集 {collected_count} 只股票的数据")
+            if result.success:
+                logger.info(f"✅ 统一数据收集成功: {result.successful_records}/{result.total_collected} "
+                           f"({result.successful_records/result.total_collected*100:.1f}%) "
+                           f"用时 {result.duration_seconds:.1f}s")
+                return result.successful_records
+            else:
+                logger.error(f"❌ 统一数据收集失败: {result.error_message}")
+                return 0
             
         except Exception as e:
-            logger.error(f"❌ 数据收集失败: {e}")
-            
-        return collected_count
+            logger.error(f"❌ 统一数据收集异常: {e}")
+            return 0
     
     async def _collect_a_stock_data(self, trade_date: str) -> List[DailyStockChange]:
         """收集A股涨跌数据"""
@@ -125,6 +125,12 @@ class StockScreeningService:
                                 volume=int(row.get('成交量', 0)),
                                 turnover=float(row.get('成交额', 0)),
                                 market=self._get_market_from_code(str(row.get('代码', ''))),
+                                # 新增市值和指标数据
+                                total_market_cap=float(row.get('总市值', 0)) / 10000,  # 转换为万元
+                                circulating_market_cap=float(row.get('流通市值', 0)) / 10000,  # 转换为万元
+                                turnover_rate=float(row.get('换手率', 0)),
+                                pe_ratio=float(row.get('市盈率-动态', 0)),
+                                pb_ratio=float(row.get('市净率', 0)),
                                 created_at=datetime.now().isoformat()
                             )
                             stocks_data.append(stock_data)
@@ -495,8 +501,10 @@ class StockScreeningService:
                         cursor.execute('''
                             INSERT OR REPLACE INTO daily_stock_changes 
                             (stock_code, trade_date, change_percent, close_price, open_price,
-                             high_price, low_price, volume, turnover, market, created_at)
-                            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                             high_price, low_price, volume, turnover, market, 
+                             total_market_cap, circulating_market_cap, turnover_rate,
+                             pe_ratio, pb_ratio, created_at)
+                            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                         ''', (
                             stock_data.stock_code,
                             stock_data.trade_date,
@@ -508,6 +516,11 @@ class StockScreeningService:
                             stock_data.volume,
                             stock_data.turnover,
                             stock_data.market,
+                            stock_data.total_market_cap,
+                            stock_data.circulating_market_cap,
+                            stock_data.turnover_rate,
+                            stock_data.pe_ratio,
+                            stock_data.pb_ratio,
                             stock_data.created_at
                         ))
                         saved_count += 1
@@ -539,14 +552,22 @@ class StockScreeningService:
             # 使用数据库中最新的交易日期而不是当前日期
             screening_date = await self._get_latest_trading_date()
         
-        logger.info(f"🔍 开始筛选强势股票 - 分析日期: {screening_date} - 条件: 连续{criteria.min_consecutive_days}天涨幅超过{criteria.min_rise_percent}%")
+        logger.info(f"📊 [数据库筛选条件]")
+        logger.info(f"  - 筛选类型: {criteria.screening_type}")
+        logger.info(f"  - 分析日期: {screening_date}")
+        logger.info(f"  - 连续天数: ≥{criteria.min_consecutive_days}天")
+        logger.info(f"  - 最小涨幅: ≥{criteria.min_rise_percent}%")
+        logger.info(f"  - 最小成交量: ≥{criteria.min_volume}手")
+        logger.info(f"  - 市场筛选: {criteria.market_filter}")
         
         results = []
         actual_screening_date = screening_date  # 保存实际使用的筛选日期
         
         try:
             # 查询符合条件的股票
+            logger.info("🔍 [数据库查询] 开始查询符合条件的股票...")
             stocks_with_consecutive_rises = await self._find_consecutive_rise_stocks(criteria, screening_date)
+            logger.info(f"📋 [数据库查询结果] 找到 {len(stocks_with_consecutive_rises)} 只候选股票")
             
             for stock_data in stocks_with_consecutive_rises:
                 # 获取股票名称
@@ -560,11 +581,30 @@ class StockScreeningService:
                     avg_rise_percent=stock_data['avg_rise_percent'],
                     total_volume=stock_data['total_volume'],
                     avg_volume=stock_data['avg_volume'],
+                    close_price=stock_data['close_price'],
+                    turnover_rate=stock_data.get('turnover_rate'),
+                    market_cap=stock_data.get('market_cap', 0.0),  # 新增市值字段
+                    pe_ratio=stock_data.get('pe_ratio', 0.0),      # 新增市盈率字段
                     daily_changes=stock_data['daily_changes']
                 )
                 results.append(result)
+                
+                # 详细记录每只股票的信息
+                logger.debug(f"  ✅ {stock_data['stock_code']} {stock_name} - "
+                           f"连续{stock_data['consecutive_days']}天, "
+                           f"平均涨幅{stock_data['avg_rise_percent']:.2f}%, "
+                           f"平均成交量{stock_data['avg_volume']}手")
             
-            logger.info(f"✅ 筛选完成，找到 {len(results)} 只符合条件的强势股票")
+            # 显示前5只股票的详细信息
+            if results:
+                logger.info("📋 [数据库筛选结果] 前5只股票详情:")
+                for i, result in enumerate(results[:5]):
+                    logger.info(f"  {i+1}. {result.stock_code} {result.stock_name} "
+                              f"({result.market}) - 连续{result.consecutive_days}天, "
+                              f"平均涨幅{result.avg_rise_percent:.2f}%, "
+                              f"平均成交量{result.avg_volume}手")
+            
+            logger.info(f"✅ [数据库筛选完成] 找到 {len(results)} 只符合条件的强势股票")
             
             # 保存筛选结果
             await self._save_screening_results(results, criteria, actual_screening_date)
@@ -596,7 +636,7 @@ class StockScreeningService:
                 market_filter = "','".join(criteria.market_filter or ['SH', 'SZ', 'HK'])
                 
                 cursor.execute(f'''
-                    SELECT stock_code, market, trade_date, change_percent, volume, close_price
+                    SELECT stock_code, market, trade_date, change_percent, volume, close_price, turnover
                     FROM daily_stock_changes 
                     WHERE trade_date BETWEEN ? AND ?
                     AND market IN ('{market_filter}')
@@ -618,6 +658,7 @@ class StockScreeningService:
                         'change_percent': row[3],
                         'volume': row[4],
                         'close_price': row[5],
+                        'turnover': row[6],
                         'market': row[1]
                     })
                 
@@ -626,12 +667,21 @@ class StockScreeningService:
                     # 按日期排序（最新的在前）
                     daily_data.sort(key=lambda x: x['trade_date'], reverse=True)
                     
-                    # 检查连续涨幅
+                    # 过滤出只包含交易日的数据
+                    from utils.market_hours import isWeekday, isHoliday
+                    trading_day_data = []
+                    for data in daily_data:
+                        trade_date_obj = datetime.strptime(data['trade_date'], '%Y-%m-%d')
+                        # 只保留工作日且非节假日的数据
+                        if isWeekday(trade_date_obj) and not isHoliday(trade_date_obj):
+                            trading_day_data.append(data)
+                    
+                    # 检查连续涨幅（基于实际交易日）
                     consecutive_count = 0
                     total_rise = 0
                     total_volume = 0
                     
-                    for data in daily_data:
+                    for data in trading_day_data:
                         if data['change_percent'] >= criteria.min_rise_percent:
                             consecutive_count += 1
                             total_rise += data['change_percent']
@@ -642,14 +692,77 @@ class StockScreeningService:
                                 avg_rise_percent = total_rise / consecutive_count
                                 avg_volume = total_volume // consecutive_count
                                 
+                                # 获取最新交易日的收盘价
+                                latest_close_price = trading_day_data[0]['close_price']
+                                latest_turnover = trading_day_data[0]['turnover']
+                                
+                                # 获取准确的换手率数据 (优先使用daily_stock_changes表)
+                                turnover_rate = None
+                                try:
+                                    # 优先从daily_stock_changes表获取换手率 (我们刚补充的数据)
+                                    with sqlite3.connect(self.db_manager.db_path) as conn:
+                                        cursor = conn.cursor()
+                                        cursor.execute('''
+                                            SELECT turnover_rate FROM daily_stock_changes 
+                                            WHERE stock_code = ? AND trade_date = ?
+                                        ''', (stock_code, screening_date))
+                                        
+                                        result = cursor.fetchone()
+                                        if result and result[0] is not None and result[0] > 0:
+                                            turnover_rate = result[0]
+                                        else:
+                                            # 备用：从技术指标表获取
+                                            cursor.execute('''
+                                                SELECT turnover_rate FROM stock_technical_indicators 
+                                                WHERE stock_code = ? AND trade_date = ?
+                                                ORDER BY updated_at DESC LIMIT 1
+                                            ''', (stock_code, screening_date))
+                                            
+                                            result = cursor.fetchone()
+                                            if result and result[0] is not None and result[0] > 0:
+                                                turnover_rate = result[0]
+                                            else:
+                                                # 最后备用：简化估算
+                                                if latest_turnover and latest_close_price and latest_turnover > 0 and latest_close_price > 0:
+                                                    estimated_circulating_shares = latest_turnover / latest_close_price
+                                                    if estimated_circulating_shares > 0:
+                                                        turnover_rate = (trading_day_data[0]['volume'] / estimated_circulating_shares) * 100
+                                                        turnover_rate = min(turnover_rate, 50)  # 限制极端值
+                                except Exception as e:
+                                    logger.debug(f"获取换手率数据失败: {e}")
+                                    turnover_rate = None
+                                
+                                # 获取市值数据
+                                market_cap = 0
+                                pe_ratio = 0
+                                try:
+                                    with sqlite3.connect(self.db_manager.db_path) as conn:
+                                        cursor = conn.cursor()
+                                        cursor.execute('''
+                                            SELECT total_market_cap, pe_ratio
+                                            FROM daily_stock_changes 
+                                            WHERE stock_code = ? AND trade_date = ?
+                                        ''', (stock_code, screening_date))
+                                        
+                                        result = cursor.fetchone()
+                                        if result:
+                                            market_cap = result[0] / 10000 if result[0] else 0  # 转换为亿元
+                                            pe_ratio = result[1] if result[1] else 0
+                                except Exception as e:
+                                    logger.debug(f"获取市值数据失败: {e}")
+                                
                                 result_stocks.append({
                                     'stock_code': stock_code,
-                                    'market': daily_data[0]['market'],
+                                    'market': trading_day_data[0]['market'],
                                     'consecutive_days': consecutive_count,
                                     'avg_rise_percent': avg_rise_percent,
                                     'total_volume': total_volume,
                                     'avg_volume': avg_volume,
-                                    'daily_changes': daily_data[:consecutive_count]
+                                    'close_price': latest_close_price,
+                                    'turnover_rate': turnover_rate,
+                                    'market_cap': market_cap,  # 新增市值字段
+                                    'pe_ratio': pe_ratio,      # 新增市盈率字段
+                                    'daily_changes': trading_day_data[:consecutive_count]
                                 })
                                 break
                         else:

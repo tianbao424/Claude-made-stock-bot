@@ -169,6 +169,12 @@ class DailyStockChange:
     volume: int = 0
     turnover: float = 0.0
     market: str = ""
+    # 新增市值字段
+    total_market_cap: float = 0.0  # 总市值（万元）
+    circulating_market_cap: float = 0.0  # 流通市值（万元）
+    turnover_rate: float = 0.0  # 换手率（%）
+    pe_ratio: float = 0.0  # 市盈率
+    pb_ratio: float = 0.0  # 市净率
     created_at: str = ""
 
 class DatabaseManager:
@@ -302,6 +308,11 @@ class DatabaseManager:
                     volume INTEGER,
                     turnover REAL,
                     market TEXT NOT NULL,
+                    total_market_cap REAL DEFAULT 0.0,
+                    circulating_market_cap REAL DEFAULT 0.0,
+                    turnover_rate REAL DEFAULT 0.0,
+                    pe_ratio REAL DEFAULT 0.0,
+                    pb_ratio REAL DEFAULT 0.0,
                     created_at TEXT NOT NULL,
                     UNIQUE(stock_code, trade_date)
                 )

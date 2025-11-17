@@ -1,20 +1,37 @@
 import React, { useState } from 'react';
-import { BarChart3, MessageSquare, Settings, Menu, X, Database, Filter, Clock, Activity, TrendingUp } from 'lucide-react';
+import { BarChart3, MessageSquare, Settings, Menu, X, Database, Filter, Clock, Activity, TrendingUp, Brain, Target, Download, Search } from 'lucide-react';
 import StockPoolManager from './components/StockPoolManager';
 import ChatInterface from './components/ChatInterface';
 import StockInfoManager from './components/StockInfoManager';
 import StockScreeningDashboard from './components/StockScreeningDashboard';
 import ScreeningHistory from './components/ScreeningHistory';
 import ScreeningConfig from './components/ScreeningConfig';
+import QuickScreening from './components/QuickScreening';
+import StrategyCenter from './components/StrategyCenter';
 import PerformanceMonitor from './components/PerformanceMonitor';
 import DeepAnalysisDashboard from './components/DeepAnalysisDashboard';
+import AdvancedStockScreening from './components/AdvancedStockScreening';
+import DataCollectionPanel from './components/DataCollectionPanel';
+import RealtimeQueryPanel from './components/RealtimeQueryPanel';
 import './App.css';
 
-type TabType = 'chat' | 'pool' | 'stockinfo' | 'screening' | 'history' | 'settings' | 'performance' | 'deep-analysis';
+type TabType = 'chat' | 'pool' | 'stockinfo' | 'screening' | 'history' | 'settings' | 'quick-screening' | 'strategy-center' | 'performance' | 'deep-analysis' | 'advanced-screening' | 'data-collection' | 'realtime-query';
 
 const App: React.FC = () => {
   const [activeTab, setActiveTab] = useState<TabType>('chat');
   const [sidebarOpen, setSidebarOpen] = useState(false);
+
+  // 监听策略中心的导航事件
+  React.useEffect(() => {
+    const handleSwitchToScreening = () => {
+      setActiveTab('screening');
+    };
+
+    window.addEventListener('switchToScreening', handleSwitchToScreening);
+    return () => {
+      window.removeEventListener('switchToScreening', handleSwitchToScreening);
+    };
+  }, []);
 
   const tabs = [
     {
@@ -54,6 +71,24 @@ const App: React.FC = () => {
       component: <ScreeningHistory />,
     },
     {
+      id: 'quick-screening' as TabType,
+      name: '快速筛选',
+      icon: Filter,
+      component: <QuickScreening />,
+    },
+    {
+      id: 'advanced-screening' as TabType,
+      name: '高级筛选',
+      icon: Target,
+      component: <AdvancedStockScreening />,
+    },
+    {
+      id: 'strategy-center' as TabType,
+      name: '策略中心',
+      icon: Brain,
+      component: <StrategyCenter />,
+    },
+    {
       id: 'settings' as TabType,
       name: '筛选配置',
       icon: Settings,
@@ -64,6 +99,18 @@ const App: React.FC = () => {
       name: '性能监控',
       icon: Activity,
       component: <PerformanceMonitor />,
+    },
+    {
+      id: 'data-collection' as TabType,
+      name: '数据采集',
+      icon: Download,
+      component: <DataCollectionPanel />,
+    },
+    {
+      id: 'realtime-query' as TabType,
+      name: '实时行情',
+      icon: Search,
+      component: <RealtimeQueryPanel />,
     },
   ];
 

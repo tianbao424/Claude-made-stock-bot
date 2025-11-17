@@ -18,6 +18,21 @@ HOLIDAYS_2024 = [
     '2024-10-05', '2024-10-06', '2024-10-07', # 国庆节
 ]
 
+# 2025年节假日配置
+HOLIDAYS_2025 = [
+    '2025-01-01', # 元旦
+    '2025-01-28', '2025-01-29', '2025-01-30', '2025-01-31', 
+    '2025-02-03', '2025-02-04', # 春节
+    '2025-04-05', '2025-04-06', '2025-04-07', # 清明节
+    '2025-05-01', '2025-05-02', '2025-05-05', # 劳动节
+    '2025-05-31', # 端午节
+    '2025-10-01', '2025-10-02', '2025-10-03', '2025-10-06',
+    '2025-10-07', '2025-10-08', # 国庆节
+]
+
+# 合并节假日配置
+ALL_HOLIDAYS = HOLIDAYS_2024 + HOLIDAYS_2025
+
 def isWeekday(date: datetime = None) -> bool:
     """判断是否为工作日"""
     if date is None:
@@ -30,7 +45,7 @@ def isHoliday(date: datetime = None) -> bool:
     if date is None:
         date = datetime.now()
     date_str = date.strftime('%Y-%m-%d')
-    return date_str in HOLIDAYS_2024
+    return date_str in ALL_HOLIDAYS
 
 def isAnyMarketOpen(date: datetime = None) -> bool:
     """判断是否有任何市场开盘"""

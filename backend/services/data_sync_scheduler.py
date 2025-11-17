@@ -11,9 +11,8 @@ import schedule
 import threading
 import time as time_module
 
-from services.akshare_service import akshare_service
-from services.improved_akshare_service import improved_akshare_service
-from services.stock_screening_service import get_stock_screening_service, ScreeningCriteria
+from services.unified_tencent_collector import get_unified_collector
+from services.stock_screening_service_v2 import get_stock_screening_service, ScreeningCriteria
 from database import DatabaseManager
 from utils.market_hours import (
     isWeekday, isHoliday, isAnyMarketOpen, 
@@ -326,72 +325,70 @@ class DataSyncScheduler:
             return error_result
     
     async def _sync_stock_info_incremental(self) -> SyncResult:
-        """增量同步股票信息（仅同步新股票）"""
+        """增量同步股票信息（使用腾讯API验证现有股票）"""
         try:
-            current_count = self.db_manager.get_stock_info_count()
-            
-            # 导入少量A股数据进行增量更新
-            a_stock_imported = await akshare_service.import_a_stocks(limit=100)
-            hk_stock_imported = await akshare_service.import_hk_stocks(limit=50)
-            
-            total_imported = a_stock_imported + hk_stock_imported
-            new_count = self.db_manager.get_stock_info_count()
+            # 由于我们现在主要使用腾讯API，这里主要用于验证数据质量
+            unified_collector = get_unified_collector(self.db_manager)
+            status = await unified_collector.get_collection_status()
             
             return SyncResult(
                 success=True,
-                message=f"增量同步完成，新增 {new_count - current_count} 只股票",
-                records_updated=total_imported
+                message=f"股票信息验证完成，数据源：{status.get('data_source', 'Tencent API')}",
+                records_updated=status.get('latest_count', 0)
             )
             
         except Exception as e:
             return SyncResult(
                 success=False,
-                message=f"增量同步失败: {str(e)}"
+                message=f"股票信息验证失败: {str(e)}"
             )
     
     async def _sync_stock_info_full(self) -> SyncResult:
-        """全量同步股票信息"""
+        """全量数据收集（使用腾讯API）"""
         try:
-            current_count = self.db_manager.get_stock_info_count()
-            
-            # 执行完整的股票数据导入
-            a_stock_imported = await akshare_service.import_a_stocks()
-            hk_stock_imported = await akshare_service.import_hk_stocks()
-            
-            total_imported = a_stock_imported + hk_stock_imported
-            new_count = self.db_manager.get_stock_info_count()
+            # 使用统一腾讯采集器进行全量数据收集
+            unified_collector = get_unified_collector(self.db_manager)
+            result = await unified_collector.collect_daily_stock_data()
             
             self.stats['last_full_sync'] = datetime.now()
             
             return SyncResult(
-                success=True,
-                message=f"全量同步完成，导入 {total_imported} 只股票，数据库总计 {new_count} 只",
-                records_updated=total_imported
+                success=result.success,
+                message=f"全量数据收集完成：{result.successful_records}/{result.total_collected} 只股票 ({result.duration_seconds:.1f}s)",
+                records_updated=result.successful_records
             )
             
         except Exception as e:
             return SyncResult(
                 success=False,
-                message=f"全量同步失败: {str(e)}"
+                message=f"全量数据收集失败: {str(e)}"
             )
     
     async def _check_data_source_health(self) -> SyncResult:
-        """检查数据源健康状态"""
+        """检查腾讯数据源健康状态"""
         try:
-            status_summary = await improved_akshare_service.check_all_data_sources()
-            available_count = sum(1 for s in status_summary.values() if s.available)
-            total_count = len(status_summary)
+            # 检查腾讯API的健康状态
+            unified_collector = get_unified_collector(self.db_manager)
+            status = await unified_collector.get_collection_status()
+            
+            # 简单测试：尝试获取一只测试股票的数据
+            from services.tencent_data_service import TencentDataService
+            tencent_service = TencentDataService()
+            
+            async with tencent_service as service:
+                test_data = await service.get_stock_data(['000001'])  # 测试平安银行
+                health_status = "healthy" if test_data and '000001' in test_data else "unhealthy"
             
             return SyncResult(
-                success=True,
-                message=f"数据源健康检查完成，{available_count}/{total_count} 个数据源可用",
-                records_updated=available_count
+                success=health_status == "healthy",
+                message=f"腾讯数据源健康检查完成，状态：{health_status}",
+                records_updated=1 if health_status == "healthy" else 0
             )
             
         except Exception as e:
             return SyncResult(
                 success=False,
-                message=f"数据源健康检查失败: {str(e)}"
+                message=f"腾讯数据源健康检查失败: {str(e)}"
             )
     
     async def _cleanup_cache(self) -> SyncResult:
@@ -413,12 +410,10 @@ class DataSyncScheduler:
             )
     
     async def _collect_daily_stock_data(self) -> SyncResult:
-        """收集每日股票涨跌数据"""
+        """收集每日股票数据（使用统一腾讯采集器）"""
         try:
-            # 获取股票筛选服务实例
-            screening_service = get_stock_screening_service(self.db_manager)
-            
-            from datetime import datetime, timedelta
+            # 使用统一腾讯采集器进行数据收集
+            unified_collector = get_unified_collector(self.db_manager)
             
             # 检查是否需要初始化历史数据
             import sqlite3
@@ -432,6 +427,7 @@ class DataSyncScheduler:
             # 如果历史数据不足，执行初始化
             if days_with_data < 5:
                 logger.info("📊 历史数据不足，开始初始化...")
+                screening_service = get_stock_screening_service(self.db_manager)
                 init_result = await screening_service.initialize_historical_data(days_back=7)
                 
                 return SyncResult(
@@ -440,40 +436,51 @@ class DataSyncScheduler:
                     records_updated=init_result['total_records']
                 )
             
-            # 正常的每日数据收集（只收集昨天的数据）
-            yesterday = (datetime.now() - timedelta(days=1)).strftime('%Y-%m-%d')
+            # 正常的每日数据收集
+            # 智能判断目标日期并检查是否需要收集
+            from utils.market_hours import getMarketStatusSummary
+            from datetime import datetime, timedelta
             
-            # 检查昨天是否已有充足数据
+            today = datetime.now().strftime('%Y-%m-%d')
+            market_status = getMarketStatusSummary()
+            
+            # 确定目标日期
+            if market_status.get('isWeekday', False) and not market_status.get('isHoliday', False):
+                target_date = today
+            else:
+                target_date = (datetime.now() - timedelta(days=1)).strftime('%Y-%m-%d')
+            
+            # 检查目标日期是否已有充足数据
             with sqlite3.connect(self.db_manager.db_path) as conn:
                 cursor = conn.cursor()
                 cursor.execute(
                     'SELECT COUNT(*) FROM daily_stock_changes WHERE trade_date = ?',
-                    (yesterday,)
+                    (target_date,)
                 )
                 existing_count = cursor.fetchone()[0]
             
             # 如果数据不足，则收集
             if existing_count < 1000:  # 假设正常情况下应该有至少1000条数据
-                logger.info(f"📊 {yesterday} 数据不足（现有{existing_count}条），开始收集...")
-                collected_count = await screening_service.collect_daily_data(yesterday)
+                logger.info(f"📊 {target_date} 数据不足（现有{existing_count}条），开始统一数据收集...")
+                result = await unified_collector.collect_daily_stock_data(target_date)
                 
                 return SyncResult(
-                    success=collected_count > 0,
-                    message=f"成功收集 {yesterday} 的数据: {collected_count} 条记录",
-                    records_updated=collected_count
+                    success=result.success,
+                    message=f"统一数据收集完成 {target_date}: {result.successful_records}/{result.total_collected} 条记录 ({result.duration_seconds:.1f}s)",
+                    records_updated=result.successful_records
                 )
             else:
-                logger.info(f"✅ {yesterday} 已有充足数据（{existing_count}条），跳过收集")
+                logger.info(f"✅ {target_date} 已有充足数据（{existing_count}条），跳过收集")
                 return SyncResult(
                     success=True,
-                    message=f"{yesterday} 数据已存在，共{existing_count}条记录",
+                    message=f"{target_date} 数据已存在，共{existing_count}条记录",
                     records_updated=0
                 )
             
         except Exception as e:
             return SyncResult(
                 success=False,
-                message=f"历史数据收集失败: {str(e)}"
+                message=f"统一数据收集失败: {str(e)}"
             )
     
     async def _screen_strong_rise_stocks(self, custom_criteria: Optional[ScreeningCriteria] = None) -> SyncResult:

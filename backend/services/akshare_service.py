@@ -278,107 +278,221 @@ class AkShareService:
             return 0
     
     async def get_stock_realtime_data(self, symbol: str, market: str = "A") -> Optional[Dict[str, Any]]:
-        """获取股票实时数据"""
+        """获取股票实时数据 - 优先使用腾讯接口"""
         if not self._check_availability():
             return None
         
         try:
             logger.info(f"🔄 获取 {symbol} ({market}) 实时数据...")
             
-            if market.upper() == "HK":
-                # 港股实时数据
-                try:
-                    data = self.ak.stock_hk_spot_em()
-                    # 港股代码可能需要去掉前导零
-                    search_symbol = symbol.lstrip('0') if len(symbol) == 5 else symbol
-                    stock_data = data[data['代码'].astype(str).str.contains(search_symbol, na=False)]
+            # 1. 优先使用腾讯财经接口（速度快、稳定）
+            try:
+                from .tencent_data_service import tencent_service
+                tencent_data = await tencent_service.get_single_stock_data(symbol, market)
+                if tencent_data:
+                    logger.info(f"✅ 腾讯接口获取 {symbol} 数据成功，价格: {tencent_data['current_price']}")
+                    return tencent_data
+                else:
+                    logger.warning(f"⚠️ 腾讯接口获取 {symbol} 数据失败")
                     
-                    if not stock_data.empty:
-                        row = stock_data.iloc[0]
-                        realtime_data = {
-                            'symbol': symbol,
-                            'name': str(row.get('名称', '')),
-                            'current_price': float(row.get('最新价', 0)),
-                            'change_amount': float(row.get('涨跌额', 0)),
-                            'change_percent': float(row.get('涨跌幅', 0)),
-                            'volume': int(row.get('成交量', 0)),
-                            'turnover': float(row.get('成交额', 0)),
-                            'open_price': float(row.get('今开', 0)),
-                            'high_price': float(row.get('最高', 0)),
-                            'low_price': float(row.get('最低', 0)),
-                            'prev_close': float(row.get('昨收', 0)),
-                            'market_cap': float(row.get('总市值', 0)),
-                            'pe_ratio': float(row.get('市盈率', 0)) if row.get('市盈率') else 0.0,
-                            'pb_ratio': float(row.get('市净率', 0)) if row.get('市净率') else 0.0,
-                            'timestamp': datetime.now().isoformat()
-                        }
-                        logger.info(f"✅ 获取港股 {symbol} 实时数据成功")
-                        return realtime_data
-                        
-                except Exception as hk_error:
-                    logger.warning(f"⚠️ 港股API获取失败: {hk_error}")
+            except Exception as tencent_error:
+                logger.warning(f"⚠️ 腾讯接口异常: {tencent_error}")
+            
+            if market.upper() == "HK":
+                # 港股暂时跳过，实时接口不可用
+                logger.warning(f"⚠️ 港股实时接口暂不可用，跳过 {symbol}")
+                return None
                     
             else:
-                # A股实时数据
+                # 2. 回退到AkShare个股信息接口
                 try:
-                    data = self.ak.stock_zh_a_spot_em()
-                    stock_data = data[data['代码'] == symbol]
+                    logger.info(f"📊 使用AkShare个股信息接口获取 {symbol} 数据...")
+                    individual_data = self.ak.stock_individual_info_em(symbol=symbol)
                     
-                    if not stock_data.empty:
-                        row = stock_data.iloc[0]
-                        realtime_data = {
-                            'symbol': symbol,
-                            'name': str(row.get('名称', '')),
-                            'current_price': float(row.get('最新价', 0)),
-                            'change_amount': float(row.get('涨跌额', 0)),
-                            'change_percent': float(row.get('涨跌幅', 0)),
-                            'volume': int(row.get('成交量', 0)),
-                            'turnover': float(row.get('成交额', 0)),
-                            'open_price': float(row.get('今开', 0)),
-                            'high_price': float(row.get('最高', 0)),
-                            'low_price': float(row.get('最低', 0)),
-                            'prev_close': float(row.get('昨收', 0)),
-                            'market_cap': float(row.get('总市值', 0)),
-                            'pe_ratio': float(row.get('市盈率', 0)) if row.get('市盈率') else 0.0,
-                            'pb_ratio': float(row.get('市净率', 0)) if row.get('市净率') else 0.0,
-                            'timestamp': datetime.now().isoformat()
-                        }
-                        logger.info(f"✅ 获取A股 {symbol} 实时数据成功")
-                        return realtime_data
+                    if individual_data is None or individual_data.empty:
+                        logger.warning(f"⚠️ 无法获取 {symbol} 个股数据")
+                        return None
+                    
+                    # 解析个股数据
+                    data_dict = dict(zip(individual_data['item'], individual_data['value']))
+                    
+                    # 获取基础价格信息
+                    current_price = 0
+                    if '最新' in data_dict:
+                        try:
+                            current_price = float(data_dict['最新'])
+                        except (ValueError, TypeError):
+                            current_price = 0
+                    
+                    # 获取市值信息
+                    market_cap = 0
+                    if '总市值' in data_dict:
+                        try:
+                            market_cap = float(data_dict['总市值'])
+                        except (ValueError, TypeError):
+                            market_cap = 0
+                    
+                    realtime_data = {
+                        'symbol': symbol,
+                        'name': str(data_dict.get('股票简称', '')),
+                        'current_price': current_price,
+                        'change_amount': 0,  # 个股信息接口不提供涨跌额
+                        'change_percent': 0,  # 个股信息接口不提供涨跌幅
+                        'volume': 0,  # 个股信息接口不提供成交量
+                        'turnover': 0,  # 个股信息接口不提供成交额
+                        'open_price': current_price,  # 使用当前价
+                        'high_price': current_price,  # 使用当前价
+                        'low_price': current_price,   # 使用当前价
+                        'prev_close': current_price,  # 使用当前价
+                        'market_cap': market_cap,
+                        'pe_ratio': 0,  # 个股信息接口不提供PE
+                        'pb_ratio': 0,  # 个股信息接口不提供PB
+                        'timestamp': datetime.now().isoformat()
+                    }
+                    logger.info(f"✅ AkShare获取A股 {symbol} 基础数据成功，价格: {current_price}")
+                    return realtime_data
                         
                 except Exception as a_error:
-                    logger.warning(f"⚠️ A股API获取失败: {a_error}")
+                    logger.warning(f"⚠️ AkShare个股信息接口获取失败: {a_error}")
+                    
+                    # 3. 最后回退到历史数据获取最新价格
+                    try:
+                        logger.info(f"🔄 尝试从历史数据获取 {symbol} 最新价格...")
+                        from datetime import timedelta
+                        end_date = datetime.now().strftime('%Y%m%d')
+                        start_date = (datetime.now() - timedelta(days=5)).strftime('%Y%m%d')
+                        
+                        hist_data = self.ak.stock_zh_a_hist(
+                            symbol=symbol, 
+                            period="daily", 
+                            start_date=start_date, 
+                            end_date=end_date, 
+                            adjust=""
+                        )
+                        
+                        if not hist_data.empty:
+                            latest_row = hist_data.iloc[-1]  # 获取最新一天的数据
+                            realtime_data = {
+                                'symbol': symbol,
+                                'name': f"股票{symbol}",  # 默认名称
+                                'current_price': float(latest_row.get('收盘', 0)),
+                                'change_amount': float(latest_row.get('涨跌额', 0)),
+                                'change_percent': float(latest_row.get('涨跌幅', 0)),
+                                'volume': int(latest_row.get('成交量', 0)),
+                                'turnover': float(latest_row.get('成交额', 0)),
+                                'open_price': float(latest_row.get('开盘', 0)),
+                                'high_price': float(latest_row.get('最高', 0)),
+                                'low_price': float(latest_row.get('最低', 0)),
+                                'prev_close': float(latest_row.get('收盘', 0)),
+                                'market_cap': 0,  # 历史数据不提供市值
+                                'pe_ratio': 0,
+                                'pb_ratio': 0,
+                                'timestamp': datetime.now().isoformat()
+                            }
+                            logger.info(f"✅ 从历史数据获取 {symbol} 最新价格成功: {realtime_data['current_price']}")
+                            return realtime_data
+                            
+                    except Exception as hist_error:
+                        logger.warning(f"⚠️ 历史数据获取也失败: {hist_error}")
             
-            # 如果API获取失败，生成模拟数据用于测试
-            logger.info(f"📊 生成 {symbol} 模拟实时数据...")
-            import random
-            base_price = 100 + random.uniform(-50, 200)
-            change = random.uniform(-10, 10)
-            
-            mock_data = {
-                'symbol': symbol,
-                'name': f'模拟股票 {symbol}',
-                'current_price': round(base_price, 2),
-                'change_amount': round(change, 2),
-                'change_percent': round((change / base_price) * 100, 2),
-                'volume': random.randint(10000, 1000000),
-                'turnover': round(base_price * random.randint(10000, 1000000), 2),
-                'open_price': round(base_price + random.uniform(-5, 5), 2),
-                'high_price': round(base_price + random.uniform(0, 10), 2),
-                'low_price': round(base_price - random.uniform(0, 10), 2),
-                'prev_close': round(base_price - change, 2),
-                'market_cap': round(base_price * 1000000000, 2),
-                'pe_ratio': round(random.uniform(5, 50), 2),
-                'pb_ratio': round(random.uniform(0.5, 5), 2),
-                'timestamp': datetime.now().isoformat()
-            }
-            logger.info(f"✅ 生成模拟数据完成")
-            return mock_data
+            # 所有方法都失败
+            logger.warning(f"⚠️ {symbol} 所有API接口都无法获取数据，跳过该股票")
+            return None
             
         except Exception as e:
             logger.error(f"❌ 获取 {symbol} 实时数据失败: {e}")
         
         return None
+    
+    async def get_all_a_stock_realtime_data(self) -> List[Dict[str, Any]]:
+        """获取全部A股实时数据 - 使用东方财富接口"""
+        if not self._check_availability():
+            return []
+        
+        try:
+            logger.info("🚀 使用东方财富接口获取全部A股实时数据...")
+            
+            # 使用AkShare的东方财富实时数据接口
+            df = self.ak.stock_zh_a_spot_em()
+            
+            if df is None or df.empty:
+                logger.warning("⚠️ 东方财富接口未返回数据")
+                return []
+            
+            logger.info(f"📊 东方财富接口获取到 {len(df)} 只股票数据")
+            
+            # 转换数据格式
+            result_data = []
+            for _, row in df.iterrows():
+                try:
+                    data = {
+                        'symbol': str(row.get('代码', '')),
+                        'name': str(row.get('名称', '')),
+                        'current_price': float(row.get('最新价', 0)),
+                        'change_amount': float(row.get('涨跌额', 0)),
+                        'change_percent': float(row.get('涨跌幅', 0)),
+                        'volume': int(row.get('成交量', 0)),
+                        'turnover': float(row.get('成交额', 0)),
+                        'open_price': float(row.get('今开', 0)),
+                        'high_price': float(row.get('最高', 0)),
+                        'low_price': float(row.get('最低', 0)),
+                        'prev_close': float(row.get('昨收', 0)),
+                        'market_cap': float(row.get('总市值', 0)),
+                        'pe_ratio': float(row.get('市盈率-动态', 0)),
+                        'pb_ratio': float(row.get('市净率', 0)),
+                        'timestamp': datetime.now().isoformat()
+                    }
+                    result_data.append(data)
+                except Exception as e:
+                    logger.debug(f"解析股票数据失败: {e}")
+                    continue
+            
+            logger.info(f"✅ 成功解析 {len(result_data)} 只股票的实时数据")
+            return result_data
+            
+        except Exception as e:
+            logger.error(f"❌ 获取全部A股实时数据失败: {e}")
+            return []
+    
+    async def get_stock_realtime_data_batch(self, symbols: List[str], market: str = "A") -> List[Dict[str, Any]]:
+        """批量获取股票实时数据 - 修复列表参数传递问题"""
+        if not symbols:
+            return []
+            
+        if not self._check_availability():
+            return []
+        
+        try:
+            logger.info(f"🔄 批量获取 {len(symbols)} 只股票 ({market}) 实时数据...")
+            
+            # 1. 优先使用腾讯财经接口进行批量获取
+            try:
+                from .tencent_data_service import tencent_service
+                tencent_data = await tencent_service.get_realtime_data(symbols, market)
+                if tencent_data and len(tencent_data) > 0:
+                    logger.info(f"✅ 腾讯接口批量获取成功: {len(tencent_data)} 只股票")
+                    return tencent_data
+                else:
+                    logger.warning(f"⚠️ 腾讯接口批量获取失败，尝试逐个获取")
+                    
+            except Exception as tencent_error:
+                logger.warning(f"⚠️ 腾讯接口批量获取异常: {tencent_error}")
+            
+            # 2. 回退到逐个获取（避免API限制）
+            results = []
+            for symbol in symbols:
+                data = await self.get_stock_realtime_data(symbol, market)
+                if data:
+                    results.append(data)
+                # 避免请求过频
+                await asyncio.sleep(0.1)
+            
+            logger.info(f"✅ 逐个获取完成: {len(results)}/{len(symbols)} 只股票")
+            return results
+            
+        except Exception as e:
+            logger.error(f"❌ 批量获取实时数据失败: {e}")
+            return []
     
     async def get_stock_history_data(self, symbol: str, market: str = "A", 
                                    start_date: Optional[str] = None, 
@@ -463,10 +577,10 @@ class AkShareService:
                     except Exception as e5:
                         logger.warning(f"方法5失败: {e5}")
             
-            # 如果所有真实API都失败，生成模拟数据作为降级方案
+            # 如果所有真实API都失败，直接返回None
             if data is None or data.empty:
-                logger.warning(f"所有真实API都失败，生成模拟数据作为降级方案")
-                return self._generate_mock_data(symbol)
+                logger.warning(f"⚠️ {symbol} 所有API都失败，无法获取真实历史数据")
+                return None
             
             # 处理获取到的真实数据
             if data is not None and not data.empty:
@@ -492,9 +606,9 @@ class AkShareService:
             import traceback
             logger.debug(f"详细错误信息: {traceback.format_exc()}")
             
-            # 发生异常时也返回模拟数据
-            logger.info(f"发生异常，返回模拟数据")
-            return self._generate_mock_data(symbol)
+            # 发生异常时返回None，不生成模拟数据
+            logger.warning(f"⚠️ {symbol} 历史数据获取失败，跳过该股票")
+            return None
     
     def _standardize_column_names(self, data: pd.DataFrame) -> pd.DataFrame:
         """标准化列名"""

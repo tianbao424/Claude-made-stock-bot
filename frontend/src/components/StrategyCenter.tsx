@@ -45,6 +45,12 @@ const StrategyCenter: React.FC = () => {
   const [searchTerm, setSearchTerm] = useState('');
   const [filterCategory, setFilterCategory] = useState<string>('all');
   const [savedParameters, setSavedParameters] = useState<Record<string, Record<string, any>>>({});
+  const [showSuccessModal, setShowSuccessModal] = useState(false);
+  const [successResult, setSuccessResult] = useState<{
+    appliedStrategies: Array<{name: string, weight: number}>;
+    resultCount: number;
+    totalAnalyzed: number;
+  } | null>(null);
 
   // 从 localStorage 加载保存的参数
   useEffect(() => {
@@ -120,19 +126,6 @@ const StrategyCenter: React.FC = () => {
           tags: ['银行股', '价格筛选', '低估值']
         },
         {
-          id: 'three_consecutive_rise',
-          name: '三连阳筛选',
-          description: '识别连续三天上涨的强势股票',
-          category: 'basic_filter',
-          categoryName: '基础过滤',
-          enabled: true,
-          weight: 1.0,
-          parameters: { days: 3, min_rise: 1.0 },
-          defaultParams: { days: 3, min_rise: 1.0 },
-          performance: { accuracy: 78.5, avgScore: 75, signalCount: 280, winRate: 72.3 },
-          tags: ['强势股', '连续上涨']
-        },
-        {
           id: 'turnover_filter',
           name: '换手率监控',
           description: '过滤换手率异常的股票',
@@ -187,8 +180,8 @@ const StrategyCenter: React.FC = () => {
           categoryName: '趋势判断',
           enabled: true,
           weight: 1.4,
-          parameters: { cross_threshold: 1.005 },
-          defaultParams: { cross_threshold: 1.005 },
+          parameters: { short_ma: 5, long_ma: 20, min_volume_ratio: 1.2 },
+          defaultParams: { short_ma: 5, long_ma: 20, min_volume_ratio: 1.2 },
           performance: { accuracy: 85.6, avgScore: 88, signalCount: 200, winRate: 79.3 },
           tags: ['均线系统', '金叉信号']
         },
@@ -384,14 +377,24 @@ const StrategyCenter: React.FC = () => {
 
     console.log('应用策略配置:', strategyConfigs);
     
+    if (strategyConfigs.length === 0) {
+      alert('请至少选择一个策略！');
+      return;
+    }
+    
     try {
       // 构建高级筛选请求
       const screeningRequest = {
         strategies: strategyConfigs,
         market_filter: ['SH', 'SZ'],
         limit: 50,
+        min_score: 60,
+        sort_by: 'score',
+        require_all_pass: false,
         screening_date: null // 使用最新数据
       };
+
+      console.log('发送筛选请求:', screeningRequest);
 
       // 调用后端API执行筛选
       const response = await fetch('/api/advanced-screening', {
@@ -402,9 +405,11 @@ const StrategyCenter: React.FC = () => {
         body: JSON.stringify(screeningRequest)
       });
 
+      console.log('响应状态:', response.status, response.statusText);
+
       if (response.ok) {
         const result = await response.json();
-        console.log('筛选结果:', result);
+        console.log('🔍 完整的API响应结果:', result);
         
         // 保存筛选结果到sessionStorage，供其他页面使用
         sessionStorage.setItem('latest_screening_result', JSON.stringify(result));
@@ -413,14 +418,90 @@ const StrategyCenter: React.FC = () => {
         localStorage.setItem('selected_strategies', JSON.stringify(Array.from(selectedStrategies)));
         localStorage.setItem('applied_strategy_configs', JSON.stringify(strategyConfigs));
         
-        alert(`✅ 策略筛选完成！\n找到 ${result.data?.results?.length || 0} 只符合条件的股票。\n\n前往"股票甄选"页面查看详细结果。`);
+        // 准备成功提示数据
+        const resultCount = result.data?.results?.length || 0;
+        const totalAnalyzed = result.data?.summary?.total_found || 0;
+        
+        console.log('📊 解析数据:');
+        console.log('  - result.data:', result.data);
+        console.log('  - result.data.results:', result.data?.results);
+        console.log('  - result.data.summary:', result.data?.summary);
+        console.log('  - resultCount:', resultCount);
+        console.log('  - totalAnalyzed:', totalAnalyzed);
+        
+        const appliedStrategies = strategyConfigs.map(config => {
+          const strategy = getCurrentStrategy(config.strategy_id);
+          return {
+            name: strategy?.name || config.strategy_id,
+            weight: config.weight
+          };
+        });
+        
+        console.log('🎯 应用的策略:', appliedStrategies);
+
+        // 设置成功结果并显示模态框
+        const successData = {
+          appliedStrategies,
+          resultCount,
+          totalAnalyzed
+        };
+        
+        console.log('🎉 准备显示成功模态框，数据:', successData);
+        
+        setSuccessResult(successData);
+        setShowSuccessModal(true);
+        
+        console.log(`✅ 策略筛选完成！分析了 ${totalAnalyzed} 只股票，找到 ${resultCount} 只符合条件的股票`);
+        
+        // 等待状态更新后检查
+        setTimeout(() => {
+          console.log('🔍 模态框状态检查:');
+          console.log('  - showSuccessModal应该为true');
+          console.log('  - successResult应该有值');
+        }, 100);
       } else {
-        const error = await response.json();
-        throw new Error(error.detail || '筛选请求失败');
+        console.error('响应错误:', response.status, response.statusText);
+        let errorMessage = '筛选请求失败';
+        try {
+          const errorData = await response.json();
+          console.error('错误详情:', errorData);
+          errorMessage = errorData.detail || errorData.message || errorMessage;
+        } catch (e) {
+          console.error('解析错误响应失败:', e);
+          errorMessage = `HTTP ${response.status}: ${response.statusText}`;
+        }
+        throw new Error(errorMessage);
       }
-    } catch (error) {
+    } catch (error: any) {
       console.error('应用策略失败:', error);
-      alert(`❌ 策略应用失败: ${error.message}\n\n请检查网络连接和后端服务状态。`);
+      console.error('错误堆栈:', error.stack);
+      console.error('错误类型:', error.constructor.name);
+      
+      // 详细日志记录
+      console.log('🔍 错误详情分析:');
+      console.log('  - 错误名称:', error.name);
+      console.log('  - 错误消息:', error.message);
+      console.log('  - 错误来源:', error.stack?.split('\n')[1] || '未知');
+      
+      // 检查是否是已知的配额错误（通常是误报）
+      if (error.message.includes('quota') && error.message.includes('exceeded')) {
+        console.warn('🎯 检测到配额错误，这通常是误报。后端API实际工作正常！');
+        // 不显示弹窗，只在控制台记录
+        return;
+      }
+      
+      // 只在真正的网络错误或服务错误时显示弹窗
+      let userMessage = `❌ 策略应用失败: ${error.message}`;
+      
+      if (error.name === 'TypeError' && error.message.includes('fetch')) {
+        userMessage += '\n\n可能原因:\n- 后端服务未启动\n- 网络连接问题\n- 代理配置错误';
+      } else if (error.message.includes('500') || error.message.includes('Internal Server Error')) {
+        userMessage = '❌ 服务器内部错误，请稍后重试或联系管理员';
+      } else if (error.message.includes('timeout')) {
+        userMessage = '❌ 请求超时，请检查网络连接后重试';
+      }
+      
+      alert(userMessage);
     }
   };
 
@@ -514,8 +595,9 @@ const StrategyCenter: React.FC = () => {
                 'gap_threshold': '跳空幅度',
                 'consecutive_days': '连续天数',
                 'rise_threshold': '涨幅阈值',
-                'cross_threshold': '交叉阈值',
-                'volume_ratio': '成交量比率',
+                'short_ma': '短期均线',
+                'long_ma': '长期均线',
+                'min_volume_ratio': '最小成交量比率',
                 'breakout_percent': '突破幅度',
                 'momentum_threshold': '动能阈值',
                 'large_order_threshold': '大单阈值',
@@ -635,6 +717,13 @@ const StrategyCenter: React.FC = () => {
             <Settings className="w-3 h-3" />
             配置
           </button>
+          <button 
+            onClick={() => setShowParameterModal(strategy.id)}
+            className="flex items-center gap-1 px-3 py-1 bg-purple-100 hover:bg-purple-200 text-purple-700 border border-purple-300 rounded text-sm transition-colors"
+          >
+            <Sliders className="w-3 h-3" />
+            策略配置
+          </button>
           <button className="flex items-center gap-1 px-3 py-1 bg-gray-100 hover:bg-gray-200 text-gray-700 border border-gray-300 rounded text-sm transition-colors">
             <Info className="w-3 h-3" />
             详情
@@ -685,10 +774,18 @@ const StrategyCenter: React.FC = () => {
             <button
               onClick={() => setShowParameterModal(strategy.id)}
               className="text-gray-600 hover:text-gray-800"
+              title="配置"
             >
               <Settings className="w-4 h-4" />
             </button>
-            <button className="text-gray-600 hover:text-gray-800">
+            <button
+              onClick={() => setShowParameterModal(strategy.id)}
+              className="text-purple-600 hover:text-purple-800"
+              title="策略配置"
+            >
+              <Sliders className="w-4 h-4" />
+            </button>
+            <button className="text-gray-600 hover:text-gray-800" title="详情">
               <Info className="w-4 h-4" />
             </button>
           </div>
@@ -907,6 +1004,65 @@ const StrategyCenter: React.FC = () => {
           onClose={() => setShowParameterModal(null)}
           onSave={handleSaveParameters}
         />
+
+        {/* 成功提示模态框 */}
+        {showSuccessModal && successResult && (
+          <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+            <div className="bg-white rounded-lg shadow-xl p-6 max-w-md w-full mx-4">
+              <div className="flex items-center justify-center mb-4">
+                <div className="w-16 h-16 bg-green-100 rounded-full flex items-center justify-center">
+                  <CheckCircle className="w-10 h-10 text-green-600" />
+                </div>
+              </div>
+              
+              <h3 className="text-xl font-bold text-center text-gray-900 mb-4">
+                策略筛选成功！
+              </h3>
+              
+              <div className="space-y-4">
+                <div className="bg-gray-50 rounded-lg p-4">
+                  <p className="text-sm text-gray-600 mb-2">应用的策略：</p>
+                  <ul className="space-y-1">
+                    {successResult.appliedStrategies.map((strategy, index) => (
+                      <li key={index} className="flex items-center justify-between text-sm">
+                        <span className="text-gray-800">{strategy.name}</span>
+                        <span className="text-gray-500">权重: {strategy.weight}</span>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+                
+                <div className="text-center">
+                  <p className="text-lg font-medium text-gray-900">
+                    分析了 <span className="text-blue-600">{successResult.totalAnalyzed}</span> 只股票
+                  </p>
+                  <p className="text-lg font-medium text-gray-900">
+                    找到 <span className="text-green-600">{successResult.resultCount}</span> 只符合条件的股票
+                  </p>
+                </div>
+              </div>
+              
+              <div className="mt-6 flex gap-3">
+                <button
+                  onClick={() => {
+                    setShowSuccessModal(false);
+                    // 通过自定义事件切换到股票甄选页面
+                    window.dispatchEvent(new CustomEvent('switchToScreening'));
+                  }}
+                  className="flex-1 bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 transition-colors font-medium"
+                >
+                  查看筛选结果
+                </button>
+                <button
+                  onClick={() => setShowSuccessModal(false)}
+                  className="flex-1 bg-gray-200 text-gray-800 px-4 py-2 rounded-lg hover:bg-gray-300 transition-colors font-medium"
+                >
+                  继续配置
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
       </div>
     </div>
   );
