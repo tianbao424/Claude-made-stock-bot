@@ -1,0 +1,240 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <title>策略测试页面</title>
+    <style>
+        body { font-family: Arial, sans-serif; padding: 20px; max-width: 1200px; margin: 0 auto; }
+        button { margin: 10px; padding: 10px 20px; font-size: 16px; cursor: pointer; }
+        #result { margin-top: 20px; padding: 20px; background: #f5f5f5; border-radius: 5px; }
+        .success { color: green; }
+        .error { color: red; }
+        .info { color: blue; }
+        pre { white-space: pre-wrap; background: #fff; padding: 10px; border-radius: 5px; }
+        table { width: 100%; border-collapse: collapse; margin-top: 10px; }
+        th, td { border: 1px solid #ddd; padding: 8px; text-align: left; }
+        th { background-color: #f0f0f0; }
+    </style>
+</head>
+<body>
+    <h1>📊 策略筛选测试页面</h1>
+    
+    <div>
+        <button onclick="testBasicStrategy()">测试基础策略</button>
+        <button onclick="testMultipleStrategies()">测试组合策略</button>
+        <button onclick="checkQuotaStatus()">检查配额状态</button>
+        <button onclick="clearCache()">清除缓存</button>
+    </div>
+    
+    <div id="result"></div>
+    
+    <script>
+        const API_BASE = '/api';
+        
+        async function testBasicStrategy() {
+            await testStrategy({
+                strategies: [
+                    {
+                        strategy_id: "low_price_filter",
+                        enabled: true,
+                        parameters: {"max_price": 10},
+                        weight: 1.0
+                    }
+                ],
+                market_filter: ["SH", "SZ"],
+                limit: 10,
+                min_score: 60,
+                sort_by: "score",
+                require_all_pass: false
+            }, '基础策略（低价股）');
+        }
+        
+        async function testMultipleStrategies() {
+            await testStrategy({
+                strategies: [
+                    {
+                        strategy_id: "low_price_filter",
+                        enabled: true,
+                        parameters: {"max_price": 10},
+                        weight: 1.0
+                    },
+                    {
+                        strategy_id: "turnover_rate_filter",
+                        enabled: true,
+                        parameters: {"min_turnover_rate": 5},
+                        weight: 0.8
+                    },
+                    {
+                        strategy_id: "volume_ratio_filter",
+                        enabled: true,
+                        parameters: {"min_volume_ratio": 1.5},
+                        weight: 0.6
+                    }
+                ],
+                market_filter: ["SH", "SZ"],
+                limit: 20,
+                min_score: 70,
+                sort_by: "score",
+                require_all_pass: false
+            }, '组合策略（低价+高换手+量比）');
+        }
+        
+        async function testStrategy(requestData, testName) {
+            const resultDiv = document.getElementById('result');
+            resultDiv.innerHTML = `<p class="info">🔄 正在测试: ${testName}...</p>`;
+            
+            try {
+                console.log(`📤 发送请求: ${testName}`, requestData);
+                
+                const response = await fetch(`${API_BASE}/advanced-screening`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify(requestData)
+                });
+                
+                console.log('📨 响应状态:', response.status, response.statusText);
+                const responseData = await response.json();
+                console.log('📨 响应数据:', responseData);
+                
+                if (response.ok && responseData.success) {
+                    const results = responseData.data?.results || [];
+                    
+                    let html = `
+                        <h3 class="success">✅ ${testName} - 测试成功！</h3>
+                        <p>找到 <strong>${results.length}</strong> 只符合条件的股票</p>
+                    `;
+                    
+                    if (results.length > 0) {
+                        html += `
+                            <table>
+                                <thead>
+                                    <tr>
+                                        <th>序号</th>
+                                        <th>股票代码</th>
+                                        <th>股票名称</th>
+                                        <th>市场</th>
+                                        <th>综合得分</th>
+                                        <th>通过策略</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                        `;
+                        
+                        results.slice(0, 10).forEach((stock, index) => {
+                            const score = stock.final_score || stock.score || 0;
+                            const passedStrategies = stock.strategy_scores
+                                ?.filter(s => s.result.pass_filter)
+                                .map(s => s.strategy)
+                                .join(', ') || '-';
+                            
+                            html += `
+                                <tr>
+                                    <td>${index + 1}</td>
+                                    <td>${stock.stock_code}</td>
+                                    <td>${stock.stock_name}</td>
+                                    <td>${stock.market}</td>
+                                    <td>${score.toFixed(2)}</td>
+                                    <td>${passedStrategies}</td>
+                                </tr>
+                            `;
+                        });
+                        
+                        html += '</tbody></table>';
+                        
+                        if (results.length > 10) {
+                            html += `<p><em>仅显示前10条结果，共有 ${results.length} 条</em></p>`;
+                        }
+                    }
+                    
+                    resultDiv.innerHTML = html;
+                } else {
+                    resultDiv.innerHTML = `
+                        <h3 class="error">❌ ${testName} - 测试失败</h3>
+                        <p>状态码: ${response.status}</p>
+                        <p>错误信息: ${responseData.message || '未知错误'}</p>
+                        <details>
+                            <summary>详细信息</summary>
+                            <pre>${JSON.stringify(responseData, null, 2)}</pre>
+                        </details>
+                    `;
+                }
+            } catch (error) {
+                console.error('🚨 捕获到错误:', error);
+                
+                let errorHtml = `
+                    <h3 class="error">🚨 ${testName} - 发生错误</h3>
+                    <p><strong>错误类型:</strong> ${error.name}</p>
+                    <p><strong>错误消息:</strong> ${error.message}</p>
+                `;
+                
+                // 特别检查配额错误
+                if (error.message.includes('quota') || error.message.includes('exceeded')) {
+                    errorHtml += `
+                        <div class="error" style="border: 2px solid red; padding: 10px; margin: 10px 0;">
+                            <h4>⚠️ 检测到配额错误！</h4>
+                            <p>原始错误消息: "${error.message}"</p>
+                            <p>这个错误不应该直接显示给用户。</p>
+                        </div>
+                    `;
+                }
+                
+                errorHtml += `
+                    <details>
+                        <summary>错误堆栈</summary>
+                        <pre>${error.stack}</pre>
+                    </details>
+                `;
+                
+                resultDiv.innerHTML = errorHtml;
+            }
+        }
+        
+        async function checkQuotaStatus() {
+            const resultDiv = document.getElementById('result');
+            resultDiv.innerHTML = '<p class="info">🔄 正在检查配额状态...</p>';
+            
+            try {
+                const response = await fetch(`${API_BASE}/quota-status`);
+                const data = await response.json();
+                
+                if (response.ok && data.success) {
+                    let html = '<h3 class="success">📊 配额使用状态</h3><table><thead><tr><th>服务</th><th>分钟配额</th><th>小时配额</th><th>日配额</th><th>状态</th></tr></thead><tbody>';
+                    
+                    const quotas = data.data?.quotas || {};
+                    for (const [service, status] of Object.entries(quotas)) {
+                        html += `
+                            <tr>
+                                <td>${service}</td>
+                                <td>${status.minute_usage}</td>
+                                <td>${status.hour_usage}</td>
+                                <td>${status.day_usage}</td>
+                                <td>${status.available ? '✅ 可用' : '❌ 已满'}</td>
+                            </tr>
+                        `;
+                    }
+                    
+                    html += '</tbody></table>';
+                    resultDiv.innerHTML = html;
+                } else {
+                    resultDiv.innerHTML = '<p class="error">获取配额状态失败</p>';
+                }
+            } catch (error) {
+                resultDiv.innerHTML = `<p class="error">检查配额状态出错: ${error.message}</p>`;
+            }
+        }
+        
+        function clearCache() {
+            localStorage.clear();
+            sessionStorage.clear();
+            document.getElementById('result').innerHTML = '<p class="success">✅ 缓存已清除</p>';
+        }
+        
+        // 页面加载时自动检查配额状态
+        window.onload = () => {
+            checkQuotaStatus();
+        };
+    </script>
+</body>
+</html>
