@@ -15,6 +15,53 @@ AI股票聊天助手使用SQLite作为主要数据存储解决方案，设计了
 
 ```mermaid
 erDiagram
+    stock_info ||--o{ daily_stock_changes : "1:N"
+    stock_info ||--o{ stock_technical_indicators : "1:N"
+    stock_pool ||--o{ stock_pool_items : "1:N"
+    stock_pool_items }o--|| stock_info : "N:1"
+    
+    stock_info {
+        INTEGER id PK
+        TEXT symbol UK
+        TEXT name
+        TEXT market
+        TEXT industry
+        REAL market_cap
+        INTEGER is_active
+        TEXT created_at
+        TEXT updated_at
+    }
+    
+    daily_stock_changes {
+        INTEGER id PK
+        TEXT stock_code FK
+        DATE trade_date
+        REAL change_percent
+        REAL close_price
+        REAL volume
+        REAL total_market_cap
+        REAL turnover_rate
+        TEXT created_at
+    }
+    
+    stock_technical_indicators {
+        INTEGER id PK
+        TEXT stock_code FK
+        DATE trade_date
+        REAL macd
+        REAL rsi
+        REAL bollinger_upper
+        REAL bollinger_lower
+    }
+    
+    stock_pool {
+        INTEGER id PK
+        TEXT name UK
+        TEXT description
+        TEXT created_at
+        TEXT updated_at
+    }
+
     STOCK_POOL {
         int id PK
         string stock_code
@@ -131,24 +178,26 @@ erDiagram
 
 ## 📋 表结构详解
 
-### 1. 股票池表 (stock_pool)
-存储用户的股票投资组合信息。
+### 1. 股票信息表 (stock_info)
+存储股票的基础信息和元数据。
 
 ```sql
-CREATE TABLE stock_pool (
+CREATE TABLE stock_info (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
-    stock_code TEXT NOT NULL,                    -- 股票代码
-    stock_name TEXT NOT NULL,                    -- 股票名称
-    pool_type TEXT NOT NULL CHECK(pool_type IN ('holding', 'potential')), -- 池类型
-    shares INTEGER DEFAULT 0,                    -- 持股数量
-    avg_cost REAL DEFAULT 0.0,                  -- 平均成本
-    current_price REAL DEFAULT 0.0,             -- 当前价格
-    market_value REAL DEFAULT 0.0,              -- 市值
-    tags TEXT DEFAULT '',                       -- 标签(JSON格式)
-    notes TEXT DEFAULT '',                      -- 备注信息
-    created_at TEXT NOT NULL,                   -- 创建时间
-    updated_at TEXT NOT NULL,                   -- 更新时间
-    UNIQUE(stock_code, pool_type)               -- 复合唯一索引
+    symbol TEXT NOT NULL UNIQUE,        -- 股票代码
+    name TEXT NOT NULL,                 -- 股票名称
+    short_name TEXT DEFAULT '',         -- 简称
+    market TEXT DEFAULT '',             -- 市场(SH/SZ/HK)
+    industry TEXT DEFAULT '',           -- 行业
+    sector TEXT DEFAULT '',             -- 板块
+    market_cap REAL DEFAULT 0.0,       -- 市值(亿元)
+    pe_ratio REAL DEFAULT 0.0,         -- 市盈率
+    pb_ratio REAL DEFAULT 0.0,         -- 市净率
+    dividend_yield REAL DEFAULT 0.0,   -- 股息率
+    listing_date TEXT DEFAULT '',      -- 上市日期
+    is_active INTEGER DEFAULT 1,       -- 是否活跃
+    created_at TEXT NOT NULL,          -- 创建时间
+    updated_at TEXT NOT NULL           -- 更新时间
 );
 
 -- 索引
@@ -249,24 +298,29 @@ CREATE INDEX idx_stock_info_industry ON stock_info(industry);
 CREATE INDEX idx_stock_info_name ON stock_info(name);
 ```
 
-### 5. 每日股价变动表 (daily_stock_changes)
+### 2. 日交易数据表 (daily_stock_changes)
 存储股票每日的价格和成交量数据。
 
 ```sql
 CREATE TABLE daily_stock_changes (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
-    stock_code TEXT NOT NULL,                   -- 股票代码
-    trade_date TEXT NOT NULL,                   -- 交易日期
-    change_percent REAL NOT NULL,               -- 涨跌幅(%)
-    close_price REAL,                           -- 收盘价
-    open_price REAL,                            -- 开盘价
-    high_price REAL,                            -- 最高价
-    low_price REAL,                             -- 最低价
-    volume INTEGER,                             -- 成交量
-    turnover REAL,                              -- 成交额
-    market TEXT,                                -- 市场
-    created_at TEXT NOT NULL,                   -- 创建时间
-    UNIQUE(stock_code, trade_date)              -- 复合唯一索引
+    stock_code TEXT NOT NULL,           -- 股票代码
+    trade_date DATE NOT NULL,           -- 交易日期
+    change_percent REAL NOT NULL,       -- 涨跌幅
+    close_price REAL,                   -- 收盘价
+    open_price REAL,                    -- 开盘价
+    high_price REAL,                    -- 最高价
+    low_price REAL,                     -- 最低价
+    volume INTEGER,                     -- 成交量
+    turnover REAL,                      -- 成交额
+    total_market_cap REAL DEFAULT 0.0, -- 总市值(万元)
+    circulating_market_cap REAL DEFAULT 0.0, -- 流通市值
+    turnover_rate REAL DEFAULT 0.0,    -- 换手率
+    pe_ratio REAL DEFAULT 0.0,         -- 市盈率
+    pb_ratio REAL DEFAULT 0.0,         -- 市净率
+    market TEXT NOT NULL,              -- 市场标识
+    created_at TEXT NOT NULL,          -- 创建时间
+    UNIQUE(stock_code, trade_date)     -- 唯一约束
 );
 
 -- 索引
@@ -276,7 +330,52 @@ CREATE INDEX idx_daily_change ON daily_stock_changes(change_percent);
 CREATE INDEX idx_daily_volume ON daily_stock_changes(volume);
 ```
 
-### 6. 深度分析结果表 (deep_analysis_results)
+### 3. 技术指标表 (stock_technical_indicators)
+存储股票技术分析指标。
+
+```sql
+CREATE TABLE stock_technical_indicators (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    stock_code TEXT NOT NULL,           -- 股票代码
+    trade_date DATE NOT NULL,           -- 交易日期
+    macd REAL,                          -- MACD指标
+    signal_line REAL,                   -- 信号线
+    histogram REAL,                     -- MACD柱
+    rsi REAL,                           -- RSI指标
+    bollinger_upper REAL,              -- 布林带上轨
+    bollinger_middle REAL,             -- 布林带中轨
+    bollinger_lower REAL,              -- 布林带下轨
+    sma_5 REAL,                         -- 5日均线
+    sma_10 REAL,                        -- 10日均线
+    sma_20 REAL,                        -- 20日均线
+    turnover_rate REAL,                 -- 换手率
+    created_at TEXT NOT NULL,          -- 创建时间
+    UNIQUE(stock_code, trade_date)     -- 唯一约束
+);
+```
+
+### 4. 股票池表 (stock_pool)
+存储用户的股票投资组合信息。
+
+```sql
+CREATE TABLE stock_pool (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    stock_code TEXT NOT NULL,                    -- 股票代码
+    stock_name TEXT NOT NULL,                    -- 股票名称
+    pool_type TEXT NOT NULL CHECK(pool_type IN ('holding', 'potential')), -- 池类型
+    shares INTEGER DEFAULT 0,                    -- 持股数量
+    avg_cost REAL DEFAULT 0.0,                  -- 平均成本
+    current_price REAL DEFAULT 0.0,             -- 当前价格
+    market_value REAL DEFAULT 0.0,              -- 市值
+    tags TEXT DEFAULT '',                       -- 标签(JSON格式)
+    notes TEXT DEFAULT '',                      -- 备注信息
+    created_at TEXT NOT NULL,                   -- 创建时间
+    updated_at TEXT NOT NULL,                   -- 更新时间
+    UNIQUE(stock_code, pool_type)               -- 复合唯一索引
+);
+```
+
+### 5. 深度分析结果表 (deep_analysis_results)
 存储深度分析算法的详细结果。
 
 ```sql

@@ -1,29 +1,65 @@
 # 🏗️ 架构设计
 
+**文档版本**: v2.3.0  
+**更新日期**: 2025年11月20日  
+**架构类型**: 分布式全栈架构
+
 ## 🎯 系统架构概览
 
 AI股票聊天助手采用现代化的前后端分离架构，结合了微服务理念和事件驱动模式，确保系统的可扩展性和维护性。
 
+### 📊 系统规模
+```
+总代码量: 22,847 行
+核心文件: 58 个
+组件模块: 15 个
+数据库表: 8 个
+API端点: 50+ 个
+支持股票: 10,590 只
+```
+
 ```mermaid
 graph TB
-    Client[🖥️ Web客户端] --> Gateway[🚪 API网关]
-    Gateway --> Backend[⚡ FastAPI后端]
-    Backend --> Services[🔧 业务服务层]
-    Services --> Database[💾 SQLite数据库]
-    Services --> External[🌐 外部数据源]
-    
-    subgraph "业务服务层"
-        Services --> Strategy[📊 AI策略分析]
-        Services --> Screening[🔍 股票筛选]
-        Services --> DeepAnalysis[📈 深度分析]
-        Services --> DataSync[🔄 数据同步]
+    subgraph "前端层 (Frontend)"
+        A[React SPA]
+        B[TypeScript]
+        C[Tailwind CSS]
     end
     
-    subgraph "外部数据源"
-        External --> AkShare[📡 AkShare]
-        External --> OpenAI[🤖 OpenAI API]
-        External --> MCP[🔌 MCP协议]
+    subgraph "API网关层 (Gateway)"
+        D[FastAPI Gateway]
+        E[API Extensions]
+        F[WebSocket Handler]
     end
+    
+    subgraph "业务服务层 (Services)"
+        G[数据采集服务]
+        H[策略筛选服务]
+        I[AI分析服务]
+        J[实时监控服务]
+    end
+    
+    subgraph "数据存储层 (Storage)"
+        K[SQLite Database]
+        L[配置文件]
+        M[缓存层]
+    end
+    
+    subgraph "外部接口层 (External)"
+        N[腾讯财经API]
+        O[AkShare API]
+        P[Claude AI API]
+    end
+    
+    A --> D
+    D --> G
+    D --> H
+    D --> I
+    G --> N
+    G --> O
+    I --> P
+    H --> K
+    G --> K
 ```
 
 ## 🔧 技术选型理念

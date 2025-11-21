@@ -20,6 +20,47 @@
 - **存储**: 50GB SSD
 - **网络**: 100Mbps带宽
 
+### 🏗️ 部署拓扑图
+```mermaid
+graph TB
+    subgraph "用户层"
+        A[Web浏览器]
+        B[移动设备]
+    end
+    
+    subgraph "负载均衡层"
+        C[Nginx/反向代理]
+    end
+    
+    subgraph "应用层"
+        D[前端静态文件服务]
+        E[后端API服务]
+        F[WebSocket服务]
+    end
+    
+    subgraph "数据层"
+        G[SQLite数据库]
+        H[日志文件]
+        I[配置文件]
+    end
+    
+    subgraph "外部服务"
+        J[腾讯财经API]
+        K[Claude AI API]
+        L[其他数据源]
+    end
+    
+    A --> C
+    B --> C
+    C --> D
+    C --> E
+    C --> F
+    E --> G
+    E --> J
+    E --> K
+    E --> L
+```
+
 #### 软件依赖
 - **Node.js**: 18.0+ (LTS版本)
 - **Python**: 3.9+

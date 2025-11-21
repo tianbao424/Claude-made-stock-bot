@@ -19,6 +19,66 @@
 }
 ```
 
+### 📋 API端点总览
+
+#### 🎯 核心业务API
+```python
+# 股票筛选相关
+POST   /api/screening/screen-stocks          # 基础股票筛选
+GET    /api/screening/latest-results         # 获取最新筛选结果
+POST   /api/advanced-screening/basic         # 高级基础筛选
+POST   /api/advanced-screening/strategy      # 策略筛选
+
+# 数据管理相关
+GET    /api/stock-info/status               # 股票信息状态
+POST   /api/stock-info/full-update          # 股票信息更新
+GET    /api/unified-collection/status       # 数据采集状态
+POST   /api/unified-collection/force-collect # 强制数据采集
+
+# AI分析相关
+POST   /api/chat                            # AI聊天对话
+GET    /api/strategies/available            # 可用策略列表
+POST   /api/strategies/test                 # 策略测试
+
+# 系统监控相关
+GET    /api/system/health-check             # 系统健康检查
+GET    /api/system/info                     # 系统信息
+GET    /api/quota-status                    # 配额状态
+```
+
+#### 🔄 数据同步API
+```python
+# 数据采集API
+POST   /api/data-sync/manual/collection     # 手动数据采集
+POST   /api/data-sync/manual/screening      # 手动筛选触发
+GET    /api/data-status/update-status       # 数据更新状态
+
+# WebSocket端点
+WS     /ws                                  # 实时通信
+```
+
+### 📊 API响应格式标准
+```python
+# 标准响应格式
+class ApiResponse(BaseModel):
+    success: bool                    # 操作成功标志
+    message: str = ""               # 响应消息
+    data: Optional[Any] = None      # 响应数据
+    error_code: Optional[str] = None # 错误代码
+    timestamp: str                   # 时间戳
+
+# 示例响应
+{
+    "success": true,
+    "message": "筛选完成",
+    "data": {
+        "results": [...],
+        "total_count": 100
+    },
+    "timestamp": "2025-11-20T14:30:00Z"
+}
+```
+
 ## 🗂️ 股票池管理API
 
 ### 获取股票池列表
