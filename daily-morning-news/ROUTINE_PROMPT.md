@@ -23,7 +23,7 @@ if git ls-remote --exit-code --heads origin daily-morning-news >/dev/null; then
 else
   BASE=origin/develop
   git cat-file -e origin/develop:daily-morning-news/pipeline/render.py 2>/dev/null || BASE=origin/claude/kind-feynman-6hv106
-  git checkout -B daily-morning-news "$BASE"
+  git checkout --no-track -B daily-morning-news "$BASE"   # 不跟踪基准分支，避免误推到别处
 fi
 cd daily-morning-news && bash pipeline/setup.sh
 D=$(TZ=Asia/Shanghai date +%F); mkdir -p reports/$D
