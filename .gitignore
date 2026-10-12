@@ -51,8 +51,10 @@ logs/
 .DS_Store
 Thumbs.db
 
-# Claude Code 配置 (包含本地设置)
-.claude/
+# Claude Code 配置 (包含本地设置)；共享的 skills 和项目权限设置例外，需提交
+.claude/*
+!.claude/skills/
+!.claude/settings.json
 
 # 临时文件
 *.tmp

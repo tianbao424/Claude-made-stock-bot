@@ -1,0 +1,23 @@
+# 补充/覆盖读音（格式同模型 lexicon.txt：词 拼音带调...），优先于模型自带词典
+# 占位字：朗读前 A股/AI 会被替换成 诶股/诶爱
+诶 ei1
+# 含"行"的银行名：未登录时会逐字读成 xing2
+招商银行 zhao1 shang1 yin2 hang2
+工商银行 gong1 shang1 yin2 hang2
+中国银行 zhong1 guo2 yin2 hang2
+建设银行 jian4 she4 yin2 hang2
+农业银行 nong2 ye4 yin2 hang2
+交通银行 jiao1 tong1 yin2 hang2
+美国银行 mei3 guo2 yin2 hang2
+银行股 yin2 hang2 gu3
+银行板块 yin2 hang2 ban3 kuai4
+内银股 nei4 yin2 gu3
+行业 hang2 ye4
+行情 hang2 qing2
+# 其他多音字
+萎缩 wei3 suo1
+利差 li4 cha1
+重回 chong2 hui2
+重新 chong2 xin1
+一点 yi1 dian3
+十一点 shi2 yi1 dian3
