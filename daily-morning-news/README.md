@@ -62,6 +62,8 @@ bash pipeline/make_video.sh reports/2026-10-12
   "date_display": "2026年10月12日 周一",      // 页眉
   "intro_date": "2026年10月12日  星期一",     // 开场页
   "default_src": "数据来源：……",              // 页脚（各页可用 src 覆盖）
+  "data_note": [["美股", "北京时间今晨收盘（美东10月12日）"],
+                ["A股 · 港股", "上一交易日（10月12日）收盘"]],  // 开场页的数据时点说明框
   "lexicon_extra": ["某词 pin1 yin1"],        // 可选：当天额外读音
   "slides": [ /* 按顺序 */ ]
 }
@@ -69,11 +71,13 @@ bash pipeline/make_video.sh reports/2026-10-12
 
 每页都有 `sentences`：`[{ "sub": 字幕, "say": 朗读文本, "hi": [高亮的元素] }]`。
 `sub` 用阿拉伯数字；`say` 的数字一律写成汉字（"百分之零点四三""三千七百九十七点二四点"），
-英文只允许 `AI`、`A股`（会自动替换），其他缩写写中文。除开场页外，每页的 `tab` 是顶部标签名。
+英文只允许 `AI`、`A股`（会自动替换），其他缩写写中文。除开场页外，每页的 `tab` 是顶部标签名，`asof` 显示为右上角的金色数据时点标签。
+
+**数据时点**：8 点出片时，美股是北京时间当天凌晨收盘的交易日，A股和港股是上一交易日收盘。开场说明框、开场播报、各市场页的 `asof` 和第一句、`script.md` 开头都必须写明，固定格式见 [ROUTINE_PROMPT.md](ROUTINE_PROMPT.md) 第 2 步。
 
 | type | 字段 | hi 取值 |
 |---|---|---|
-| `intro` | `chips: [[市场, 指数, "+0.83%", "up"/"down"], ...]`（3 个） | `chips` |
+| `intro` | `chips: [[市场, 指数, "+0.83%", "up"/"down"], ...]`（3 个）；数据时点取顶层 `data_note` | `chips`、`note` |
 | `market` | `tab`, `asof`, `cards: [[名称, 点位, 涨跌幅, 方向]]`（≤4），`bullets: [[[文字, 颜色], ...]]`（≤5 行，颜色 `null`/`up`/`down`/`gold`/`sub`） | `c0`…、`b0`… |
 | `macro` | `tab`, `asof`, `src`, `groups: [[标题, gid, rows]]`，`cn`/`us` 行为 `[名称, 数值, 说明]`，`cal` 行为 `[日期, 事件]` | `cn0`、`us1`、`cal0`… |
 | `sentiment` | `tab`, `asof`, `src`, `verdict: [结论, 建议]`, `counts: {hot,warm,neutral,cool}`, `cols: [[标题, gid, [[名称, 数值, 状态]]]]`（左 A股 ≤9、右 美股 ≤9） | `cn0`、`us0`…、`banner` |

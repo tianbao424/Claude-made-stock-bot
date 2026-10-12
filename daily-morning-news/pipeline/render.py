@@ -132,6 +132,13 @@ def subtitle(d, s):
         bold(d, (W / 2, y0 + 22 + lh * i + lh / 2), l, f, "#FFFFFF", "mm", 1)
 
 
+def asof_badge(d, text):
+    """数据时点标签：金色描边，放在标签栏下方右侧，务必让观众看清数据是哪天的。"""
+    f = F(28); tw = d.textlength(text, font=f)
+    d.rounded_rectangle([1020 - tw - 36, 312, 1020, 356], 22, outline=C["gold"], width=2)
+    d.text((1020 - 18, 334), text, font=f, fill=C["gold"], anchor="rm")
+
+
 def footer(d, src):
     d.text((W / 2, 1712), src, font=F(28), fill=C["sub"], anchor="mm")
     d.text((W / 2, 1756), "仅供参考 · 不构成投资建议", font=F(28), fill=C["sub"], anchor="mm")
@@ -140,15 +147,25 @@ def footer(d, src):
 # ---------- 各类页面 ----------
 
 def slide_intro(d, rep, sl, hi):
-    bold(d, (W / 2, 520), rep.get("title", "股市早报"), F(150), C["text"], "mm", 3)
-    d.text((W / 2, 660), rep.get("intro_date", rep["date_display"]), font=F(48), fill=C["sub"], anchor="mm")
-    d.rectangle([W / 2 - 80, 720, W / 2 + 80, 726], fill=C["gold"])
+    bold(d, (W / 2, 470), rep.get("title", "股市早报"), F(150), C["text"], "mm", 3)
+    d.text((W / 2, 610), rep.get("intro_date", rep["date_display"]), font=F(48), fill=C["sub"], anchor="mm")
+    d.rectangle([W / 2 - 80, 670, W / 2 + 80, 676], fill=C["gold"])
     for i, (mkt, name, pct, dirn) in enumerate(sl["chips"]):
-        y = 820 + i * 150; on = "chips" in hi
+        y = 770 + i * 150; on = "chips" in hi
         panel(d, [110, y, 970, y + 120], on, 26)
         bold(d, (150, y + 60), mkt, F(48), C["gold"], "lm", 1)
         d.text((330, y + 60), name, font=F(44), fill=C["text"], anchor="lm")
         pct_pill(d, 940, y + 60, pct, dirn)
+    # 数据时点说明：每期必须写明各市场数据对应的交易日
+    note = rep.get("data_note", [])
+    if note:
+        y = 1212; h = 30 + 50 * len(note); on = "note" in hi
+        d.rounded_rectangle([110, y, 970, y + h], 22, fill=C["card_hi"] if on else "#111C31",
+                            outline=C["gold"], width=3 if on else 2)
+        for i, (mkt, text) in enumerate(note):
+            cy = y + 40 + i * 50
+            bold(d, (146, cy), mkt, F(32), C["gold"], "lm", 1)
+            d.text((330, cy), text, font=F(32), fill=C["text"], anchor="lm")
 
 
 def slide_market(d, rep, sl, hi):
@@ -197,7 +214,6 @@ def slide_sentiment(d, rep, sl, hi):
     bold(d, (60, 334), title, F(34), C["text"], "lm", 1)
     d.text((60 + d.textlength(title, font=F(34)) + 14, 336), sl.get("subtitle", "霍华德·马克斯四层框架"),
            font=F(26), fill=C["sub"], anchor="lm")
-    d.text((1020, 334), sl.get("asof", ""), font=F(26), fill=C["sub"], anchor="rm")
     panel(d, [60, 370, 1020, 500], "banner" in hi)
     bold(d, (92, 414), sl["verdict"][0], F(56), C["gold"], "lm", 2)
     d.text((94, 466), sl["verdict"][1], font=F(30), fill=C["text"], anchor="lm")
@@ -259,8 +275,8 @@ def frame(bg, rep, tab_names, item):
     img = bg.copy().convert("RGBA"); ov = Image.new("RGBA", (W, H)); d = ImageDraw.Draw(ov)
     if sl["type"] != "intro":
         header(d, rep); tabs(d, tab_names, tab_names.index(sl["tab"]))
-        if sl["type"] not in ("sentiment",) and sl.get("asof"):
-            d.text((1020, 334), sl["asof"], font=F(28), fill=C["sub"], anchor="rm")
+        if sl.get("asof"):
+            asof_badge(d, sl["asof"])
     SLIDES[sl["type"]](d, rep, sl, hi)
     subtitle(d, sent["sub"])
     footer(d, sl.get("src", rep.get("default_src", "数据来源：公开报道")))
