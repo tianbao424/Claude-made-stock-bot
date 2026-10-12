@@ -10,7 +10,7 @@
 
 ```
 Claude 定时任务（周一至周五 北京时间 07:36）
-  └─ 全新云端会话，按 ROUTINE_PROMPT.md 执行
+  └─ 唤醒固定的「每日股市早报机器人」云端会话（已挂载本仓库），按 ROUTINE_PROMPT.md 执行
        1. WebSearch 收集隔夜美股、A股/港股收盘、宏观数据、情绪指标、机构观点
        2. 写 reports/<日期>/report.json（数据 + 逐句文稿）
        3. pipeline/make_video.sh：读音检查 → 离线 TTS 配音 → 逐句渲染画面 → ffmpeg 合成
