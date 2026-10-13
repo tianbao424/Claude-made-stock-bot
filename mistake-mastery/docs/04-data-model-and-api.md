@@ -1,6 +1,6 @@
 # 04 · 数据模型与接口
 
-> 单个家庭、单个 SQLite 文件。没有账号体系，只有一个家庭密码；可以有多个孩子档案。
+> 服务器上用 SQLite 做**工作数据库**；数据的**正本**以 JSONL 文本存在 GitHub 私有仓库里（见 [03 §5](03-system-architecture.md) 和本文 §6）。没有账号体系，只有一个家庭密码；可以有多个孩子档案。
 
 ---
 
@@ -54,6 +54,7 @@ erDiagram
 - 标注为 `JSON` 的列以文本存储，用 SQLite 的 JSON 函数查询。
 - 每张表都有 `created_at`；需要修改的表另有 `updated_at`。
 - 建表顺序按依赖关系：`knowledge_points`（§3.5）先于 `question_kps` 和 `kp_mastery`。
+- 标注 **【仅本地】** 的表和列不同步到数据仓库；其余都会导出成 JSONL（§6）。
 
 ### 3.1 孩子档案与设置
 
@@ -78,13 +79,13 @@ CREATE TABLE exam_events (
     scope_kp_codes JSON                   -- 考试范围（知识点编码），为空表示全部
 );
 
-CREATE TABLE app_settings (               -- 全局设置：家庭密码哈希、各任务使用的模型等
+CREATE TABLE app_settings (               -- 【仅本地】家庭密码哈希、会话版本号、TOTP 密钥等；非敏感项另存 settings.json 同步
     key           TEXT PRIMARY KEY,
     value         JSON NOT NULL
 );
 ```
 
-> 接口密钥优先放在 `.env` 里；设置页填写的密钥加密后存进 `app_settings`。
+> 接口密钥和 GitHub 部署密钥只放在服务器的 `.env` 和密钥文件里，不进数据库，也不进任何仓库。
 
 ### 3.2 采集
 
@@ -104,8 +105,8 @@ CREATE TABLE source_pages (
     id            TEXT PRIMARY KEY,
     document_id   TEXT NOT NULL REFERENCES source_documents(id),
     page_no       INTEGER NOT NULL,
-    original_path TEXT NOT NULL,          -- data/files/ 下的相对路径
-    corrected_path TEXT,
+    original_path TEXT NOT NULL,          -- 数据仓库 files/ 下的相对路径
+    transform     JSON,                   -- 透视矫正的变换矩阵（矫正图按需重新生成）
     erased_path   TEXT,
     erase_status  TEXT,                   -- pending|done|patched|failed
     paper_size    TEXT,                   -- A4|B4|A3|8K
@@ -150,9 +151,7 @@ CREATE TABLE question_instances (
     page_id         TEXT NOT NULL REFERENCES source_pages(id),
     question_id     TEXT NOT NULL REFERENCES questions(id),
     number_label    TEXT,                 -- 卷面题号 '27'
-    bbox            JSON NOT NULL,        -- 在矫正图上的位置
-    crop_path       TEXT,                 -- 原貌截图
-    erased_crop_path TEXT,                -- 擦除后的截图（错题重做单使用）
+    bbox            JSON NOT NULL,        -- 在矫正图上的位置；原貌截图和擦除截图都按它现场裁出并缓存
     answer_area_mm  REAL,                 -- 原卷作答区高度（毫米）
     student_answer  JSON,                 -- 识别出的孩子原始作答
     grading_marks   JSON                  -- 红笔批改：{"mark":"wrong","score":"3/8"}
@@ -177,7 +176,7 @@ CREATE TABLE mistakes (
     followups         INTEGER NOT NULL DEFAULT 0,   -- 已追加变式的次数
     variant_passed_at TEXT,
     next_review_at    TEXT,
-    priority          REAL,               -- 调度优先级（每天重算）
+    priority          REAL,               -- 【仅本地】调度优先级（每天重算，重建索引时也重算）
     mastered_at       TEXT,
     last_wrong_at     TEXT NOT NULL,
     created_at        TEXT NOT NULL,
@@ -233,7 +232,7 @@ CREATE TABLE tutor_messages (
     created_at      TEXT NOT NULL
 );
 
-CREATE TABLE kp_mastery (
+CREATE TABLE kp_mastery (                 -- 【仅本地】派生数据：由作答记录算出，重建索引时重算
     student_id      TEXT NOT NULL REFERENCES students(id),
     kp_code         TEXT NOT NULL REFERENCES knowledge_points(code),
     score           REAL NOT NULL,        -- 0–1，见 06 §6
@@ -253,9 +252,9 @@ CREATE TABLE print_jobs (
     filters         JSON,                 -- 筛选条件（用于重新打印）
     layout          JSON NOT NULL,        -- {paper:'A4',columns:2,answer_space:'original',with_key:true,...}
     status          TEXT NOT NULL,        -- queued|rendering|ready|failed
-    pdf_path        TEXT,
-    key_pdf_path    TEXT,                 -- 答案页单独的 PDF
-    manifest_path   TEXT,                 -- 版面清单（题目 → 页码、坐标）
+    pdf_path        TEXT,                 -- 【仅本地】缓存 7 天，需要时按本记录重新渲染
+    key_pdf_path    TEXT,                 -- 【仅本地】答案页单独的 PDF
+    manifest        JSON,                 -- 版面清单（题目 → 页码、坐标），同步
     page_count      INTEGER,
     created_at      TEXT NOT NULL
 );
@@ -274,7 +273,7 @@ CREATE TABLE print_job_items (
 ### 3.5 字典、任务与日志
 
 ```sql
-CREATE TABLE knowledge_points (           -- 启动时从 app/curriculum/*.yaml 同步
+CREATE TABLE knowledge_points (           -- 【仅本地】启动时从代码仓库的 app/curriculum/*.yaml 加载
     code            TEXT PRIMARY KEY,     -- 'M.FUN.QUAD.GRAPH'
     subject         TEXT NOT NULL,
     name            TEXT NOT NULL,
@@ -284,7 +283,7 @@ CREATE TABLE knowledge_points (           -- 启动时从 app/curriculum/*.yaml 
     textbook_refs   JSON                  -- {"rjb":"九上 …","bsd":"…"}
 );
 
-CREATE TABLE jobs (                       -- 进程内任务队列
+CREATE TABLE jobs (                       -- 【仅本地】进程内任务队列
     id              TEXT PRIMARY KEY,
     kind            TEXT NOT NULL,        -- capture|erase|variants|render|grade ...
     payload         JSON NOT NULL,
@@ -298,7 +297,7 @@ CREATE TABLE jobs (                       -- 进程内任务队列
 );
 CREATE INDEX idx_jobs_status ON jobs(status, created_at);
 
-CREATE TABLE ai_calls (                   -- 调试与费用统计
+CREATE TABLE ai_calls (                   -- 【仅本地】调试、费用统计、每日费用上限；每月汇总写入 settings.json
     id              TEXT PRIMARY KEY,
     task            TEXT NOT NULL,        -- classify|solve|verify|variant_gen|tutor|grade ...
     model           TEXT NOT NULL,
@@ -355,7 +354,7 @@ CREATE TABLE ai_calls (                   -- 调试与费用统计
 
 ## 5. 接口（REST，`/api`）
 
-- **鉴权**：`POST /api/login` 校验家庭密码，写入长期有效的会话 Cookie；其余接口都要求已登录。
+- **鉴权**：`POST /api/login` 校验家庭密码（同一 IP 连续失败 5 次锁定 15 分钟；开启两步验证时还要动态码），写入 30 天有效的会话 Cookie；**除登录接口外，所有接口和文件都要求已登录**（见 03 §4）。
 - **长任务**一律异步：返回 `job_id`，前端轮询 `GET /api/jobs/{id}` 显示进度。
 - 当前孩子由请求参数 `student_id` 指定（只有一个孩子时前端自动带上）。
 
@@ -364,11 +363,15 @@ CREATE TABLE ai_calls (                   -- 调试与费用统计
 | 方法 | 路径 | 说明 |
 |------|------|------|
 | POST | `/api/login` · `/api/logout` | 家庭密码登录 |
+| POST | `/api/logout-all` | 退出所有设备（递增会话版本号） |
+| POST | `/api/totp/setup` · `/api/totp/verify` | 开启两步验证（v0.2） |
 | GET/POST/PATCH | `/api/students` · `/api/students/{id}` | 孩子档案 |
 | GET/POST/DELETE | `/api/students/{id}/exams` | 考试日历 |
-| GET/PATCH | `/api/settings` | 模型选择、接口密钥、学透参数 |
+| GET/PATCH | `/api/settings` | 模型选择、学透参数、每日费用上限 |
 | GET | `/api/jobs/{id}` | 任务进度：`{status, progress, result}` |
-| POST | `/api/backup` | 导出数据库 + 图片的压缩包 |
+| GET | `/api/sync/status` | 最后同步时间、待推送的提交数、最近一次错误 |
+| POST | `/api/sync` | 立即同步到 GitHub |
+| GET | `/api/files/{path}` | 读取图片（鉴权后返回；不开放静态目录） |
 
 ### 5.2 采集
 
@@ -417,3 +420,20 @@ CREATE TABLE ai_calls (                   -- 调试与费用统计
 | GET | `/api/today` | 首页数据：考试倒计时、今日学透单、待处理计数 |
 | GET | `/api/dashboard` | 知识点掌握度、错因分布、反复错 TOP |
 | GET | `/api/weekly?week=2026-W42` | 周小结 |
+
+---
+
+## 6. 同步到 GitHub 的格式
+
+数据仓库的目录结构见 [03 §5.2](03-system-architecture.md)。导出规则保证**同样的数据导出两次，结果逐字节相同**，这样 git 里只会出现真正变化的行：
+
+| 规则 | 说明 |
+|------|------|
+| 一表一文件 | `tables/{表名}.jsonl`；`attempts` 按 `created_at` 的年月分成 `tables/attempts/YYYY-MM.jsonl` |
+| 一行一条 | 每条记录占一行 JSON；按主键排序（UUIDv7 有序，新记录追加在末尾） |
+| 键有序 | 每行的键按字母排序；JSON 列直接嵌入为对象，不再转成字符串 |
+| 中文可读 | 不转义非 ASCII 字符（`ensure_ascii=False`），在 GitHub 网页上能直接看懂 |
+| 删除 | 记录从文件中移除；git 历史里仍然能找回 |
+| 只导出变化的表 | 同步时只重写有改动的表文件 |
+
+**重建索引**（`python -m app.tools.rebuild_index`）：清空 SQLite → 读入全部 JSONL → 从代码仓库加载知识点树 → 重算 `priority` 和 `kp_mastery`。这两项随时间变化，所以标为【仅本地】、不导出；其余数据导出 → 重建 → 再导出，结果必须和原来逐字节一致，这一条写成单元测试。
