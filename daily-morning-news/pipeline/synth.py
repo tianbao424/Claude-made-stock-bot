@@ -13,7 +13,7 @@ import sherpa_onnx
 import soundfile as sf
 
 HERE = os.path.dirname(os.path.abspath(__file__))
-# 引擎会丢弃英文字母和部分标点：朗读前替换（"诶"的读音在 lexicon_extra.txt 里固定为 ei1）
+# 引擎会丢弃英文字母和部分标点：朗读前替换（"诶股""诶爱"的读音在 lexicon_extra.txt 里固定）
 SAY_REPLACE = [("AI", "诶爱"), ("A股", "诶股"), ("；", "，"), ("·", "")]
 SENT_GAP, SLIDE_GAP, HEAD, TAIL = 0.28, 0.65, 0.5, 0.8
 
