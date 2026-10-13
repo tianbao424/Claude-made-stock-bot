@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
+import { useNavigate } from "react-router-dom";
 import { api, SyncStatus } from "../api";
-import { fmtTime, useStudent } from "../components/common";
+import { ConfirmButton, fmtTime, useStudent } from "../components/common";
 import { SyncChip } from "./Home";
 import { DISTRICTS, TEXTBOOKS } from "./Onboarding";
 
@@ -24,6 +25,7 @@ const ERASER_NAMES: Record<string, string> = { local_color: "本地（只擦彩�
 
 export default function Settings() {
   const { student, reload } = useStudent();
+  const navigate = useNavigate();
   const [name, setName] = useState(student.name);
   const [district, setDistrict] = useState(student.district ?? "");
   const [books, setBooks] = useState<Record<string, string>>(student.textbooks ?? {});
@@ -146,9 +148,9 @@ export default function Settings() {
       <div className="card stack">
         <h2>账号</h2>
         <div className="row">
-          <button onClick={() => api.post("/api/logout").then(() => (location.href = "/login"))}>退出登录</button>
-          <button className="danger" onClick={() => confirm("所有设备都需要重新输入密码，确定吗？") &&
-            api.post("/api/logout-all").then(() => (location.href = "/login"))}>退出所有设备</button>
+          <button onClick={() => api.post("/api/logout").then(() => navigate("/login"))}>退出登录</button>
+          <ConfirmButton prompt="所有设备都要重新登录，再点一次确认"
+            onConfirm={() => api.post("/api/logout-all").then(() => navigate("/login"))}>退出所有设备</ConfirmButton>
         </div>
       </div>
     </>

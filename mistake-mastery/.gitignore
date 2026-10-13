@@ -11,3 +11,6 @@ web/dist/
 bakeoff-out/
 .bakeoff-tmp.db
 *.tsbuildinfo
+# 预览版构建产物（合成的示例数据）
+web/demo/fixtures.json
+web/dist-demo/

@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { Link, useNavigate, useSearchParams } from "react-router-dom";
-import { api, Doc, MistakeSummary, PrintJobInfo, subjectName } from "../api";
+import { api, Doc, MistakeSummary, PrintJobInfo, runtime, subjectName } from "../api";
 import { fmtTime, JobProgress, StatusBadge, useJob, useStudent } from "../components/common";
 
 export default function Print() {
@@ -86,7 +86,7 @@ export default function Print() {
           {mistakes.map((m) => (
             <label key={m.id} className={`list-item card ${picked.includes(m.id) ? "selected" : ""}`} style={{ margin: 0 }}>
               <input type="checkbox" checked={picked.includes(m.id)} onChange={() => toggle(m.id)} style={{ width: 22, height: 22, flex: "none" }} />
-              {m.instance_id && <img className="thumb" style={{ width: 64, height: 64 }} loading="lazy" alt="" src={`/api/instances/${m.instance_id}/image?kind=erased&max_side=400`} />}
+              {m.instance_id && <img className="thumb" style={{ width: 64, height: 64 }} loading="lazy" alt="" src={runtime.fileUrl(`/api/instances/${m.instance_id}/image?kind=erased&max_side=400`)} />}
               <div className="body">
                 <div className="row spread">
                   <span>{m.document?.title ?? subjectName(m.subject)} · 第 {m.number_label || "?"} 题</span>

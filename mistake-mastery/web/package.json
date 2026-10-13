@@ -6,7 +6,8 @@
   "scripts": {
     "dev": "vite",
     "build": "tsc -b && vite build",
-    "typecheck": "tsc -b"
+    "typecheck": "tsc -b",
+    "build:demo": "tsc -b && vite build --config vite.demo.config.ts && node demo/build_preview.mjs"
   },
   "dependencies": {
     "katex": "0.16.11",

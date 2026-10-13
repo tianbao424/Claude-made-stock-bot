@@ -82,6 +82,8 @@ uv run python -m app
 2. Safari 里点"分享 → 添加到主屏幕"，以后就像 App 一样打开。
 3. 第一次进入时建一个孩子档案（用昵称即可）。
 
+**电脑上用**：在运行程序的这台电脑上打开 `http://localhost:8000`；家里其他电脑、平板用上面那个局域网地址。界面按手机设计，在电脑上显示为居中的一栏。
+
 **手机打不开时**：确认手机和电脑在同一个 Wi-Fi；电脑防火墙允许 8000 端口的入站连接（Mac 首次运行时会弹窗询问，选"允许"）。
 
 ---
@@ -118,6 +120,14 @@ uv run python -m app
 ```bash
 uv run pytest                             # 后端测试（PDF 测试需要 Chromium）
 cd web && npm run dev                     # 前端开发服务器，/api 转发到 8000 端口
+```
+
+**预览版**（不需要后端、发给家人先看看的单个页面）：同一套页面，后端换成浏览器里的模拟（`web/src/demo/`），
+示例数据用真实后端处理两张合成的卷子生成（AI 部分是固定结果），不含真实孩子的信息。
+
+```bash
+uv run python web/demo/make_fixtures.py   # 生成 web/demo/fixtures.json（需要 Chromium）
+cd web && npm run build:demo              # 输出 web/dist-demo/preview.html，约 4 MB
 ```
 
 代码结构见 [docs/03 §13](docs/03-system-architecture.md)。

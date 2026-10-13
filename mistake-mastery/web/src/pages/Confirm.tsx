@@ -1,7 +1,7 @@
 import { PointerEvent, useCallback, useEffect, useRef, useState } from "react";
 import { Link, useParams } from "react-router-dom";
-import { ANSWER_SOURCE, api, Candidate, Doc, GRADING, subjectName } from "../api";
-import { CauseChips, KpPicker, Md, useCurriculum } from "../components/common";
+import { ANSWER_SOURCE, api, Candidate, Doc, GRADING, runtime, subjectName } from "../api";
+import { CauseChips, ImageViewer, KpPicker, Md, useCurriculum } from "../components/common";
 
 interface Choice {
   selected: boolean;
@@ -17,6 +17,7 @@ function RegionPicker({ page, existing, onClose }: { page: Page; existing: numbe
   const [start, setStart] = useState<[number, number] | null>(null);
   const [rect, setRect] = useState<number[] | null>(null);
   const [busy, setBusy] = useState(false);
+  const [error, setError] = useState("");
 
   const frac = (e: PointerEvent): [number, number] => {
     const r = box.current!.getBoundingClientRect();
@@ -36,10 +37,16 @@ function RegionPicker({ page, existing, onClose }: { page: Page; existing: numbe
   const save = async () => {
     if (!rect) return;
     setBusy(true);
-    await api.post(`/api/pages/${page.id}/regions`, {
-      bbox: [rect[0] * page.cw, rect[1] * page.ch, rect[2] * page.cw, rect[3] * page.ch],
-    });
-    onClose(true);
+    setError("");
+    try {
+      await api.post(`/api/pages/${page.id}/regions`, {
+        bbox: [rect[0] * page.cw, rect[1] * page.ch, rect[2] * page.cw, rect[3] * page.ch],
+      });
+      onClose(true);
+    } catch (err) {
+      setError((err as Error).message);
+      setBusy(false);
+    }
   };
   const pct = (r: number[]) => ({ left: `${r[0] * 100}%`, top: `${r[1] * 100}%`, width: `${(r[2] - r[0]) * 100}%`, height: `${(r[3] - r[1]) * 100}%` });
 
@@ -51,8 +58,9 @@ function RegionPicker({ page, existing, onClose }: { page: Page; existing: numbe
           <button className="primary" disabled={!rect || busy || rect[2] - rect[0] < 0.02} onClick={save}>添加这道题</button>
         </div>
         <p className="muted small">虚线框是已经识别出的题。框的范围要包括题目下面的作答空白，打印时会原样保留。</p>
+        {error && <div className="error">{error}</div>}
         <div ref={box} className="picker" onPointerDown={down} onPointerMove={move} onPointerUp={() => setStart(null)}>
-          <img src={`/api/pages/${page.id}/image?kind=corrected`} alt="" draggable={false} />
+          <img src={runtime.fileUrl(`/api/pages/${page.id}/image?kind=corrected`)} alt="" draggable={false} />
           {existing.map((b, i) => (
             <div key={i} className="rect existing" style={pct([b[0] / page.cw, b[1] / page.ch, b[2] / page.cw, b[3] / page.ch])} />
           ))}
@@ -70,6 +78,7 @@ export default function Confirm() {
   const [choices, setChoices] = useState<Record<string, Choice>>({});
   const [kpFor, setKpFor] = useState<string | null>(null);
   const [regionPage, setRegionPage] = useState<Page | null>(null);
+  const [viewPage, setViewPage] = useState<Page | null>(null);
   const [showOriginal, setShowOriginal] = useState<Record<string, boolean>>({});
   const [result, setResult] = useState<{ created: number; merged: number; solving: number } | null>(null);
   const [error, setError] = useState("");
@@ -154,9 +163,9 @@ export default function Confirm() {
       <div className="row" style={{ margin: "8px 0" }}>
         {doc.pages?.map((p) => (
           <span key={p.id} className="row" style={{ gap: 4 }}>
-            <a className="chip btn" href={`/api/pages/${p.id}/image?kind=erased&max_side=2400`} target="_blank" rel="noreferrer">
+            <button className="chip" onClick={() => setViewPage(p)}>
               第 {p.page_no} 页擦除图{p.erase_status === "failed" ? "（失败）" : ""}
-            </a>
+            </button>
             <button className="chip" onClick={() => setRegionPage(p)}>＋ 手动框题</button>
           </span>
         ))}
@@ -182,7 +191,7 @@ export default function Confirm() {
               </span>
             </div>
             <img className="crop" style={{ marginTop: 8 }} loading="lazy" alt=""
-              src={`/api/instances/${it.instance_id}/image?kind=${orig ? "original" : "erased"}`}
+              src={runtime.fileUrl(`/api/instances/${it.instance_id}/image?kind=${orig ? "original" : "erased"}`)}
               onClick={() => setShowOriginal((s) => ({ ...s, [it.instance_id]: !orig }))} />
             <div className="muted small">点图片切换{orig ? "擦除后" : "原图"}</div>
             {it.question.stem_md && (
@@ -226,6 +235,10 @@ export default function Confirm() {
       {kpFor && doc && (
         <KpPicker subject={doc.subject} value={choices[kpFor].kp_codes}
           onClose={(v) => { if (v) set(kpFor, { kp_codes: v }); setKpFor(null); }} />
+      )}
+      {viewPage && (
+        <ImageViewer title={`第 ${viewPage.page_no} 页 · 擦除后`} onClose={() => setViewPage(null)}
+          src={runtime.fileUrl(`/api/pages/${viewPage.id}/image?kind=erased&max_side=2400`)} />
       )}
       {regionPage && (
         <RegionPicker page={regionPage} existing={items.filter((i) => i.page_no === regionPage.page_no).map((i) => i.bbox)}

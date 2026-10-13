@@ -7,7 +7,7 @@ from pydantic import BaseModel
 from app.api.deps import LOGIN, bad_request, get_ctx, not_found
 from app.api.mistakes import AttemptBody, record_result
 from app.context import AppContext
-from app.models import Mistake, PrintJob, PrintJobItem, QuestionInstance
+from app.models import Mistake, PrintJob, PrintJobItem, QuestionInstance, SourceDocument, SourcePage
 from app.services import mastery, printing
 
 router = APIRouter(prefix="/api", dependencies=LOGIN)
@@ -56,9 +56,12 @@ def get_job(job_id: str, ctx: AppContext = Depends(get_ctx)) -> dict:
         for it in s.query(PrintJobItem).filter_by(print_job_id=job_id).order_by(PrintJobItem.seq):
             m = s.get(Mistake, it.mistake_id) if it.mistake_id else None
             inst = s.get(QuestionInstance, it.instance_id) if it.instance_id else None
+            page = s.get(SourcePage, inst.page_id) if inst else None
+            doc = s.get(SourceDocument, page.document_id) if page else None
             items.append({"seq": it.seq, "page_no": it.page_no, "mistake_id": it.mistake_id,
                           "instance_id": it.instance_id, "page_id": it.page_id,
                           "number_label": inst.number_label if inst else None,
+                          "source": (doc.title or printing.SUBJECT_NAMES.get(doc.subject)) if doc else None,
                           "status": m.status if m else None,
                           "status_name": mastery.STATUS_NAMES.get(m.status) if m else None})
         out["items"] = items

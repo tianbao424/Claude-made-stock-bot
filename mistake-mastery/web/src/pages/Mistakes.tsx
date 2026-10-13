@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { Link, useNavigate, useSearchParams } from "react-router-dom";
-import { api, MistakeSummary, SUBJECTS } from "../api";
+import { api, MistakeSummary, runtime, SUBJECTS } from "../api";
 import { StatusBadge, useStudent } from "../components/common";
 
 const STATUS_FILTERS = [
@@ -57,7 +57,7 @@ export default function Mistakes() {
       {list?.map((m) => {
         const body = (
           <div className="list-item">
-            {m.instance_id && <img className="thumb" loading="lazy" alt="" src={`/api/instances/${m.instance_id}/image?kind=erased&max_side=400`} />}
+            {m.instance_id && <img className="thumb" loading="lazy" alt="" src={runtime.fileUrl(`/api/instances/${m.instance_id}/image?kind=erased&max_side=400`)} />}
             <div className="body">
               <div className="row spread">
                 <b>{m.document?.title ?? "未命名"} · 第 {m.number_label || "?"} 题</b>

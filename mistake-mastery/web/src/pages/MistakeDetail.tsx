@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
-import { ANSWER_SOURCE, api, GRADING, Job, MistakeDetail as Detail } from "../api";
-import { CauseChips, fmtTime, JobProgress, KpPicker, Md, StatusBadge, useCurriculum, useJob } from "../components/common";
+import { ANSWER_SOURCE, api, GRADING, Job, MistakeDetail as Detail, runtime } from "../api";
+import { CauseChips, ConfirmButton, fmtTime, JobProgress, KpPicker, Md, StatusBadge, useCurriculum, useJob } from "../components/common";
 
 const CONTEXT: Record<string, string> = { capture: "录入", redo: "重做", variant: "变式", review: "复习", exam_pack: "考前打印", daily: "每日学透单" };
 const RESULT: Record<string, string> = { correct: "✓ 做对", wrong: "✗ 做错", partial: "½ 半对" };
@@ -49,7 +49,7 @@ export default function MistakeDetail() {
       <div className="card stack">
         {m.instance_id && (
           <>
-            <img className="crop" alt="" src={`/api/instances/${m.instance_id}/image?kind=${orig ? "original" : "erased"}`} onClick={() => setOrig(!orig)} />
+            <img className="crop" alt="" src={runtime.fileUrl(`/api/instances/${m.instance_id}/image?kind=${orig ? "original" : "erased"}`)} onClick={() => setOrig(!orig)} />
             <div className="muted small">点图片切换{orig ? "擦除后" : "原图（含孩子的作答和批改）"}</div>
           </>
         )}
@@ -143,10 +143,10 @@ export default function MistakeDetail() {
       </div>
 
       {error && <div className="error">{error}</div>}
-      <button className="danger block" style={{ marginTop: 10 }}
-        onClick={() => confirm("确定从错题本删除这道题吗？") && act(async () => { await api.del(`/api/mistakes/${m.id}`); navigate("/mistakes"); })}>
+      <ConfirmButton className="danger block" style={{ marginTop: 10 }} prompt="再点一次，确认删除"
+        onConfirm={() => act(async () => { await api.del(`/api/mistakes/${m.id}`); navigate("/mistakes"); })}>
         删除这道错题
-      </button>
+      </ConfirmButton>
 
       {kpOpen && (
         <KpPicker subject={m.subject} value={m.kp_codes}

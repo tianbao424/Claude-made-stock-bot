@@ -1,6 +1,6 @@
 import { ChangeEvent, useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { api, Job, Subject, SUBJECTS } from "../api";
+import { api, Job, runtime, Subject, SUBJECTS } from "../api";
 import { JobProgress, useCurriculum, useJob, useStudent } from "../components/common";
 
 export default function Capture() {
@@ -120,6 +120,11 @@ export default function Capture() {
             <input type="file" accept="image/*" multiple onChange={addFiles} hidden />
           </label>
         </div>
+        {runtime.sampleFiles && (
+          <button className="block" onClick={async () => setFiles(await runtime.sampleFiles!())}>
+            🧪 用示例照片（预览版）
+          </button>
+        )}
       </div>
 
       {error && <div className="error">{error}</div>}

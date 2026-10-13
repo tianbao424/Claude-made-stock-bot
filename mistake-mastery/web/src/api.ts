@@ -33,6 +33,14 @@ async function request<T>(method: string, path: string, body?: unknown): Promise
   return (await res.json()) as T;
 }
 
+// 预览版（npm run build:demo）在启动前替换这几个钩子：图片和 PDF 不走网络，直接用内置的示例数据。
+export const runtime = {
+  demo: false,
+  fileUrl: (path: string): string => path,
+  pdfPages: null as null | ((printJobId: string) => string[]),
+  sampleFiles: null as null | (() => Promise<File[]>),
+};
+
 export const api = {
   get: <T,>(p: string) => request<T>("GET", p),
   post: <T,>(p: string, b?: unknown) => request<T>("POST", p, b ?? {}),
@@ -163,7 +171,7 @@ export interface PrintJobInfo {
   layout: Record<string, unknown>;
   created_at: string;
   has_pdf: boolean;
-  items?: { seq: number; page_no: number | null; mistake_id: string | null; instance_id: string | null; page_id: string | null; number_label: string | null; status: string | null; status_name: string | null }[];
+  items?: { seq: number; page_no: number | null; mistake_id: string | null; instance_id: string | null; page_id: string | null; number_label: string | null; source?: string | null; status: string | null; status_name: string | null }[];
 }
 
 export interface KpNode {

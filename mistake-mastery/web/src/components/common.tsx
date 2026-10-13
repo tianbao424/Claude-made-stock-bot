@@ -1,8 +1,8 @@
-import { createContext, useContext, useEffect, useState } from "react";
+import { createContext, CSSProperties, ReactNode, useContext, useEffect, useState } from "react";
 import ReactMarkdown from "react-markdown";
 import rehypeKatex from "rehype-katex";
 import remarkMath from "remark-math";
-import { api, Curriculum, getCurriculum, Job, KpNode, Student, Subject } from "../api";
+import { api, Curriculum, getCurriculum, Job, KpNode, runtime, Student, Subject } from "../api";
 
 // ---------------------------------------------------------------- 当前孩子
 
@@ -174,6 +174,47 @@ export function CauseChips({ causes, value, suggested = [], onChange }: {
         );
       })}
       <button className="chip" onClick={() => setAll(!all)}>{all ? "收起" : shown.length ? "＋ 其他" : "＋ 选择错因"}</button>
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------- 需要确认的操作
+
+// 点一次变成"再点一次确认"，几秒内再点才执行（不用浏览器自带的 confirm 弹窗）。
+export function ConfirmButton({ children, prompt, onConfirm, className = "danger", style }: {
+  children: ReactNode;
+  prompt: string;
+  onConfirm: () => void;
+  className?: string;
+  style?: CSSProperties;
+}) {
+  const [armed, setArmed] = useState(false);
+  useEffect(() => {
+    if (!armed) return;
+    const t = window.setTimeout(() => setArmed(false), 4000);
+    return () => window.clearTimeout(t);
+  }, [armed]);
+  return (
+    <button className={`${className} ${armed ? "armed" : ""}`} style={style}
+      onClick={() => { if (armed) { setArmed(false); onConfirm(); } else setArmed(true); }}>
+      {armed ? prompt : children}
+    </button>
+  );
+}
+
+// ---------------------------------------------------------------- 看大图
+
+export function ImageViewer({ src, title, onClose }: { src: string; title: string; onClose: () => void }) {
+  return (
+    <div className="modal-bg" onClick={onClose}>
+      <div className="modal stack" onClick={(e) => e.stopPropagation()}>
+        <div className="row spread">
+          <b>{title}</b>
+          <button className="chip" onClick={onClose}>关闭</button>
+        </div>
+        <img className="crop" src={src} alt={title} />
+        {!runtime.demo && <a className="small" href={src} target="_blank" rel="noreferrer">在新窗口打开原图（可放大）</a>}
+      </div>
     </div>
   );
 }

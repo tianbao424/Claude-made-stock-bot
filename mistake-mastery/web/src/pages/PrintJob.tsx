@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
 import { Link, useParams } from "react-router-dom";
-import { api, PrintJobInfo } from "../api";
+import { api, PrintJobInfo, runtime } from "../api";
 import { fmtTime, StatusBadge } from "../components/common";
 
 // 打印单页面，也是 PDF 上二维码的落地页：孩子做完后，家长扫码逐题回填对错。
@@ -45,7 +45,12 @@ export default function PrintJobPage() {
         <span className="muted small">{fmtTime(job.created_at)}</span>
       </div>
       <div className="card stack">
-        {job.status === "ready" ? (
+        {job.status === "ready" && runtime.pdfPages ? (
+          <>
+            <div className="notice">预览版直接显示 PDF 的每一页。正式版在这里点"打开 PDF"，再用打印机打印。</div>
+            {runtime.pdfPages(job.id).map((src, i) => <img key={i} className="crop sheet" src={src} alt={`第 ${i + 1} 页`} />)}
+          </>
+        ) : job.status === "ready" ? (
           <a className="btn primary block" href={`/api/print-jobs/${job.id}/pdf`} target="_blank" rel="noreferrer">
             📄 打开 PDF（{job.page_count} 页）
           </a>
@@ -54,7 +59,9 @@ export default function PrintJobPage() {
         ) : (
           <div className="muted">正在生成…</div>
         )}
-        <p className="muted small">手机上打开 PDF 后，点"分享 → 打印"就能用家里的打印机（AirPrint）；也可以在电脑上打开打印。</p>
+        {!runtime.pdfPages && (
+          <p className="muted small">手机上打开 PDF 后，点"分享 → 打印"就能用家里的打印机（AirPrint）；也可以在电脑上打开打印。</p>
+        )}
       </div>
 
       {!!gradable.length && (
@@ -62,9 +69,10 @@ export default function PrintJobPage() {
           <h2>孩子做完了？逐题回填</h2>
           {gradable.map((it) => (
             <div key={it.seq} className="row spread">
-              <span>
+              <span style={{ flex: 1, minWidth: 0 }}>
                 <b>{it.seq}.</b> 原第 {it.number_label || "?"} 题{" "}
                 {it.status && <StatusBadge status={it.status} name={it.status_name ?? undefined} />}
+                {it.source && <div className="muted small clamp">{it.source}</div>}
               </span>
               <span className="row" style={{ gap: 4 }}>
                 {([["correct", "✓"], ["partial", "½"], ["wrong", "✗"]] as const).map(([v, n]) => (
