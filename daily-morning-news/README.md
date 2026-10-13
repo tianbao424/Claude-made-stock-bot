@@ -13,7 +13,7 @@ Claude 定时任务（周一至周五 北京时间 07:36）
   └─ 唤醒固定的「每日股市早报机器人」云端会话（已挂载本仓库），按 ROUTINE_PROMPT.md 执行
        1. WebSearch 收集隔夜美股、A股/港股收盘、宏观数据、情绪指标、机构观点
        2. 写 reports/<日期>/report.json（数据 + 逐句文稿）
-       3. pipeline/make_video.sh：读音检查 → 离线 TTS 配音 → 逐句渲染画面 → ffmpeg 合成（开头拼接 pipeline/assets/intro.mp4 片头，字幕自动后移）
+       3. pipeline/make_video.sh：读音检查 → 离线 TTS 配音 → 逐句渲染画面 → ffmpeg 合成（开头拼接片头、铺背景音乐，字幕自动后移）
        4. 检查拼图、写 script.md（文稿 + 数据来源）
        5. 提交并推送到 daily-morning-news 分支
 ```
@@ -32,6 +32,8 @@ daily-morning-news/
 │   ├── make_video.sh        # report.json → 配音 / 字幕 / 视频
 │   ├── assets/intro.mp4     # 4.5 秒片头（K线 + 走势线 + 标题），自动拼在每期视频开头（INTRO_VIDEO= 可跳过）
 │   ├── make_intro.py        # 生成上面的片头（改文案、配色后重跑一次即可）
+│   ├── assets/bgm.mp3       # 背景音乐：原创法式香颂手风琴华尔兹，循环铺满全片、有人声时自动压低（BGM_AUDIO= 可跳过，BGM_VOL 调音量）
+│   ├── make_bgm.py          # 合成上面的背景音乐（改旋律、和弦、速度后重跑）
 │   ├── lint_say.py          # 朗读文本检查（字母数字残留、多音字）
 │   ├── synth.py             # 逐句 TTS，按句缓存
 │   ├── render.py            # 逐句渲染画面 + 检查用拼图
