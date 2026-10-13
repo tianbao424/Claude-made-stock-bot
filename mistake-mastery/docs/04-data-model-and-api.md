@@ -1,17 +1,20 @@
 # 04 · 数据模型与接口
 
+> 单个家庭、单个 SQLite 文件。没有账号体系，只有一个家庭密码；可以有多个孩子档案。
+
 ---
 
 ## 1. 核心概念
 
 | 概念 | 含义 | 关键区分 |
 |------|------|----------|
-| **题目（Question）** | 题目本身的规范化内容：题干、选项、图、答案、解析、知识点 | **不含任何个人信息**，可以跨用户去重和缓存。来源有三种：拍照录入、AI 变式、题库 |
-| **题目实例（QuestionInstance）** | 某次拍照中这道题在某页上的样子：位置、截图、擦除图、作答区尺寸 | 属于用户；含孩子的笔迹 |
+| **题目（Question）** | 题目本身的规范化内容：题干、选项、图、答案、解析、知识点 | 来源有三种：拍照录入、AI 变式、（以后）导入的真题 |
+| **题目实例（QuestionInstance）** | 某次拍照中这道题在某页上的样子：位置、截图、擦除图、作答区尺寸 | 含孩子的笔迹 |
 | **错题（Mistake）** | "某个孩子 × 某道题"的学习档案：状态、轮次、关卡、调度 | 每个孩子每道题**只有一条**；重复录入时合并 |
-| **作答记录（Attempt）** | 每一次作答的结果：录入时的原始错误、重做、变式、复习、考前打印 | 状态机的唯一输入 |
-| **变式组（VariantSet）** | 为某道错题生成的一组变式题（5 题，或追加的 3 题） | 变式题本身也是 Question（`origin=variant`） |
-| **打印任务（PrintJob）** | 一次打印：模板、筛选条件、题目清单、PDF、版面清单 | 回传扫描靠它定位题目 |
+| **作答记录（Attempt）** | 每一次作答的结果：录入时的原始错误、重做、变式、复习、考前打印 | 状态机的唯一输入，只追加不修改 |
+| **变式组（VariantSet）** | 为某道错题生成的一组变式题（5 题，或追加的 3 题） | 变式题本身也是 Question（`origin='variant'`） |
+| **打印任务（PrintJob）** | 一次打印：模板、筛选条件、题目清单、PDF、版面清单 | 页面二维码指向它的回填页 |
+| **后台任务（Job）** | 识别、擦除、出题、排版等耗时操作 | 进程内队列，存在数据库里，重启后可以续跑 |
 
 ---
 
@@ -19,8 +22,6 @@
 
 ```mermaid
 erDiagram
-    GUARDIAN ||--o{ STUDENT : "监护"
-    GUARDIAN ||--o{ CONSENT : "签署"
     STUDENT ||--o{ EXAM_EVENT : "考试日历"
     STUDENT ||--o{ SOURCE_DOCUMENT : "拍摄"
     SOURCE_DOCUMENT ||--|{ SOURCE_PAGE : "包含"
@@ -30,218 +31,215 @@ erDiagram
     QUESTION ||--o{ MISTAKE : "对应"
     MISTAKE ||--o{ ATTEMPT : "作答"
     MISTAKE ||--o{ VARIANT_SET : "举一反三"
-    VARIANT_SET }o--o{ QUESTION : "包含变式题"
-    QUESTION ||--o{ QUESTION : "parent → variant"
+    VARIANT_SET ||--o{ QUESTION : "包含变式题"
+    QUESTION ||--o{ QUESTION : "母题 → 变式"
     MISTAKE ||--o{ TUTOR_SESSION : "讲解"
     TUTOR_SESSION ||--|{ TUTOR_MESSAGE : "消息"
     STUDENT ||--o{ PRINT_JOB : "打印"
     PRINT_JOB ||--|{ PRINT_JOB_ITEM : "题目清单"
     PRINT_JOB_ITEM }o--|| QUESTION : "引用"
     ATTEMPT }o--o| PRINT_JOB : "来自"
-    QUESTION }o--o{ KNOWLEDGE_POINT : "标注"
+    QUESTION ||--o{ QUESTION_KP : "标注"
+    KNOWLEDGE_POINT ||--o{ QUESTION_KP : "被标注"
     STUDENT ||--o{ KP_MASTERY : "掌握度"
     KNOWLEDGE_POINT ||--o{ KP_MASTERY : "被评估"
 ```
 
 ---
 
-## 3. 表结构（PostgreSQL）
+## 3. 表结构（SQLite）
 
-> 下列 DDL 按领域分组展示，实际建表顺序以 Alembic 迁移为准（如 `kp_mastery` 依赖 §3.5 的 `knowledge_points`）。主键统一用 UUIDv7（按时间有序）。所有表都有 `created_at`、`updated_at`；用户数据表带 `deleted_at`，用于软删除，再由定时任务做物理清除。
+**约定**
+- 主键是 UUIDv7 字符串（按时间有序）；时间是 ISO 8601 字符串；布尔值用 0/1。
+- 标注为 `JSON` 的列以文本存储，用 SQLite 的 JSON 函数查询。
+- 每张表都有 `created_at`；需要修改的表另有 `updated_at`。
+- 建表顺序按依赖关系：`knowledge_points`（§3.5）先于 `question_kps` 和 `kp_mastery`。
 
-### 3.1 账号与档案
+### 3.1 孩子档案与设置
 
 ```sql
-CREATE TABLE guardians (
-    id              uuid PRIMARY KEY,
-    phone_hash      text UNIQUE,            -- 手机号哈希，明文加密后另存
-    phone_enc       bytea,
-    wechat_openid   text UNIQUE,
-    nickname        text,
-    membership      jsonb,                  -- {plan, expires_at}
-    created_at      timestamptz NOT NULL DEFAULT now()
-);
-
 CREATE TABLE students (
-    id              uuid PRIMARY KEY,
-    guardian_id     uuid NOT NULL REFERENCES guardians(id),
-    display_name    text NOT NULL,          -- 昵称即可，不要求真实姓名
-    grade           smallint NOT NULL,      -- 9 = 初三
-    district        text,                   -- 北京区县，如 'haidian'
-    school          text,                   -- 选填
-    textbooks       jsonb NOT NULL,         -- {"math":"rjb","physics":"bsd"}，教材版本编码见 07
-    settings        jsonb NOT NULL DEFAULT '{}', -- 每日时长上限、学生模式等
-    deleted_at      timestamptz
-);
-
-CREATE TABLE consents (                     -- 监护人同意记录，只追加
-    id              uuid PRIMARY KEY,
-    guardian_id     uuid NOT NULL REFERENCES guardians(id),
-    student_id      uuid REFERENCES students(id),
-    policy_version  text NOT NULL,          -- 隐私政策 / 儿童个人信息保护规则版本
-    scopes          text[] NOT NULL,        -- {'basic','ai_processing','training_data'}
-    granted         boolean NOT NULL,
-    created_at      timestamptz NOT NULL DEFAULT now()
+    id            TEXT PRIMARY KEY,
+    name          TEXT NOT NULL,          -- 昵称即可
+    grade         INTEGER NOT NULL,       -- 9 = 初三
+    district      TEXT,                   -- 北京区县，如 'haidian'
+    textbooks     JSON NOT NULL,          -- {"math":"rjb","physics":"bsd"}，编码见 07 §7
+    settings      JSON NOT NULL DEFAULT '{}', -- 每日时长预算、学透参数、家长模式等
+    created_at    TEXT NOT NULL
 );
 
 CREATE TABLE exam_events (
-    id              uuid PRIMARY KEY,
-    student_id      uuid NOT NULL REFERENCES students(id),
-    name            text NOT NULL,          -- '海淀一模'
-    kind            text NOT NULL,          -- midterm|final|mock1|mock2|zhongkao|monthly|other
-    exam_date       date NOT NULL,
-    subjects        text[] NOT NULL,
-    scope_kp_ids    uuid[]                  -- 考试范围（知识点），为空表示全部
+    id            TEXT PRIMARY KEY,
+    student_id    TEXT NOT NULL REFERENCES students(id),
+    name          TEXT NOT NULL,          -- '海淀期末'
+    kind          TEXT NOT NULL,          -- midterm|final|mock1|mock2|zhongkao|monthly|other
+    exam_date     TEXT NOT NULL,
+    subjects      JSON NOT NULL,          -- ["math","physics"]
+    scope_kp_codes JSON                   -- 考试范围（知识点编码），为空表示全部
+);
+
+CREATE TABLE app_settings (               -- 全局设置：家庭密码哈希、各任务使用的模型等
+    key           TEXT PRIMARY KEY,
+    value         JSON NOT NULL
 );
 ```
+
+> 接口密钥优先放在 `.env` 里；设置页填写的密钥加密后存进 `app_settings`。
 
 ### 3.2 采集
 
 ```sql
-CREATE TABLE source_documents (            -- 一份来源卷（可多页）
-    id              uuid PRIMARY KEY,
-    student_id      uuid NOT NULL REFERENCES students(id),
-    subject         text NOT NULL,          -- math|physics
-    source_kind     text NOT NULL,          -- homework|quiz|monthly|midterm|final|mock1|mock2|other
-    title           text,                   -- '2026 海淀区九年级上学期期中'（可由卷头识别）
-    exam_date       date,
-    status          text NOT NULL,          -- uploading|processing|ready|failed
-    deleted_at      timestamptz
+CREATE TABLE source_documents (           -- 一份来源卷（可以有多页）
+    id            TEXT PRIMARY KEY,
+    student_id    TEXT NOT NULL REFERENCES students(id),
+    subject       TEXT NOT NULL,          -- math|physics
+    source_kind   TEXT NOT NULL,          -- homework|quiz|monthly|midterm|final|mock1|mock2|other
+    title         TEXT,                   -- '2026 海淀区九年级上学期期中'
+    exam_date     TEXT,
+    status        TEXT NOT NULL,          -- processing|ready|failed
+    created_at    TEXT NOT NULL
 );
 
 CREATE TABLE source_pages (
-    id              uuid PRIMARY KEY,
-    document_id     uuid NOT NULL REFERENCES source_documents(id),
-    page_no         smallint NOT NULL,
-    original_key    text NOT NULL,          -- OSS 对象键
-    corrected_key   text,
-    erased_key      text,
-    erase_status    text,                   -- pending|done|user_patched|failed
-    paper_size      text,                   -- A4|B4|A3|8K
-    layout          jsonb,                  -- 版面分析原始结果
-    quality         jsonb,                  -- {blur, glare, skew}
+    id            TEXT PRIMARY KEY,
+    document_id   TEXT NOT NULL REFERENCES source_documents(id),
+    page_no       INTEGER NOT NULL,
+    original_path TEXT NOT NULL,          -- data/files/ 下的相对路径
+    corrected_path TEXT,
+    erased_path   TEXT,
+    erase_status  TEXT,                   -- pending|done|patched|failed
+    paper_size    TEXT,                   -- A4|B4|A3|8K
+    layout        JSON,                   -- 切题接口的原始结果
     UNIQUE (document_id, page_no)
 );
 
-CREATE TABLE questions (                    -- 规范化题目，无个人信息
-    id                 uuid PRIMARY KEY,
-    subject            text NOT NULL,
-    origin             text NOT NULL,       -- captured|variant|bank
-    content_hash       text NOT NULL,       -- 规范化题干的哈希，用于去重
-    stem_md            text NOT NULL,       -- Markdown + LaTeX
-    options            jsonb,               -- [{"key":"A","md":"..."}]
-    sub_questions      jsonb,               -- [{"no":"(1)","md":"...","points":3}]
-    figures            jsonb,               -- [{"key":"oss/...","kind":"geometry|circuit|photo|chart","source":"crop|generated"}]
-    answer             jsonb,               -- {"final":"C"} 或按小问给出
-    solution_md        text,
-    answer_source      text NOT NULL,       -- teacher|answer_key|manual|ai_verified|ai_unverified|bank
-    verification       jsonb,               -- 校验记录：各模型解答、sympy 结果、结论
-    question_type      text NOT NULL,       -- choice_single|choice_multi|fill|solve|experiment|reading|calc ...
-    difficulty         smallint,            -- 1–5
-    bj_slot            text,                -- 北京中考题位标签，如 'math.q28.new_definition'
-    kp_ids             uuid[] NOT NULL,     -- 知识点（主知识点放第一个）
-    embedding          vector(1024),        -- 用于去重、同类题检索
-    parent_question_id uuid REFERENCES questions(id),  -- 变式题的母题
-    variant_level      smallint,            -- 1–5，对应变式阶梯
-    gen_meta           jsonb,               -- 模型、提示词版本、生成参数
-    status             text NOT NULL DEFAULT 'active'  -- active|flagged|retired
+CREATE TABLE questions (
+    id                 TEXT PRIMARY KEY,
+    subject            TEXT NOT NULL,
+    origin             TEXT NOT NULL,     -- captured|variant|imported
+    content_hash       TEXT NOT NULL,     -- 规范化题干的哈希，用于去重
+    stem_md            TEXT NOT NULL,     -- Markdown + LaTeX
+    options            JSON,              -- [{"key":"A","md":"..."}]
+    sub_questions      JSON,              -- [{"no":"(1)","md":"...","points":3}]
+    figures            JSON,              -- [{"path":"figures/...png","kind":"geometry|circuit|photo|chart"}]
+    answer             JSON,              -- {"final":"C"} 或按小问给出
+    solution_md        TEXT,
+    answer_source      TEXT NOT NULL,     -- teacher|answer_key|manual|ai_verified|ai_unverified|imported
+    verification       JSON,              -- 校验记录：各模型的解答、sympy 结果、结论
+    question_type      TEXT NOT NULL,     -- choice_single|choice_multi|fill|solve|experiment|reading|calc
+    difficulty         INTEGER,           -- 1–5
+    bj_slot            TEXT,              -- 北京中考题位，如 'math.q28.new_definition'
+    parent_question_id TEXT REFERENCES questions(id),  -- 变式题的母题
+    variant_set_id     TEXT,              -- 所属变式组
+    variant_level      INTEGER,           -- 1–5，对应变式阶梯
+    gen_meta           JSON,              -- 模型、提示词版本、生成参数
+    status             TEXT NOT NULL DEFAULT 'active',  -- active|flagged（被标记有问题）
+    created_at         TEXT NOT NULL
 );
-CREATE INDEX ON questions (content_hash);
-CREATE INDEX ON questions USING gin (kp_ids);
-CREATE INDEX ON questions USING hnsw (embedding vector_cosine_ops);
+CREATE INDEX idx_questions_hash ON questions(content_hash);
 
-CREATE TABLE question_instances (           -- 题目在某页上的实例，属于用户
-    id               uuid PRIMARY KEY,
-    page_id          uuid NOT NULL REFERENCES source_pages(id),
-    question_id      uuid NOT NULL REFERENCES questions(id),
-    number_label     text,                  -- 卷面题号 '27'
-    bbox             jsonb NOT NULL,        -- 在矫正图上的位置
-    crop_key         text,                  -- 原貌截图
-    erased_crop_key  text,                  -- 擦除后截图（错题重做单使用）
-    answer_area_mm   numeric(6,1),          -- 原卷作答区高度（毫米）
-    student_answer   jsonb,                 -- OCR 出的孩子原始作答
-    grading_marks    jsonb                  -- 红笔批改：{"mark":"wrong","score":"3/8"}
+CREATE TABLE question_kps (               -- 题目 × 知识点
+    question_id   TEXT NOT NULL REFERENCES questions(id),
+    kp_code       TEXT NOT NULL REFERENCES knowledge_points(code),
+    is_primary    INTEGER NOT NULL DEFAULT 0,
+    PRIMARY KEY (question_id, kp_code)
+);
+
+CREATE TABLE question_instances (
+    id              TEXT PRIMARY KEY,
+    page_id         TEXT NOT NULL REFERENCES source_pages(id),
+    question_id     TEXT NOT NULL REFERENCES questions(id),
+    number_label    TEXT,                 -- 卷面题号 '27'
+    bbox            JSON NOT NULL,        -- 在矫正图上的位置
+    crop_path       TEXT,                 -- 原貌截图
+    erased_crop_path TEXT,                -- 擦除后的截图（错题重做单使用）
+    answer_area_mm  REAL,                 -- 原卷作答区高度（毫米）
+    student_answer  JSON,                 -- 识别出的孩子原始作答
+    grading_marks   JSON                  -- 红笔批改：{"mark":"wrong","score":"3/8"}
 );
 ```
+
+**去重**：一个家庭的题量很小（一学期几百到一两千道），录入时先按 `content_hash` 精确匹配，再在同学科题目里做文本相似度比较（如 rapidfuzz），相似度高于阈值时提示"可能是同一道题，合并吗？"。不需要向量数据库。
 
 ### 3.3 错题与学习
 
 ```sql
 CREATE TABLE mistakes (
-    id               uuid PRIMARY KEY,
-    student_id       uuid NOT NULL REFERENCES students(id),
-    question_id      uuid NOT NULL REFERENCES questions(id),
-    first_instance_id uuid REFERENCES question_instances(id),
-    status           text NOT NULL,         -- 状态机，见 06 §2
-    round            smallint NOT NULL DEFAULT 1,
-    gates            jsonb NOT NULL DEFAULT '{"original":false,"variant":false,"spaced":false}',
-    error_causes     text[] NOT NULL DEFAULT '{}',   -- 错因编码，见 07
-    wrong_count      smallint NOT NULL DEFAULT 1,
-    leitner_box      smallint NOT NULL DEFAULT 0,
-    next_review_at   date,
-    priority         real,                  -- 调度优先级（每日重算）
-    mastered_at      timestamptz,
-    last_wrong_at    timestamptz NOT NULL,
-    deleted_at       timestamptz,
+    id                TEXT PRIMARY KEY,
+    student_id        TEXT NOT NULL REFERENCES students(id),
+    question_id       TEXT NOT NULL REFERENCES questions(id),
+    first_instance_id TEXT REFERENCES question_instances(id),
+    status            TEXT NOT NULL,      -- 状态机，见 06 §2
+    round             INTEGER NOT NULL DEFAULT 1,
+    gates             JSON NOT NULL DEFAULT '{"original":false,"variant":false,"spaced":false}',
+    error_causes      JSON NOT NULL DEFAULT '[]',   -- 错因编码，见 07 §6.2
+    wrong_count       INTEGER NOT NULL DEFAULT 1,
+    followups         INTEGER NOT NULL DEFAULT 0,   -- 已追加变式的次数
+    variant_passed_at TEXT,
+    next_review_at    TEXT,
+    priority          REAL,               -- 调度优先级（每天重算）
+    mastered_at       TEXT,
+    last_wrong_at     TEXT NOT NULL,
+    created_at        TEXT NOT NULL,
     UNIQUE (student_id, question_id)
 );
-CREATE INDEX ON mistakes (student_id, status);
-CREATE INDEX ON mistakes (student_id, next_review_at);
+CREATE INDEX idx_mistakes_status ON mistakes(student_id, status);
+CREATE INDEX idx_mistakes_review ON mistakes(student_id, next_review_at);
 
-CREATE TABLE attempts (                     -- 只追加，是状态机的事实来源
-    id               uuid PRIMARY KEY,
-    mistake_id       uuid NOT NULL REFERENCES mistakes(id),
-    question_id      uuid NOT NULL REFERENCES questions(id),  -- 原题或变式题
-    round            smallint NOT NULL,
-    context          text NOT NULL,         -- capture|redo|variant|review|exam_pack|daily
-    variant_set_id   uuid,
-    print_job_id     uuid,
-    result           text NOT NULL,         -- correct|wrong|partial|skipped
-    graded_by        text NOT NULL,         -- teacher|self|guardian|ai
-    ai_confidence    real,
-    answer_image_key text,
-    error_cause      text,
-    created_at       timestamptz NOT NULL DEFAULT now()
+CREATE TABLE attempts (                   -- 只追加，是状态机的事实来源
+    id              TEXT PRIMARY KEY,
+    mistake_id      TEXT NOT NULL REFERENCES mistakes(id),
+    question_id     TEXT NOT NULL REFERENCES questions(id),  -- 原题或变式题
+    round           INTEGER NOT NULL,
+    context         TEXT NOT NULL,        -- capture|redo|variant|review|exam_pack|daily
+    variant_set_id  TEXT,
+    print_job_id    TEXT,
+    result          TEXT NOT NULL,        -- correct|wrong|partial|skipped
+    graded_by       TEXT NOT NULL,        -- teacher|guardian|ai
+    error_cause     TEXT,
+    note            TEXT,
+    created_at      TEXT NOT NULL
 );
 
 CREATE TABLE variant_sets (
-    id               uuid PRIMARY KEY,
-    mistake_id       uuid NOT NULL REFERENCES mistakes(id),
-    round            smallint NOT NULL,
-    kind             text NOT NULL,         -- initial(5)|followup(3)
-    target_levels    smallint[] NOT NULL,   -- 追加题针对的阶梯层级
-    status           text NOT NULL,         -- generating|ready|partial|failed|completed
-    question_ids     uuid[] NOT NULL DEFAULT '{}',
-    score            jsonb                  -- {"correct":4,"total":5,"synthesis_ok":true}
+    id              TEXT PRIMARY KEY,
+    mistake_id      TEXT NOT NULL REFERENCES mistakes(id),
+    round           INTEGER NOT NULL,
+    kind            TEXT NOT NULL,        -- initial(5)|followup(3)
+    target_levels   JSON NOT NULL,        -- 追加题针对的阶梯层级
+    status          TEXT NOT NULL,        -- generating|ready|partial|failed|completed
+    score           JSON,                 -- {"correct":4,"total":5,"synthesis_ok":true}
+    created_at      TEXT NOT NULL
 );
 
 CREATE TABLE tutor_sessions (
-    id               uuid PRIMARY KEY,
-    student_id       uuid NOT NULL REFERENCES students(id),
-    mistake_id       uuid REFERENCES mistakes(id),
-    question_id      uuid REFERENCES questions(id),
-    mode             text NOT NULL,         -- guided|diagnose
-    current_step     smallint NOT NULL DEFAULT 1,
-    status           text NOT NULL          -- active|completed|abandoned|low_confidence
+    id              TEXT PRIMARY KEY,
+    student_id      TEXT NOT NULL REFERENCES students(id),
+    mistake_id      TEXT REFERENCES mistakes(id),
+    question_id     TEXT REFERENCES questions(id),
+    mode            TEXT NOT NULL,        -- guided|diagnose|parent（家长模式）
+    current_step    INTEGER NOT NULL DEFAULT 1,
+    status          TEXT NOT NULL,        -- active|completed|abandoned|low_confidence
+    created_at      TEXT NOT NULL
 );
 
 CREATE TABLE tutor_messages (
-    id               uuid PRIMARY KEY,
-    session_id       uuid NOT NULL REFERENCES tutor_sessions(id),
-    role             text NOT NULL,         -- student|assistant|system
-    step             smallint,
-    content_md       text NOT NULL,
-    attachments      jsonb,
-    created_at       timestamptz NOT NULL DEFAULT now()
+    id              TEXT PRIMARY KEY,
+    session_id      TEXT NOT NULL REFERENCES tutor_sessions(id),
+    role            TEXT NOT NULL,        -- student|assistant
+    step            INTEGER,
+    content_md      TEXT NOT NULL,
+    attachments     JSON,
+    created_at      TEXT NOT NULL
 );
 
 CREATE TABLE kp_mastery (
-    student_id       uuid NOT NULL REFERENCES students(id),
-    kp_id            uuid NOT NULL REFERENCES knowledge_points(id),
-    score            real NOT NULL,         -- 0–1，见 06 §6
-    evidence_count   integer NOT NULL,
-    updated_at       timestamptz NOT NULL,
-    PRIMARY KEY (student_id, kp_id)
+    student_id      TEXT NOT NULL REFERENCES students(id),
+    kp_code         TEXT NOT NULL REFERENCES knowledge_points(code),
+    score           REAL NOT NULL,        -- 0–1，见 06 §6
+    evidence_count  INTEGER NOT NULL,
+    updated_at      TEXT NOT NULL,
+    PRIMARY KEY (student_id, kp_code)
 );
 ```
 
@@ -249,64 +247,68 @@ CREATE TABLE kp_mastery (
 
 ```sql
 CREATE TABLE print_jobs (
-    id               uuid PRIMARY KEY,
-    student_id       uuid NOT NULL REFERENCES students(id),
-    template         text NOT NULL,         -- page_restore|redo_sheet|variant_sheet|exam_pack|daily
-    filters          jsonb,                 -- 筛选条件（用于重新打印）
-    layout           jsonb NOT NULL,        -- {paper:'A4',columns:2,answer_space:'original',with_key:true,...}
-    status           text NOT NULL,         -- queued|rendering|ready|failed
-    pdf_key          text,
-    key_pdf_key      text,                  -- 答案页单独的 PDF
-    manifest_key     text,                  -- 版面清单（题目 → 页码、坐标）
-    page_count       smallint,
-    qr_token         text UNIQUE NOT NULL   -- 回传二维码短码，不含个人信息
+    id              TEXT PRIMARY KEY,
+    student_id      TEXT NOT NULL REFERENCES students(id),
+    template        TEXT NOT NULL,        -- page_restore|redo_sheet|variant_sheet|exam_pack|daily
+    filters         JSON,                 -- 筛选条件（用于重新打印）
+    layout          JSON NOT NULL,        -- {paper:'A4',columns:2,answer_space:'original',with_key:true,...}
+    status          TEXT NOT NULL,        -- queued|rendering|ready|failed
+    pdf_path        TEXT,
+    key_pdf_path    TEXT,                 -- 答案页单独的 PDF
+    manifest_path   TEXT,                 -- 版面清单（题目 → 页码、坐标）
+    page_count      INTEGER,
+    created_at      TEXT NOT NULL
 );
 
 CREATE TABLE print_job_items (
-    print_job_id     uuid NOT NULL REFERENCES print_jobs(id),
-    seq              smallint NOT NULL,
-    question_id      uuid NOT NULL REFERENCES questions(id),
-    mistake_id       uuid REFERENCES mistakes(id),
-    page_no          smallint,
-    answer_bbox_mm   jsonb,                 -- 作答区在页面上的坐标（毫米）
+    print_job_id    TEXT NOT NULL REFERENCES print_jobs(id),
+    seq             INTEGER NOT NULL,     -- 打印单上的题号
+    question_id     TEXT NOT NULL REFERENCES questions(id),
+    mistake_id      TEXT REFERENCES mistakes(id),
+    page_no         INTEGER,
+    answer_bbox_mm  JSON,                 -- 作答区在页面上的坐标（毫米）
     PRIMARY KEY (print_job_id, seq)
 );
 ```
 
-### 3.5 字典与运营
+### 3.5 字典、任务与日志
 
 ```sql
-CREATE TABLE knowledge_points (             -- 由 data/curriculum/*.yaml 导入
-    id               uuid PRIMARY KEY,
-    subject          text NOT NULL,
-    code             text UNIQUE NOT NULL,  -- 'M.FUN.QUAD.GRAPH'
-    name             text NOT NULL,
-    parent_id        uuid REFERENCES knowledge_points(id),
-    level            smallint NOT NULL,     -- 1 模块 | 2 主题 | 3 考点
-    bj_weight        real,                  -- 北京中考权重（0–1），用于调度优先级
-    textbook_refs    jsonb                  -- {"rjb":"九上 22.1", "bjb":"..."}
+CREATE TABLE knowledge_points (           -- 启动时从 app/curriculum/*.yaml 同步
+    code            TEXT PRIMARY KEY,     -- 'M.FUN.QUAD.GRAPH'
+    subject         TEXT NOT NULL,
+    name            TEXT NOT NULL,
+    parent_code     TEXT REFERENCES knowledge_points(code),
+    level           INTEGER NOT NULL,     -- 1 模块 | 2 主题 | 3 考点
+    bj_weight       REAL,                 -- 北京中考权重（0–1），用于调度优先级
+    textbook_refs   JSON                  -- {"rjb":"九上 …","bsd":"…"}
 );
 
-CREATE TABLE question_feedback (
-    id               uuid PRIMARY KEY,
-    question_id      uuid NOT NULL REFERENCES questions(id),
-    student_id       uuid REFERENCES students(id),
-    reason           text NOT NULL,         -- wrong_answer|ambiguous|out_of_scope|figure_mismatch|other
-    note             text,
-    status           text NOT NULL          -- open|confirmed|rejected
+CREATE TABLE jobs (                       -- 进程内任务队列
+    id              TEXT PRIMARY KEY,
+    kind            TEXT NOT NULL,        -- capture|erase|variants|render|grade ...
+    payload         JSON NOT NULL,
+    status          TEXT NOT NULL,        -- queued|running|done|failed
+    progress        JSON,                 -- {"stage":"切题","pct":40}
+    result          JSON,
+    error           TEXT,
+    attempts        INTEGER NOT NULL DEFAULT 0,
+    created_at      TEXT NOT NULL,
+    updated_at      TEXT NOT NULL
 );
+CREATE INDEX idx_jobs_status ON jobs(status, created_at);
 
-CREATE TABLE ai_calls (                     -- 审计与计量
-    id               uuid PRIMARY KEY,
-    task             text NOT NULL,         -- classify|solve|verify|variant_gen|tutor|grade ...
-    model            text NOT NULL,
-    prompt_version   text NOT NULL,
-    student_ref      text,                  -- 孩子 ID 的哈希
-    input_tokens     integer, output_tokens integer,
-    cost_cny         numeric(10,5),
-    latency_ms       integer,
-    outcome          text,                  -- ok|schema_retry|failed|blocked
-    created_at       timestamptz NOT NULL DEFAULT now()
+CREATE TABLE ai_calls (                   -- 调试与费用统计
+    id              TEXT PRIMARY KEY,
+    task            TEXT NOT NULL,        -- classify|solve|verify|variant_gen|tutor|grade ...
+    model           TEXT NOT NULL,
+    prompt_version  TEXT NOT NULL,
+    input_tokens    INTEGER,
+    output_tokens   INTEGER,
+    cost_cny        REAL,
+    latency_ms      INTEGER,
+    outcome         TEXT,                 -- ok|schema_retry|failed
+    created_at      TEXT NOT NULL
 );
 ```
 
@@ -332,7 +334,7 @@ CREATE TABLE ai_calls (                     -- 审计与计量
   "student_answer": {"text": "(2) 证明：∵ AB=AC ……", "legible": true},
   "grading_marks": {"mark": "partial", "score": "4/7"},
   "teacher_answer": null,
-  "header_info": {"title": "2026 海淀区九年级第一学期期中", "has_name_field": true}
+  "header_info": {"title": "2026 海淀区九年级第一学期期中"}
 }
 ```
 
@@ -351,66 +353,67 @@ CREATE TABLE ai_calls (                     -- 审计与计量
 
 ---
 
-## 5. 接口设计（REST，`/api/v1`）
+## 5. 接口（REST，`/api`）
 
-鉴权：微信登录或手机号登录后获得 JWT；所有带 `student_id` 的资源都会校验它是否属于当前监护人。长任务一律异步：返回 `job_id`，再通过轮询 `GET /jobs/{id}` 或订阅消息获取结果。
+- **鉴权**：`POST /api/login` 校验家庭密码，写入长期有效的会话 Cookie；其余接口都要求已登录。
+- **长任务**一律异步：返回 `job_id`，前端轮询 `GET /api/jobs/{id}` 显示进度。
+- 当前孩子由请求参数 `student_id` 指定（只有一个孩子时前端自动带上）。
 
-### 5.1 账号与档案
+### 5.1 基础
 
 | 方法 | 路径 | 说明 |
 |------|------|------|
-| POST | `/auth/wechat` · `/auth/sms` | 登录 |
-| POST | `/consents` | 记录监护人同意 |
-| GET/POST/PATCH | `/students` · `/students/{id}` | 孩子档案 |
-| GET/POST/DELETE | `/students/{id}/exams` | 考试日历 |
-| POST | `/students/{id}/export` · `DELETE /students/{id}` | 数据导出、注销删除 |
+| POST | `/api/login` · `/api/logout` | 家庭密码登录 |
+| GET/POST/PATCH | `/api/students` · `/api/students/{id}` | 孩子档案 |
+| GET/POST/DELETE | `/api/students/{id}/exams` | 考试日历 |
+| GET/PATCH | `/api/settings` | 模型选择、接口密钥、学透参数 |
+| GET | `/api/jobs/{id}` | 任务进度：`{status, progress, result}` |
+| POST | `/api/backup` | 导出数据库 + 图片的压缩包 |
 
 ### 5.2 采集
 
 | 方法 | 路径 | 说明 |
 |------|------|------|
-| POST | `/uploads/presign` | 获取 OSS 直传签名 |
-| POST | `/captures` | 提交来源卷：`{student_id, subject, mode: single|page, pages:[{object_key}], source_kind?}` → `job_id` |
-| GET | `/jobs/{id}` | 任务进度：`{stage, progress, result_ref}` |
-| GET | `/documents/{id}/candidates` | 批量确认页数据：识别出的题目及预选状态 |
-| POST | `/documents/{id}/confirm` | 批量确认：`{items:[{instance_id, selected, kp_codes?, error_causes?, answer?}]}` → 生成或合并错题 |
-| PATCH | `/pages/{id}/erase` | 提交修补后的擦除结果（补擦、恢复的蒙版） |
+| POST | `/api/captures` | multipart 上传一份来源卷的多张照片：`subject, mode=single|page, source_kind?, title?` → `job_id` |
+| GET | `/api/documents/{id}/candidates` | 批量确认页数据：识别出的题目和预选状态 |
+| POST | `/api/documents/{id}/confirm` | 批量确认：`{items:[{instance_id, selected, kp_codes?, error_causes?, answer?}]}` → 生成或合并错题 |
+| POST | `/api/pages/{id}/regions` | 手动框选或调整切题结果 |
+| PATCH | `/api/pages/{id}/erase` | 提交修补后的擦除结果（补擦、恢复的蒙版） |
 
 ### 5.3 错题
 
 | 方法 | 路径 | 说明 |
 |------|------|------|
-| GET | `/students/{id}/mistakes` | 列表；筛选参数：`subject, kp, status, cause, min_wrong, source_kind, from, to` |
-| GET | `/mistakes/{id}` | 详情（含旅程时间线） |
-| PATCH | `/mistakes/{id}` | 修改知识点、错因、答案 |
-| POST | `/mistakes/{id}/attempts` | 回填一次作答（单题） |
-| POST | `/attempts:batch` | 按打印任务批量回填：`{print_job_id, results:[{seq, result}]}` |
+| GET | `/api/mistakes` | 列表；筛选参数：`subject, kp, status, cause, min_wrong, source_kind, from, to` |
+| GET | `/api/mistakes/{id}` | 详情（含错题旅程） |
+| PATCH | `/api/mistakes/{id}` | 修改知识点、错因、答案 |
+| POST | `/api/mistakes/{id}/attempts` | 回填一次作答 |
+| POST | `/api/print-jobs/{id}/results` | 按打印单批量回填：`{results:[{seq, result}]}` |
 
 ### 5.4 变式与讲解
 
 | 方法 | 路径 | 说明 |
 |------|------|------|
-| POST | `/mistakes/{id}/variant-sets` | 生成变式组：`{kind: initial|followup}` → `job_id` |
-| GET | `/variant-sets/{id}` | 变式组详情（题目、答案只在请求答案页时返回） |
-| POST | `/questions/{id}/feedback` | 反馈题目有误 |
-| POST | `/tutor/sessions` | 发起讲解：`{mistake_id?}` 或 `{image_key}`（拍新题），`mode: guided|diagnose` |
-| POST | `/tutor/sessions/{id}/messages` | 发送追问或"下一步"；**SSE 流式**返回 |
+| POST | `/api/mistakes/{id}/variant-sets` | 出一组变式：`{kind: initial|followup}` → `job_id` |
+| GET | `/api/variant-sets/{id}` | 变式组详情 |
+| POST | `/api/questions/{id}/flag` | 标记题目有问题（作废并重出） |
+| POST | `/api/tutor/sessions` | 发起讲解：`{mistake_id}`，或上传一张新题照片；`mode: guided|diagnose|parent` |
+| POST | `/api/tutor/sessions/{id}/messages` | 发送追问或"下一步"，**SSE 流式**返回 |
 
 ### 5.5 打印
 
 | 方法 | 路径 | 说明 |
 |------|------|------|
-| POST | `/print-jobs/preview` | 按筛选条件和排版参数预估：题数、页数、时长 |
-| POST | `/print-jobs` | 创建：`{student_id, template, filters | item_ids, layout}` → `job_id` |
-| GET | `/print-jobs/{id}` | 状态与 PDF 下载链接（短时有效的签名 URL） |
-| GET | `/students/{id}/print-jobs` | 打印记录 |
-| POST | `/print-jobs/{id}/returns` | 上传回传照片 → AI 批改任务（P1） |
-| GET | `/p/{qr_token}` | 二维码落地：已登录时跳转到对应打印任务的回填页 |
+| POST | `/api/print-jobs/preview` | 按筛选条件和排版参数预估：题数、页数、时长 |
+| POST | `/api/print-jobs` | 创建：`{template, filters | item_ids, layout}` → `job_id` |
+| GET | `/api/print-jobs/{id}` | 状态和 PDF 下载 |
+| GET | `/api/print-jobs` | 打印记录 |
+| GET | `/p/{print_job_id}` | **页面二维码的落地页**：打开这次打印的回填页（未登录时先输密码） |
 
 ### 5.6 学情
 
 | 方法 | 路径 | 说明 |
 |------|------|------|
-| GET | `/students/{id}/today` | 首页数据：倒计时、今日学透单、待处理计数 |
-| GET | `/students/{id}/dashboard` | 知识点掌握度、错因分布、反复错 TOP |
-| GET | `/students/{id}/reports/weekly?week=2026-W42` | 周报 |
+| GET | `/api/today` | 首页数据：考试倒计时、今日学透单、待处理计数 |
+| GET | `/api/dashboard` | 知识点掌握度、错因分布、反复错 TOP |
+| GET | `/api/weekly?week=2026-W42` | 周小结 |
