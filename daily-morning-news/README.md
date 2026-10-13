@@ -30,7 +30,8 @@ daily-morning-news/
 ├── pipeline/
 │   ├── setup.sh             # 安装依赖 + 下载离线语音模型（~130MB，缓存在 ~/.cache，不提交）
 │   ├── make_video.sh        # report.json → 配音 / 字幕 / 视频
-│   ├── assets/intro.mp4     # 5 秒片头（日出 + 标题，无配音），自动拼在每期视频开头（INTRO_VIDEO= 可跳过）
+│   ├── assets/intro.mp4     # 4.5 秒片头（K线 + 走势线 + 标题），自动拼在每期视频开头（INTRO_VIDEO= 可跳过）
+│   ├── make_intro.py        # 生成上面的片头（改文案、配色后重跑一次即可）
 │   ├── lint_say.py          # 朗读文本检查（字母数字残留、多音字）
 │   ├── synth.py             # 逐句 TTS，按句缓存
 │   ├── render.py            # 逐句渲染画面 + 检查用拼图

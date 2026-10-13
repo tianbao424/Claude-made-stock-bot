@@ -20,11 +20,11 @@ ffmpeg -y -loglevel error -f concat -safe 0 -i "$DIR/build/frames.txt" -i "$DIR/
   -vf "fps=15,format=yuv420p" -tune stillimage "${ENC[@]}" -shortest "$DIR/build/main.mp4"
 ffmpeg -y -loglevel error -i "$DIR/build/narration.wav" -ac 1 -ar 44100 -c:a libmp3lame -b:a 64k "$DIR/narration.mp3"
 if [ -n "$INTRO" ] && [ -f "$INTRO" ]; then
-  # 片头统一成正片规格（1080x1920、15fps、单声道 44.1kHz）后拼接，字幕整体后移片头时长
+  # 片头统一成正片规格（1080x1920、单声道 44.1kHz），统一 30fps 保证片头动画流畅后拼接，字幕整体后移片头时长
   ffmpeg -y -loglevel error -i "$INTRO" -i "$DIR/build/main.mp4" -filter_complex \
-    "[0:v]scale=1080:1920:force_original_aspect_ratio=decrease,pad=1080:1920:(ow-iw)/2:(oh-ih)/2,fps=15,setsar=1,format=yuv420p[iv];\
+    "[0:v]scale=1080:1920:force_original_aspect_ratio=decrease,pad=1080:1920:(ow-iw)/2:(oh-ih)/2,fps=30,setsar=1,format=yuv420p[iv];[1:v]fps=30,setsar=1[mv];\
      [0:a]aformat=sample_rates=44100:channel_layouts=mono[ia];[1:a]aformat=sample_rates=44100:channel_layouts=mono[ma];\
-     [iv][ia][1:v][ma]concat=n=2:v=1:a=1[v][a]" -map "[v]" -map "[a]" "${ENC[@]}" "$OUT"
+     [iv][ia][mv][ma]concat=n=2:v=1:a=1[v][a]" -map "[v]" -map "[a]" "${ENC[@]}" "$OUT"
   OFFSET=$(ffprobe -v error -show_entries format=duration -of csv=p=0 "$INTRO")
   python3 - "$DIR/build/subtitles.srt" "$DIR/subtitles.srt" "$OFFSET" <<'PY'
 import re, sys
