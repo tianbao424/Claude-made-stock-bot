@@ -17,7 +17,8 @@ function dataUrlToFile(url: string, name: string): File {
 
 const TOUR: { to: string; title: string; text: string }[] = [
   { to: "/capture", title: "① 拍照录入", text: "点「用示例照片」，再点上传：矫正、切题、识别、擦除笔迹" },
-  { to: "/", title: "② 确认错题", text: "处理完会自动打开；勾选错题，看擦除前后，改知识点和错因" },
+  { to: "/", title: "② 确认错题", text: "处理完会自动打开；题库里有的题直接带官方答案和出处" },
+  { to: "/bank", title: "📚 题库", text: "一套导入好的期中卷：按题号对上的官方答案、AI 核对出的 ⚠" },
   { to: "/print", title: "⑤ 打印", text: "错题重做单或原卷还原，看生成的 A4 页面" },
   { to: "", title: "⑥ 回填", text: "孩子做完，在打印单页面逐题记 ✓ ✗，状态跟着变" },
   { to: "/mistakes", title: "错题本", text: "每道题的三道关、错题旅程、答案" },

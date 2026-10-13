@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
-import { useNavigate, useParams } from "react-router-dom";
+import { Link, useNavigate, useParams } from "react-router-dom";
 import { ANSWER_SOURCE, api, GRADING, Job, MistakeDetail as Detail, runtime } from "../api";
 import { CauseChips, ConfirmButton, fmtTime, JobProgress, KpPicker, Md, StatusBadge, useCurriculum, useJob } from "../components/common";
 
@@ -60,6 +60,9 @@ export default function MistakeDetail() {
           <span className={`gate ${g.spaced ? "ok" : ""}`}>时间关{g.spaced ? " ✓" : ""}</span>
         </div>
         <div className="muted small">错 {m.wrong_count} 次 · 第 {m.round} 轮{m.next_review_at ? ` · 复习日 ${m.next_review_at}` : ""}</div>
+        {m.bank && (
+          <div className="small">📚 出处：<Link to={`/bank/${m.bank.paper_id}`}>{m.bank.paper_title}</Link> 第 {m.bank.number_label} 题</div>
+        )}
       </div>
 
       <div className="card stack">
@@ -84,13 +87,13 @@ export default function MistakeDetail() {
             <Md text={q.answer?.final || "（暂无）"} />
             {q.solution_md && (
               <details>
-                <summary className="muted small">解答过程{q.answer_source.startsWith("ai") ? "（AI 生成，请核对）" : ""}</summary>
+                <summary className="muted small">{q.answer_source === "official" ? "评分标准 / 解析" : `解答过程${q.answer_source.startsWith("ai") ? "（AI 生成，请核对）" : ""}`}</summary>
                 <Md text={q.solution_md} />
               </details>
             )}
             <div className="row">
               <button className="chip" onClick={() => setEditAnswer(q.answer?.final ?? "")}>修改答案</button>
-              {!["teacher", "manual", "answer_key"].includes(q.answer_source) && (
+              {!["teacher", "manual", "answer_key", "official"].includes(q.answer_source) && (
                 <button className="chip" onClick={() => act(async () => setSolveJob((await api.post<{ job_id: string }>(`/api/mistakes/${m.id}/solve`)).job_id))}>
                   请 AI 重新解答
                 </button>

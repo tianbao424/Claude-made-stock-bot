@@ -5,7 +5,7 @@ from itertools import chain
 from pathlib import Path
 from typing import Callable, Iterator
 
-from sqlalchemy import create_engine, event
+from sqlalchemy import create_engine, event, inspect, text
 from sqlalchemy.engine import Engine
 from sqlalchemy.orm import Session, sessionmaker
 
@@ -40,8 +40,24 @@ def make_engine(db_path: Path) -> Engine:
     return engine
 
 
-def init_schema(engine: Engine) -> None:
+def init_schema(engine: Engine) -> list[str]:
     Base.metadata.create_all(engine)
+    return add_missing_columns(engine)
+
+
+def add_missing_columns(engine: Engine) -> list[str]:
+    """升级后给已有的表补上新加的列（新列一律允许为空）。其他结构变化靠从数据仓库重建索引。"""
+    insp = inspect(engine)
+    added: list[str] = []
+    with engine.begin() as conn:
+        for table in Base.metadata.sorted_tables:
+            have = {c["name"] for c in insp.get_columns(table.name)}
+            for col in table.columns:
+                if col.name not in have:
+                    ddl = col.type.compile(engine.dialect)
+                    conn.execute(text(f'ALTER TABLE "{table.name}" ADD COLUMN "{col.name}" {ddl}'))
+                    added.append(f"{table.name}.{col.name}")
+    return added
 
 
 class Database:

@@ -2,6 +2,8 @@ import { useCallback, useEffect, useState } from "react";
 import { NavLink, Route, Routes, useLocation, useNavigate } from "react-router-dom";
 import { api, Student } from "./api";
 import { StudentContext } from "./components/common";
+import Bank from "./pages/Bank";
+import BankPaper from "./pages/BankPaper";
 import Capture from "./pages/Capture";
 import Confirm from "./pages/Confirm";
 import Home from "./pages/Home";
@@ -98,6 +100,8 @@ export default function App() {
           <Route path="/print" element={<Print />} />
           <Route path="/p/:id" element={<PrintJobPage />} />
           <Route path="/settings" element={<Settings />} />
+          <Route path="/bank" element={<Bank />} />
+          <Route path="/bank/:id" element={<BankPaper />} />
           <Route path="*" element={<Home />} />
         </Routes>
       </div>

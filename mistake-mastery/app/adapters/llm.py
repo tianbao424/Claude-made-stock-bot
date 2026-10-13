@@ -36,6 +36,7 @@ PROVIDERS: dict[str, Provider] = {
 # 型号以各平台控制台为准，见 docs/05-ai-design.md §2。
 DEFAULT_MODELS: dict[str, str] = {
     "recognize": "qwen:qwen3-vl-plus",
+    "bank": "qwen:qwen3-vl-plus",  # 题库导入：印刷卷子的切题和答案页
     "classify": "qwen:qwen-plus",
     "solve": "qwen:qwen3-vl-plus",
     "verify": "doubao:",  # 交叉校验要换一家；v0.2 起使用，填上豆包的模型名

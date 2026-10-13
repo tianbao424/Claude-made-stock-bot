@@ -6,7 +6,7 @@ from pydantic import BaseModel
 from app.api.deps import LOGIN, bad_request, get_ctx, not_found
 from app.context import AppContext
 from app.models import Attempt, Mistake, Question, QuestionInstance, QuestionKp, SourceDocument, SourcePage
-from app.services import mastery
+from app.services import bank, mastery
 
 router = APIRouter(prefix="/api", dependencies=LOGIN)
 
@@ -35,6 +35,7 @@ def _summary(s, ctx: AppContext, m: Mistake, q: Question) -> dict:  # noqa: ANN0
         "document": {"id": doc.id, "title": doc.title, "source_kind": doc.source_kind,
                      "exam_date": doc.exam_date} if doc else None,
         "last_wrong_at": m.last_wrong_at, "created_at": m.created_at, "next_review_at": m.next_review_at,
+        "bank": bank.match_info(s, q),
     }
 
 
@@ -152,8 +153,8 @@ def resolve(mistake_id: str, ctx: AppContext = Depends(get_ctx)) -> dict:
         if m is None:
             raise not_found("错题")
         q = s.get(Question, m.question_id)
-        if q.answer_source in ("teacher", "manual", "answer_key"):
-            raise bad_request("这道题已有老师或家长给的答案")
+        if q.answer_source in ("teacher", "manual", "answer_key", "official"):
+            raise bad_request("这道题已有官方、老师或家长给的答案")
         q.answer_source = "none"
         qid = q.id
     return {"job_id": ctx.jobs.submit("solve", {"question_id": qid})}

@@ -1,7 +1,7 @@
 // 预览版的"后端"：在浏览器里用示例数据模拟 /api/* 接口。
 // 示例数据由 web/demo/make_fixtures.py 用真实后端生成（AI 部分是固定的模拟结果），
 // 这里只负责记住页面上的操作，并按 v0.1 的规则更新错题状态。
-import type { Candidate, Curriculum, Doc, MistakeDetail, PrintJobInfo, Student, SyncStatus } from "../api";
+import type { BankPaperInfo, BankQuestion, Candidate, Curriculum, Doc, MistakeDetail, PrintJobInfo, Student, SyncStatus } from "../api";
 
 interface Exam {
   id: string;
@@ -26,6 +26,7 @@ export interface Fixtures {
     print_jobs: PrintJobInfo[];
     settings: { models: Record<string, string>; eraser: string } & Record<string, unknown>;
     sync: SyncStatus;
+    bank: Record<string, BankPaperInfo>;
   };
   curriculum: Record<string, Curriculum>;
   math_after_confirm: Record<string, MistakeDetail>;
@@ -75,6 +76,7 @@ export class MockServer {
   private printPages: Record<string, string[]> = {};
   private jobs: Record<string, FakeJob> = {};
   private settings!: Fixtures["initial"]["settings"];
+  private bank: Record<string, BankPaperInfo> = {};
   private sync!: SyncStatus;
   private syncTimer: number | undefined;
 
@@ -97,11 +99,14 @@ export class MockServer {
     this.jobs = {};
     this.settings = ini.settings;
     this.sync = ini.sync;
+    this.bank = ini.bank ?? {};
   }
 
   // ------------------------------------------------------------ 图片和 PDF
 
   fileUrl(path: string): string {
+    const bq = path.match(/^\/api\/bank\/questions\/([^/]+)\/image/);
+    if (bq) return this.fx.images[`bankq:${bq[1]}`] ?? "";
     const m = path.match(/^\/api\/(instances|pages)\/([^/]+)\/image\?(.*)$/);
     if (!m) return path;
     const kind = new URLSearchParams(m[3]).get("kind") ?? "erased";
@@ -214,13 +219,22 @@ export class MockServer {
       bj_slot: q.bj_slot, difficulty: q.difficulty, kp_codes: kp, kp_names: this.kpNames(doc.subject, kp),
       instance_id: it.instance_id, number_label: it.number_label,
       document: { id: doc.id, title: doc.title, source_kind: doc.source_kind, exam_date: doc.exam_date },
-      last_wrong_at: t, created_at: t, next_review_at: null,
+      last_wrong_at: t, created_at: t, next_review_at: null, bank: it.bank ?? null,
       question: { id: q.id, stem_md: q.stem_md, options: q.options, sub_questions: q.sub_questions, answer: q.answer,
         solution_md: null, answer_source: q.answer_source, verification: null },
       instances: [{ id: it.instance_id, page_id: doc.pages![0].id, number_label: it.number_label,
         student_answer: it.student_answer, grading: it.grading, score: it.score }],
       attempts: [{ id: uid(), round: 1, context: "capture", result: it.grading === "partial" ? "partial" : "wrong",
         graded_by: "teacher", error_cause: causes[0] ?? null, note: null, created_at: t }],
+    };
+  }
+
+  private bankStats(paper: BankPaperInfo) {
+    const qs: BankQuestion[] = paper.questions ?? [];
+    paper.stats = {
+      ...paper.stats,
+      official: qs.filter((x) => ["official", "manual"].includes(x.answer_source)).length,
+      to_review: qs.filter((x) => x.needs_review).length,
     };
   }
 
@@ -379,6 +393,10 @@ export class MockServer {
         it.status = "confirmed";
         const ready = this.fx.math_after_confirm[it.instance_id];
         const mk = ready ? clone(ready) : this.fromCandidate(doc, it, choice);
+        if (!it.bank && mk.bank) {
+          mk.bank = null;
+          mk.answer_source = mk.question.answer_source = "ai_unverified";
+        }
         mk.id = uid();
         mk.created_at = mk.last_wrong_at = now();
         if (choice.kp_codes?.length) {
@@ -402,6 +420,64 @@ export class MockServer {
     }
     if (route(/^\/api\/pages\/[^/]+\/regions$/)) {
       throw new HttpError(400, "预览版不能手动框题。正式版里在这里拖出题目范围，就会新增一道题。");
+    }
+
+    // 题库（预览版不能上传新卷子，里面放了一套事先导入好的示例卷子）
+    if (p === "/api/bank/papers" && method === "POST") {
+      throw new HttpError(400, "预览版不能上传导入。题库里已经放了一套用真实流程导入的示例卷子，可以点开看看；正式版在这里上传 PDF，每页约半分钟。");
+    }
+    if (p === "/api/bank/papers") {
+      const subject = q.get("subject");
+      return Object.values(this.bank).filter((x) => !subject || x.subject === subject)
+        .map(({ questions: _q, ...rest }) => rest);
+    }
+    if ((m = route(/^\/api\/bank\/papers\/([^/]+)(\/verify|\/reimport)?$/))) {
+      const paper = this.bank[m[1]];
+      if (!paper) throw new HttpError(404, "找不到这套卷子");
+      if (m[2]) throw new HttpError(400, "预览版不能重新识别或核对。");
+      if (method === "DELETE") {
+        delete this.bank[paper.id];
+        this.touch();
+        return { ok: true };
+      }
+      return paper;
+    }
+    if ((m = route(/^\/api\/bank\/questions\/([^/]+)$/)) && method === "PATCH") {
+      const paper = Object.values(this.bank).find((x) => x.questions?.some((y) => y.id === m![1]));
+      const bq = paper?.questions?.find((y) => y.id === m![1]);
+      if (!paper || !bq) throw new HttpError(404, "找不到题目");
+      if (typeof b.answer === "string") {
+        bq.answer = b.answer.trim() ? { final: b.answer.trim() } : null;
+        bq.answer_source = b.answer.trim() ? "manual" : "none";
+      }
+      if (b.reviewed !== undefined || typeof b.answer === "string") {
+        bq.verification = { ...(bq.verification ?? {}), reviewed: true };
+      }
+      bq.needs_review = bq.answer_source === "official" && bq.verification?.agree === false && !bq.verification?.reviewed;
+      this.bankStats(paper);
+      this.touch();
+      return bq;
+    }
+    if ((m = route(/^\/api\/questions\/([^/]+)\/bank-match$/))) {
+      // "不是这道题"：取消匹配，答案交给 AI（预览版直接用事先生成的 AI 答案）
+      const qid = m[1];
+      for (const items of Object.values(this.cands)) {
+        for (const it of items) {
+          if (it.question.id !== qid || !it.bank) continue;
+          it.bank = null;
+          if (it.question.answer_source === "official") {
+            it.question.answer = null;
+            it.question.answer_source = "none";
+          }
+        }
+      }
+      for (const mk of this.mistakes) {
+        if (mk.question.id !== qid) continue;
+        mk.bank = null;
+        if (mk.answer_source === "official") mk.answer_source = mk.question.answer_source = "ai_unverified";
+      }
+      this.touch();
+      return { ok: true, solving: false };
     }
 
     // 错题

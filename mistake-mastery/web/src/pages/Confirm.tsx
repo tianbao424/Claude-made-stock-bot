@@ -114,6 +114,15 @@ export default function Confirm() {
     return () => window.clearInterval(t);
   }, [doc?.status, load]);
 
+  const rejectMatch = async (qid: string) => {
+    setError("");
+    try {
+      await api.post(`/api/questions/${qid}/bank-match`, { action: "reject" });
+      await load();
+    } catch (err) {
+      setError((err as Error).message);
+    }
+  };
   const set = (iid: string, patch: Partial<Choice>) => setChoices((c) => ({ ...c, [iid]: { ...c[iid], ...patch } }));
   const pending = items.filter((i) => i.status === "candidate");
   const selectedCount = pending.filter((i) => choices[i.instance_id]?.selected).length;
@@ -194,6 +203,12 @@ export default function Confirm() {
               src={runtime.fileUrl(`/api/instances/${it.instance_id}/image?kind=${orig ? "original" : "erased"}`)}
               onClick={() => setShowOriginal((s) => ({ ...s, [it.instance_id]: !orig }))} />
             <div className="muted small">点图片切换{orig ? "擦除后" : "原图"}</div>
+            {it.bank && (
+              <div className="row small" style={{ marginTop: 6 }}>
+                <span>📚 题库里有这道题：<Link to={`/bank/${it.bank.paper_id}`}>{it.bank.paper_title}</Link> 第 {it.bank.number_label} 题</span>
+                <button className="chip" onClick={() => rejectMatch(it.question.id)}>不是这道题</button>
+              </div>
+            )}
             {it.question.stem_md && (
               <details style={{ marginTop: 6 }}>
                 <summary className="muted small">识别出的题目文字</summary>

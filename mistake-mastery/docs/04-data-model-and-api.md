@@ -274,6 +274,38 @@ CREATE TABLE print_job_items (
 );
 ```
 
+### 3.4a 题库
+
+详见 [10 §4](10-question-bank.md)。题目内容放在 `questions`（`origin = 'bank'`），位置单独一张表：
+
+```sql
+CREATE TABLE bank_papers (                -- 一套卷子；原卷和答案文件在 files/bank/<id>/
+    id              TEXT PRIMARY KEY,
+    subject         TEXT NOT NULL,
+    title           TEXT NOT NULL,        -- '2025 海淀一模 · 数学'
+    year            INTEGER,
+    region          TEXT,                 -- beijing（全市）或区的代码
+    exam_kind       TEXT NOT NULL,        -- zhongkao|yimo|ermo|midterm|final|monthly|other
+    files           JSON NOT NULL,        -- [{"role":"paper|answer","kind":"pdf|image","path":…,"name":…,"pages":3}]
+    pages           JSON NOT NULL,        -- [{"n":1,"file":0,"index":0,"role":"paper","kind":"questions|answers|other"}]
+    status          TEXT NOT NULL,        -- processing|ready|failed
+    error           TEXT,
+    stats           JSON,                 -- 题数、官方答案数、待核对数、答案对不上题号的列表……
+    created_at      TEXT NOT NULL
+);
+
+CREATE TABLE bank_items (                 -- 一道题库题在原卷上的位置
+    question_id     TEXT PRIMARY KEY REFERENCES questions(id),
+    paper_id        TEXT NOT NULL REFERENCES bank_papers(id),
+    seq             INTEGER NOT NULL,
+    number_label    TEXT NOT NULL,
+    regions         JSON NOT NULL,        -- [{"page":1,"bbox":[x0,y0,x1,y1]}]，0–1000 归一化；跨页时多段
+    points          TEXT                  -- 卷面分值 '2分'
+);
+-- questions 加一列 bank_match JSON：录入的题对上了哪道题库题 {"question_id","score","status":"auto|rejected",…}
+-- questions.answer_source 增加取值 official（官方答案及评分标准）
+```
+
 ### 3.5 字典、任务与日志
 
 ```sql
@@ -416,6 +448,10 @@ CREATE TABLE ai_calls (                   -- 【仅本地】调试、费用统�
 | GET | `/api/print-jobs/{id}` | 状态和 PDF 下载 |
 | GET | `/api/print-jobs` | 打印记录 |
 | GET | `/p/{print_job_id}` | **页面二维码的落地页**：打开这次打印的回填页（未登录时先输密码） |
+
+### 5.5a 题库
+
+见 [10 §5](10-question-bank.md)：`/api/bank/papers`（列表、上传、详情、删除、重新识别、继续核对）、`/api/bank/questions/{id}`（改答案、标记已核对）、`/api/questions/{id}/bank-match`（取消录入时的自动匹配）。
 
 ### 5.6 学情
 

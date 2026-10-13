@@ -9,10 +9,14 @@ from typing import TYPE_CHECKING
 import numpy as np
 
 from app.adapters import imaging
-from app.models import QuestionInstance, SourcePage
+from app.models import Question, QuestionInstance, QuestionKp, SourcePage
 
 if TYPE_CHECKING:
+    from sqlalchemy.orm import Session
+
     from app.context import AppContext
+
+VALID_TYPES = {"choice_single", "choice_multi", "fill", "solve", "experiment", "reading", "calc"}
 
 _PUNCT = re.compile(r"[\s，。、；：？！,.;:?!“”\"'（）()\[\]【】{}<>《》$\\]+")
 
@@ -62,3 +66,17 @@ def page_image(ctx: "AppContext", page: SourcePage, kind: str) -> np.ndarray:
 
 def instance_crop(ctx: "AppContext", inst: QuestionInstance, page: SourcePage, kind: str) -> np.ndarray:
     return imaging.crop(page_image(ctx, page, kind), inst.bbox)
+
+
+def apply_classification(ctx: "AppContext", s: "Session", q: Question, item: dict) -> None:
+    """写入模型给的知识点、题位和难度（只填还空着的：家长改过或从题库带来的不覆盖）。"""
+    subject = q.subject
+    codes = [c for c in item.get("kp_codes") or [] if c in ctx.curriculum.kps
+             and ctx.curriculum.kps[c].subject == subject][:3]
+    if codes and not s.query(QuestionKp).filter_by(question_id=q.id).first():
+        for n, code in enumerate(dict.fromkeys(codes)):
+            s.add(QuestionKp(question_id=q.id, kp_code=code, is_primary=int(n == 0)))
+    if not q.bj_slot and item.get("bj_slot") in {x["code"] for x in ctx.curriculum.slots_for(subject)}:
+        q.bj_slot = item["bj_slot"]
+    if not q.difficulty and isinstance(item.get("difficulty"), int) and 1 <= item["difficulty"] <= 5:
+        q.difficulty = item["difficulty"]

@@ -13,14 +13,14 @@ from app.jobs import JobHandle
 from app.models import (Attempt, Mistake, Question, QuestionInstance, QuestionKp, SourceDocument, SourcePage,
                         Student)
 from app.services import mastery, prompts
-from app.services.questions import bbox_to_pixels, content_hash, corrected_image, instance_crop
+from app.services import bank
+from app.services.questions import (VALID_TYPES, apply_classification, bbox_to_pixels, content_hash, corrected_image,
+                                    instance_crop)
 
 if TYPE_CHECKING:
     from app.context import AppContext
 
 log = logging.getLogger(__name__)
-
-VALID_TYPES = {"choice_single", "choice_multi", "fill", "solve", "experiment", "reading", "calc"}
 
 
 # ---------------------------------------------------------------- 上传
@@ -152,6 +152,8 @@ def _recognize(ctx: "AppContext", page_id: str, img, subject: str, mode: str) ->
                 )
                 s.add(question)
                 s.flush()
+                if stem.strip():
+                    bank.attach_match(ctx, s, question)  # 题库里有这道题：带上官方答案和出处
             grading = item.get("grading") if item.get("grading") in ("right", "wrong", "partial", "none") else "none"
             inst = QuestionInstance(
                 page_id=page_id, question_id=question.id, number_label=str(item.get("number_label") or ""),
@@ -205,8 +207,6 @@ def _classify(ctx: "AppContext", subject: str, instance_ids: list[str]) -> None:
         for idx, iid in enumerate(instance_ids):
             inst = s.get(QuestionInstance, iid)
             q = s.get(Question, inst.question_id)
-            if s.query(QuestionKp).filter_by(question_id=q.id).first():
-                continue  # 重复录入的题已经分过类
             rows.append({"id": idx, "number_label": inst.number_label, "type": q.question_type,
                          "stem": (q.stem_md or "")[:600], "options": q.options,
                          "student_answer": (inst.student_answer or {}).get("text"),
@@ -215,7 +215,6 @@ def _classify(ctx: "AppContext", subject: str, instance_ids: list[str]) -> None:
         return
     result = ctx.llm.chat_json("classify", prompts.classify_messages(subject, ctx.curriculum, rows),
                                prompt_version=prompts.CLASSIFY_VERSION)
-    valid_slots = {x["code"] for x in ctx.curriculum.slots_for(subject)}
     valid_causes = {x["code"] for x in ctx.curriculum.causes_for(subject)}
     with ctx.db.session() as s:
         for item in (result or {}).get("items", []):
@@ -225,15 +224,7 @@ def _classify(ctx: "AppContext", subject: str, instance_ids: list[str]) -> None:
                 continue
             inst = s.get(QuestionInstance, iid)
             q = s.get(Question, inst.question_id)
-            codes = [c for c in item.get("kp_codes") or [] if c in ctx.curriculum.kps
-                     and ctx.curriculum.kps[c].subject == subject][:3]
-            if not s.query(QuestionKp).filter_by(question_id=q.id).first():
-                for n, code in enumerate(dict.fromkeys(codes)):
-                    s.add(QuestionKp(question_id=q.id, kp_code=code, is_primary=int(n == 0)))
-            if item.get("bj_slot") in valid_slots:
-                q.bj_slot = item["bj_slot"]
-            if isinstance(item.get("difficulty"), int) and 1 <= item["difficulty"] <= 5:
-                q.difficulty = item["difficulty"]
+            apply_classification(ctx, s, q, item)
             causes = [c for c in item.get("error_causes") or [] if c in valid_causes][:2]
             marks = dict(inst.grading_marks or {})
             marks["cause_suggestions"] = causes

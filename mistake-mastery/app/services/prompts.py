@@ -9,6 +9,7 @@ SUBJECT_NAMES = {"math": "数学", "physics": "物理"}
 RECOGNIZE_VERSION = "recognize-v1"
 CLASSIFY_VERSION = "classify-v1"
 SOLVE_VERSION = "solve-v1"
+BANK_PAGE_VERSION = "bank-page-v1"
 
 SYSTEM_DATA_ONLY = (
     "你是一位细心的北京初中{subject}老师，负责整理学生的试卷。"
@@ -93,4 +94,49 @@ def solve_messages(subject: str, question: dict, image_url: str | None) -> list[
     return [
         {"role": "system", "content": SYSTEM_DATA_ONLY.format(subject=SUBJECT_NAMES[subject])},
         {"role": "user", "content": content},
+    ]
+
+
+BANK_ROLE_HINT = {
+    "paper": "家长说这是试卷部分（但有的 PDF 最后几页附了答案，请按实际内容判断）",
+    "answer": "家长说这是答案及评分标准部分",
+}
+
+
+def bank_page_messages(subject: str, image_url: str, page_text: str, role: str, part: str) -> list[dict]:
+    """题库导入：一页（或 A3 卷的半页）试卷或答案。page_text 是 PDF 的文字层，用来校对。"""
+    hint = BANK_ROLE_HINT.get(role, "")
+    reference = (f"""
+下面是从 PDF 里提取的整页文字，可以用来校对文字和数字（公式、上下标和图可能缺失或错乱，以图片为准；A3 卷只对照图片里的这半页）：
+<<<
+{page_text}
+>>>
+""" if page_text.strip() else "")
+    text = f"""这是一份北京初三{SUBJECT_NAMES[subject]}试卷或答案的{part}，是印刷版（PDF 渲染或扫描），上面没有学生作答。{hint}
+
+先判断这一页是什么：page_kind = questions（试题）| answers（答案、评分标准或解析）| other（封面、注意事项、答题卡、空白页）
+
+如果是 questions，按阅读顺序（双栏时先左栏再右栏）列出每一道题，大题标题（如"一、单项选择题"）不算题：
+- number_label：题号，如 "8"、"27"
+- continued：图片最上面如果是上一页最后一道题的后半部分（没有题号），这一段单独列出并写 true；其余写 false
+- bbox：这道题在图片中的范围 [x0, y0, x1, y1]，坐标归一化到 0–1000，左上角为原点；包括题干、选项、图、各小问，以及留给作答的空白，一直到下一道题开始之前
+- question_type：choice_single | choice_multi | fill | solve | experiment | reading | calc
+- stem_md：题干（Markdown，公式用 $...$ 的 LaTeX）
+- options：选择题的选项 [{{"key":"A","md":"..."}}]；不是选择题为 null
+- sub_questions：小问 [{{"no":"(1)","md":"..."}}]；没有为 null
+- has_figure：题目里是否有图
+- points：卷面标注的这道题的分值，如 "2分"；没有为 null
+
+如果是 answers，按题号列出：
+- number_label：题号；小问的答案归到所属的大题，写大题的题号（如 "27"）
+- final_answer：最终答案（选择题写选项字母；有多个小问的，按 "(1)…；(2)…" 写在一起）
+- solution_md：评分标准或解析（Markdown + $LaTeX$）；只有答案没有过程的写 null
+
+header：卷头上的试卷名称（如 "2025 北京市海淀区九年级第一次模拟"），这一部分没有卷头就写 null。
+{reference}
+只输出 JSON：{{"page_kind": ..., "header": ..., "questions": [...], "answers": [...]}}（不适用的列表写 []）"""
+    return [
+        {"role": "system", "content": SYSTEM_DATA_ONLY.format(subject=SUBJECT_NAMES[subject])},
+        {"role": "user", "content": [{"type": "image_url", "image_url": {"url": image_url}},
+                                     {"type": "text", "text": text}]},
     ]

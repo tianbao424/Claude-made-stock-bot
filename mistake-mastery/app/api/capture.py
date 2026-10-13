@@ -10,7 +10,7 @@ from app.adapters import imaging
 from app.api.deps import LOGIN, bad_request, get_ctx, not_found
 from app.context import AppContext
 from app.models import Question, QuestionInstance, QuestionKp, SourceDocument, SourcePage
-from app.services import capture
+from app.services import bank, capture
 from app.services.questions import content_hash, corrected_image, instance_crop, page_image
 
 router = APIRouter(prefix="/api", dependencies=LOGIN)
@@ -95,6 +95,7 @@ def candidates(document_id: str, ctx: AppContext = Depends(get_ctx)) -> dict:
                 "kp_codes": kps, "grading": marks.get("mark"), "score": marks.get("score"),
                 "cause_suggestions": marks.get("cause_suggestions") or [],
                 "student_answer": (inst.student_answer or {}).get("text"),
+                "bank": bank.match_info(s, q),
             })
         return {"document": _doc_dict(d), "items": items}
 

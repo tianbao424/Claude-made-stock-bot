@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import { api, SyncStatus } from "../api";
 import { ConfirmButton, fmtTime, useStudent } from "../components/common";
 import { SyncChip } from "./Home";
@@ -20,7 +20,7 @@ interface Exam {
   exam_date: string;
 }
 
-const TASK_NAMES: Record<string, string> = { recognize: "识别切题", classify: "知识点分类", solve: "解答", verify: "交叉校验（v0.2）", tutor: "讲解（v0.3）" };
+const TASK_NAMES: Record<string, string> = { recognize: "识别切题", bank: "题库导入（印刷卷切题）", classify: "知识点分类", solve: "解答", verify: "交叉校验（v0.2）", tutor: "讲解（v0.3）" };
 const ERASER_NAMES: Record<string, string> = { local_color: "本地（只擦彩色笔迹）", baidu: "百度", youdao: "有道", textin: "TextIn", none: "不擦除" };
 
 export default function Settings() {
@@ -63,6 +63,14 @@ export default function Settings() {
   return (
     <>
       <div className="topbar"><h1>我的</h1></div>
+
+      <Link to="/bank" className="card row spread" style={{ color: "inherit" }}>
+        <span>
+          <b>📚 题库</b>
+          <span className="muted small" style={{ display: "block" }}>真题、各区一模二模、区统考：录入错题时自动带上官方答案</span>
+        </span>
+        <span className="muted">›</span>
+      </Link>
 
       <div className="card stack">
         <h2>孩子档案</h2>

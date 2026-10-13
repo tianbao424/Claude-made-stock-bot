@@ -132,6 +132,8 @@ class Question(Base):
     gen_meta: Mapped[Optional[dict]] = mapped_column(JSON)
     status: Mapped[str] = mapped_column(String(10), nullable=False, default="active")
     created_at: Mapped[str] = _created()
+    # 录入的题在题库里找到了同一道题：{"question_id", "score", "status": auto|rejected, "prev_answer", "prev_source"}
+    bank_match: Mapped[Optional[dict]] = mapped_column(JSON)
 
 
 class QuestionKp(Base):
@@ -159,6 +161,46 @@ class QuestionInstance(Base):
     status: Mapped[str] = mapped_column(String(12), nullable=False, default="candidate")
     preselected: Mapped[bool] = mapped_column(Integer, nullable=False, default=0)
     created_at: Mapped[str] = _created()
+
+
+# ---------------------------------------------------------------- 题库（真题、各区一模二模、区统考）
+
+
+class BankPaper(Base):
+    """导入题库的一套卷子。原卷和答案文件存在数据仓库的 files/bank/<id>/ 下。"""
+
+    __tablename__ = "bank_papers"
+    __sync__ = "table"
+
+    id: Mapped[str] = _id()
+    subject: Mapped[str] = mapped_column(String(10), nullable=False)
+    title: Mapped[str] = mapped_column(String(100), nullable=False, default="")
+    year: Mapped[Optional[int]] = mapped_column(Integer)
+    region: Mapped[Optional[str]] = mapped_column(String(20))  # beijing（全市统考）或区的代码
+    exam_kind: Mapped[str] = mapped_column(String(20), nullable=False, default="other")
+    # [{"role": "paper"|"answer", "kind": "pdf"|"image", "path": ..., "name": ...}]
+    files: Mapped[list] = mapped_column(JSON, nullable=False, default=list)
+    # [{"n": 1, "file": 0, "index": 0, "role": ..., "kind": questions|answers|other, "transform": ...}]
+    pages: Mapped[list] = mapped_column(JSON, nullable=False, default=list)
+    status: Mapped[str] = mapped_column(String(12), nullable=False, default="processing")
+    error: Mapped[Optional[str]] = mapped_column(Text)
+    stats: Mapped[Optional[dict]] = mapped_column(JSON)
+    created_at: Mapped[str] = _created()
+
+
+class BankItem(Base):
+    """题库里的一道题在原卷上的位置（题目内容在 questions 表，origin = "bank"）。"""
+
+    __tablename__ = "bank_items"
+    __sync__ = "table"
+
+    question_id: Mapped[str] = mapped_column(ForeignKey("questions.id"), primary_key=True)
+    paper_id: Mapped[str] = mapped_column(ForeignKey("bank_papers.id"), nullable=False, index=True)
+    seq: Mapped[int] = mapped_column(Integer, nullable=False)
+    number_label: Mapped[str] = mapped_column(String(20), nullable=False, default="")
+    # 跨页的题有多段：[{"page": 1, "bbox": [x0, y0, x1, y1]}]，坐标按页面 0–1000 归一化
+    regions: Mapped[list] = mapped_column(JSON, nullable=False, default=list)
+    points: Mapped[Optional[str]] = mapped_column(String(20))  # 卷面标注的分值
 
 
 # ---------------------------------------------------------------- 错题与学习

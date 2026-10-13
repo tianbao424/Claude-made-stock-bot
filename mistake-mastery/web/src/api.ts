@@ -119,6 +119,16 @@ export interface Candidate {
   score: string | null;
   cause_suggestions: string[];
   student_answer: string | null;
+  bank: BankMatch | null;
+}
+
+// 录入的题在题库里找到了同一道题
+export interface BankMatch {
+  question_id: string;
+  paper_id: string;
+  paper_title: string;
+  number_label: string;
+  score: number | null;
 }
 
 export interface MistakeSummary {
@@ -143,6 +153,7 @@ export interface MistakeSummary {
   last_wrong_at: string;
   created_at: string;
   next_review_at: string | null;
+  bank: BankMatch | null;
 }
 
 export interface MistakeDetail extends MistakeSummary {
@@ -209,6 +220,7 @@ export function getCurriculum(subject: Subject): Promise<Curriculum> {
 }
 
 export const ANSWER_SOURCE: Record<string, string> = {
+  official: "官方答案",
   teacher: "老师给的答案",
   answer_key: "答案页",
   manual: "家长填写",
@@ -218,3 +230,57 @@ export const ANSWER_SOURCE: Record<string, string> = {
 };
 
 export const GRADING: Record<string, string> = { wrong: "✗ 判错", partial: "½ 半对", right: "✓ 判对", none: "无批改" };
+
+// ---------------------------------------------------------------- 题库
+
+export const EXAM_KINDS: [string, string][] = [
+  ["zhongkao", "中考"], ["yimo", "一模"], ["ermo", "二模"], ["midterm", "期中"], ["final", "期末"],
+  ["monthly", "月考"], ["other", "其他"],
+];
+
+export interface BankPaperInfo {
+  id: string;
+  subject: Subject;
+  title: string;
+  year: number | null;
+  region: string | null;
+  exam_kind: string;
+  exam_kind_name: string;
+  status: "processing" | "ready" | "failed";
+  error: string | null;
+  stats: {
+    questions?: number;
+    official?: number;
+    ai_only?: number;
+    no_answer?: number;
+    unchecked?: number;
+    to_review?: number;
+    verify_paused?: boolean;
+    unmatched_answers?: string[];
+    matched_captured?: number;
+  };
+  created_at: string;
+  files: { role: string; kind: string; name: string | null; pages: number }[];
+  pages: { n: number; role: string; kind: string | null }[];
+  questions?: BankQuestion[];
+}
+
+export interface BankQuestion {
+  id: string;
+  seq: number;
+  number_label: string;
+  points: string | null;
+  pages: number[];
+  type: string;
+  stem_md: string;
+  options: Option[] | null;
+  sub_questions: SubQ[] | null;
+  answer: { final?: string } | null;
+  solution_md: string | null;
+  answer_source: string;
+  verification: { ai_answer?: string; ai_solution_md?: string; agree?: boolean | null; reviewed?: boolean } | null;
+  needs_review: boolean;
+  kp_codes: string[];
+  bj_slot: string | null;
+  difficulty: number | null;
+}

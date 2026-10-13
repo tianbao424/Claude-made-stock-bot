@@ -156,7 +156,9 @@ PHYSICS = {
 CLASSIFY = {
     "math": {"1": (["M.FUN.QUAD.GRAPH"], "math.q8.choice_final", 2, ["CONCEPT"]),
              "2": (["M.GEO.TRI.CONG", "M.GEO.TRI.ISO"], "math.basic_calc", 3, ["RIGOR"]),
-             "3": (["M.NUM.RAD.OPS"], "math.basic_calc", 1, [])},
+             "3": (["M.NUM.RAD.OPS"], "math.basic_calc", 1, []),
+             "4": (["M.EQ.QUAD.SOLVE", "M.GEO.TRI.ISO"], "math.basic_calc", 3, []),
+             "5": (["M.GEO.CIRCLE.ANGLE"], "math.q24.circle", 2, [])},
     "physics": {"1": (["P.ELEC.POWER.JOULE"], "physics.single_choice", 1, ["CONCEPT"]),
                 "2": (["P.ELEC.OHM.DYNAMIC", "P.ELEC.UIR.METER"], "physics.experiment", 3, ["P_CIRCUIT"]),
                 "3": (["P.ELEC.POWER.CALC"], "physics.calc", 2, [])},
@@ -167,11 +169,102 @@ SOLVE = {
     "滑动变阻器": ("变小；变小",
                  "R₁ 与 R₂ 串联，电压表测 R₁ 两端电压。滑片向右移动，R₂ 接入电阻变大，总电阻变大，"
                  "由 $I=U/R$ 知电流变小；R₁ 两端电压 $U_1=IR_1$ 变小。"),
+    "求证": ("$\\triangle ABD\\cong\\triangle ACE$（SAS），所以 $AD=AE$",
+             "$\\because AB=AC$，$\\therefore \\angle B=\\angle C$。又 $BD=CE$，"
+             "$\\therefore \\triangle ABD\\cong\\triangle ACE$（SAS），$\\therefore AD=AE$。"),
+    "方程的根": ("(1) $x_1=1$，$x_2=3$；(2) 7",
+              "(1) $(x-1)(x-3)=0$。(2) 腰为 3、底为 1 时周长为 7；腰为 1 时 $1+1<3$，构不成三角形。"),
+    "直径": ("$30°$", "$\\because AB$ 是直径，$\\therefore \\angle ACB=90°$……（这里 AI 把两个角弄混了）"),
     "计算：": ("$\\sqrt{3}$", "$\\sqrt{12}=2\\sqrt{3}$，所以 $2\\sqrt{3}-\\sqrt{3}=\\sqrt{3}$。"),
 }
 
 
+# ---------------------------------------------------------------- 题库示例：同一份期中卷的印刷版 PDF 和答案
+
+BANK_TITLE = "2026 海淀区九年级第一学期期中练习 · 数学"
+BANK_Q4 = {"number_label": "4", "question_type": "solve", "stem_md": "已知关于 $x$ 的方程 $x^2-4x+3=0$。",
+           "sub_questions": [{"no": "(1)", "md": "求方程的根；"}], "points": "6分"}
+BANK_Q4_CONT = {"number_label": "", "continued": True, "question_type": "solve", "stem_md": "",
+                "sub_questions": [{"no": "(2)", "md": "若方程的两根分别是等腰三角形的两边长，求这个三角形的周长。"}]}
+BANK_Q5 = {"number_label": "5", "question_type": "solve", "has_figure": True, "points": "5分",
+           "stem_md": "如图，$AB$ 是 $\\odot O$ 的直径，点 $C$ 在 $\\odot O$ 上，$\\angle ABC=30°$，求 $\\angle BAC$ 的度数。"}
+
+
+def bank_pdfs() -> tuple[bytes, bytes]:
+    """印刷版：带文字层的 A4 PDF（像 Word 导出的那样），第 4 题跨页；答案单独一个 PDF。"""
+    doc = fitz.open()
+
+    def t(page, x: float, y: float, s: str, size: float = 11) -> None:  # noqa: ANN001
+        page.insert_text((x, y), s, fontname="china-s", fontsize=size)
+
+    p1 = doc.new_page(width=595, height=842)
+    t(p1, 130, 50, BANK_TITLE, 14)
+    t(p1, 40, 85, "一、选择题（每题 2 分）", 12)
+    t(p1, 40, 110, "1. 已知二次函数 y = x² - 2x，下列说法正确的是（　）")
+    for i, o in enumerate(["A. 图象开口向下", "B. 对称轴是直线 x = 1", "C. 顶点坐标是 (1, 1)", "D. 与 y 轴交点为 (0, 2)"]):
+        t(p1, 60, 135 + 20 * i, o)
+    t(p1, 40, 240, "二、解答题", 12)
+    t(p1, 40, 262, "2. 如图，在△ABC 中，AB = AC，点 D、E 在 BC 上，且 BD = CE。")
+    t(p1, 58, 282, "求证：AD = AE。（5 分）")
+    a, b, c = (470, 300), (410, 400), (530, 400)
+    p1.draw_polyline([a, b, c, a], width=1)
+    for label, (x, y) in {"A": (466, 296), "B": (398, 412), "C": (532, 412)}.items():
+        t(p1, x, y, label, 10)
+    t(p1, 40, 445, "3. 计算：√12 - √3 = ______（2 分）")
+    t(p1, 40, 495, "4. 已知关于 x 的方程 x² - 4x + 3 = 0。（6 分）")
+    t(p1, 58, 520, "(1) 求方程的根；")
+    p2 = doc.new_page(width=595, height=842)
+    t(p2, 58, 60, "(2) 若方程的两根分别是等腰三角形的两边长，求这个三角形的周长。")
+    t(p2, 40, 150, "5. 如图，AB 是⊙O 的直径，点 C 在⊙O 上，∠ABC = 30°，")
+    t(p2, 58, 170, "求∠BAC 的度数。（5 分）")
+    p2.draw_circle((470, 250), 60, width=1)
+    p2.draw_polyline([(410, 250), (530, 250), (440, 302), (410, 250)], width=1)
+    for label, (x, y) in {"A": (398, 254), "B": (534, 254), "C": (434, 316), "O": (466, 246)}.items():
+        t(p2, x, y, label, 10)
+    paper = doc.tobytes()
+
+    ans = fitz.open()
+    pa = ans.new_page(width=595, height=842)
+    t(pa, 100, 50, BANK_TITLE + " 参考答案及评分标准", 12)
+    for i, line in enumerate(["1. B", "2. 证明：∵ AB = AC，∴ ∠B = ∠C。又 BD = CE，∴ △ABD ≌ △ACE（SAS），∴ AD = AE。",
+                              "3. √3", "4. (1) x₁ = 1，x₂ = 3（3 分）  (2) 7（3 分）", "5. 60°"]):
+        t(pa, 40, 90 + 26 * i, line, 10)
+    return paper, ans.tobytes()
+
+
+def _bank_page(text: str) -> dict:
+    """按 PDF 文字层判断是哪一页（坐标按上面的排版算好）。"""
+    if "参考答案" in text:
+        return {"page_kind": "answers", "questions": [], "answers": [
+            {"number_label": "1", "final_answer": "B", "solution_md": None},
+            {"number_label": "2", "final_answer": "见解析",
+             "solution_md": "$\\because AB=AC$，$\\therefore \\angle B=\\angle C$（2 分）。又 $BD=CE$，"
+                            "$\\therefore \\triangle ABD\\cong\\triangle ACE$（SAS）（4 分），$\\therefore AD=AE$（5 分）。"},
+            {"number_label": "3", "final_answer": "$\\sqrt{3}$", "solution_md": None},
+            {"number_label": "4", "final_answer": "(1) $x_1=1$，$x_2=3$；(2) 7",
+             "solution_md": "(1) 因式分解得 $(x-1)(x-3)=0$（3 分）；(2) 腰为 3、底为 1，周长为 7（3 分）。"},
+            {"number_label": "5", "final_answer": "$60°$",
+             "solution_md": "$\\because AB$ 是直径，$\\therefore \\angle ACB=90°$（2 分），"
+                            "$\\therefore \\angle BAC=90°-30°=60°$（5 分）。"},
+        ]}
+    if "两根分别" in text:
+        return {"page_kind": "questions", "questions": [
+            {**BANK_Q4_CONT, "bbox": [40, 40, 960, 130]},
+            {**BANK_Q5, "bbox": [40, 150, 960, 500]},
+        ], "answers": []}
+    q1, q2, q3 = MATH["questions"]
+    return {"page_kind": "questions", "header": BANK_TITLE, "questions": [
+        {**q1, "bbox": [40, 108, 960, 265], "points": "2分"},
+        {**q2, "bbox": [40, 290, 960, 500], "points": "5分"},
+        {**q3, "bbox": [40, 505, 960, 560], "points": "2分"},
+        {**BANK_Q4, "bbox": [40, 565, 960, 995]},
+    ], "answers": []}
+
+
 def fake_llm(task: str, messages: list[dict]):
+    if task == "bank":
+        prompt = messages[-1]["content"][1]["text"]
+        return _bank_page(prompt.split("<<<")[1].split(">>>")[0] if "<<<" in prompt else "")
     text = json.dumps(messages, ensure_ascii=False)
     physics = "初三物理" in text or "初中物理" in text
     if task == "recognize":
@@ -249,6 +342,14 @@ def main() -> None:
                                              "layout": {"with_key": True}}).json()["print_job_id"]
         c.post(f"/api/print-jobs/{pj}/results", json={"results": [{"seq": 1, "result": "correct"}]})
         fx["pdf"][pj] = pdf_pages(c.get(f"/api/print-jobs/{pj}/pdf").content)
+        # 题库：先导入同一份期中卷的印刷版和答案（拍照录入时就能对上，带官方答案）
+        bank_paper, bank_answer = bank_pdfs()
+        r = c.post("/api/bank/papers", data={"subject": "math", "year": "2026", "region": "haidian",
+                                             "exam_kind": "midterm", "title": "2026 海淀期中 · 数学"},
+                   files=[("paper_files", ("海淀期中-数学.pdf", bank_paper, "application/pdf")),
+                          ("answer_files", ("海淀期中-数学-答案.pdf", bank_answer, "application/pdf"))]).json()
+        assert c.get(f"/api/jobs/{r['job_id']}").json()["status"] == "done"
+        bank_id = r["paper_id"]
         math_raw = math_page()
         fx["images"]["photo:math"] = jpeg_url(math_raw, 1200, 75)  # 预览版"用示例照片"上传的就是它
         math = upload("math", "midterm", math_raw)
@@ -265,9 +366,12 @@ def main() -> None:
             "mistakes": [c.get(f"/api/mistakes/{m['id']}").json() for m in c.get(f"/api/mistakes?student_id={sid}").json()],
             "print_jobs": [c.get(f"/api/print-jobs/{pj}").json()],
             "settings": c.get("/api/settings").json(),
+            "bank": {bank_id: c.get(f"/api/bank/papers/{bank_id}").json()},
             "sync": c.get("/api/sync/status").json(),
         }
         fx["curriculum"] = {s: c.get(f"/api/curriculum/{s}").json() for s in ("math", "physics")}
+        for q in fx["initial"]["bank"][bank_id]["questions"]:
+            fx["images"][f"bankq:{q['id']}"] = jpeg_url(c.get(f"/api/bank/questions/{q['id']}/image").content, 1000, 72)
         for d in (math, phys):
             for p in fx["initial"]["documents"][d]["pages"]:
                 for kind in ("corrected", "erased"):

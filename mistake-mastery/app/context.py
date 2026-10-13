@@ -14,6 +14,7 @@ from app.config import Settings
 from app.db import Database, ensure_data_dir
 from app.jobs import JobRunner
 from app.models import SYNCED_MODELS, AppSetting, KnowledgePoint
+from app.services.bank import BankIndex
 from app.services.sync import TABLES_DIR, SyncManager, import_all
 from app.storage import Storage
 
@@ -38,6 +39,7 @@ class AppContext:
         self.jobs.ctx = self
         self.sync = SyncManager(settings, self.db)
         self._eraser_override: Eraser | None = None
+        self.bank_index = BankIndex()  # 录入时匹配题库用
         self.restored = self._restore_if_empty()
         self.db.on_change = self.sync.touch
 

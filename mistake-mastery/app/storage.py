@@ -1,5 +1,6 @@
 """数据目录里的文件：进 git 的图片在 files/，本地缓存和 PDF 在 .local/。"""
 
+import shutil
 from datetime import datetime
 from pathlib import Path
 
@@ -17,6 +18,15 @@ class Storage:
     def page_dir(self, page_id: str, when: datetime | None = None) -> str:
         when = when or datetime.now()
         return f"files/pages/{when:%Y/%m}/{page_id}"
+
+    def bank_dir(self, paper_id: str) -> str:
+        return f"files/bank/{paper_id}"
+
+    def delete_tree(self, rel: str) -> None:
+        """删除数据仓库里的一个目录（git 历史里仍然能找回）。"""
+        p = self.abspath(rel)
+        if p != self.root and p.is_dir():
+            shutil.rmtree(p)
 
     def abspath(self, rel: str) -> Path:
         """把相对路径解析成绝对路径，并确保不会跳出数据目录。"""

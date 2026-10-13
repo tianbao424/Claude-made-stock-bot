@@ -131,6 +131,8 @@ xuetou-data/                      # 私有仓库
 │   ├── variant_sets.jsonl
 │   ├── print_jobs.jsonl
 │   ├── print_job_items.jsonl
+│   ├── bank_papers.jsonl         # 题库的卷子（见 10）
+│   ├── bank_items.jsonl          # 题库题目在原卷上的位置
 │   ├── tutor_sessions.jsonl
 │   ├── tutor_messages.jsonl
 │   └── attempts/                 # 作答记录只追加，按月分文件
@@ -138,6 +140,7 @@ xuetou-data/                      # 私有仓库
 ├── files/
 │   ├── pages/2026/10/{page_id}/original.jpg   # 原图（长边 2000px，JPEG 质量 80）
 │   ├── pages/2026/10/{page_id}/erased.png     # 擦除图（8 位灰度 PNG）
+│   ├── bank/{paper_id}/paper-1.pdf             # 题库：导入的原卷和答案（PDF 或照片）
 │   └── figures/{question_id}-{n}.png          # 变式题的图（程序绘制时才有）
 ├── evals/                        # 评测集：孩子卷子上的题 + 标准答案（见 05 §6）
 └── settings.json                 # 非敏感设置：模型选择、学透参数等
@@ -344,13 +347,13 @@ mistake-mastery/
 │   ├── context.py             # 把数据库、存储、AI、任务队列、同步装在一起；空库时自动从数据仓库恢复
 │   ├── db.py · models.py      # SQLite 与数据表（__sync__ 标明是否导出到数据仓库）
 │   ├── auth.py · jobs.py · storage.py · ids.py
-│   ├── api/                   # 接口：auth、core（档案、设置、同步、首页）、capture、mistakes、printing
-│   ├── services/              # capture（采集管线）、mastery（状态机）、printing（排版）、sync（GitHub 同步）、prompts
-│   ├── adapters/              # imaging（OpenCV）、eraser（各家去手写）、llm（OpenAI 兼容客户端）
+│   ├── api/                   # 接口：auth、core（档案、设置、同步、首页）、capture、mistakes、printing、bank
+│   ├── services/              # capture（采集管线）、bank（题库导入与匹配）、mastery（状态机）、printing（排版）、sync（GitHub 同步）、prompts
+│   ├── adapters/              # imaging（OpenCV）、pdf（pdfium 渲染和取文字）、eraser（各家去手写）、llm（OpenAI 兼容客户端）
 │   ├── curriculum/            # 知识点树、错因、北京题位（YAML，通用资料）
 │   └── tools/                 # bakeoff（第 0 步试水）、rebuild_index、hash_password
-├── web/                       # 前端（React + Vite，npm run build 后由后端直接提供）
-├── tests/                     # 37 个测试，只用虚构数据
+├── web/                       # 前端（React + Vite，npm run build 后由后端直接提供；npm run build:demo 出预览版）
+├── tests/                     # 49 个测试，只用虚构数据
 ├── pyproject.toml · uv.lock
 └── .env.example               # 配置模板（不含真实密钥）
 ```
