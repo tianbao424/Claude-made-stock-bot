@@ -71,7 +71,7 @@ def process_document(ctx: "AppContext", handle: JobHandle, payload: dict) -> dic
             handle.progress(f"第 {i + 1}/{total} 页：矫正", base)
             img, transform = _correct(ctx, page_id, mode)
             handle.progress(f"第 {i + 1}/{total} 页：识别题目", base + int(step * 0.2))
-            title, new_ids = _recognize(ctx, page_id, img, subject, mode)
+            title, new_ids = _recognize(ctx, page_id, _outbound(ctx, img, i + 1), subject, mode)
             header_title = header_title or title
             created += new_ids
         except (LLMError, ValueError) as exc:
@@ -99,6 +99,12 @@ def process_document(ctx: "AppContext", handle: JobHandle, payload: dict) -> dic
     if not created:
         raise RuntimeError("；".join(errors) or "没有识别出题目")
     return {"questions": len(created), "errors": errors}
+
+
+def _outbound(ctx: "AppContext", img, page_no: int):  # noqa: ANN001
+    """送给外部接口的图片：按设置把第 1 页的卷头涂白。"""
+    ratio = ctx.settings.mask_header_ratio
+    return imaging.mask_header(img, ratio) if page_no == 1 and ratio > 0 else img
 
 
 def _correct(ctx: "AppContext", page_id: str, mode: str):
@@ -166,9 +172,16 @@ def erase_page(ctx: "AppContext", page_id: str) -> str | None:
         page = s.get(SourcePage, page_id)
         img = corrected_image(ctx, page)
         page_dir = ctx.storage.page_dir(page.id)
+        page_no = page.page_no
     error: str | None = None
     try:  # 调用外部接口时不占着数据库会话
-        out = imaging.decode(ctx.eraser().erase(imaging.encode_jpeg(img, 92)))
+        eraser = ctx.eraser()
+        # 本地算法用无损 PNG；云接口有大小限制，用高质量 JPEG
+        if eraser.name == "local_color":  # 本地算法用无损 PNG，不出本机
+            data = imaging.encode_png(img)
+        else:  # 云接口有大小限制，用高质量 JPEG；按设置涂白卷头
+            data = imaging.encode_jpeg(_outbound(ctx, img, page_no), 92)
+        out = imaging.decode(eraser.erase(data))
     except (EraseError, ValueError, OSError) as exc:
         error = str(exc)
     except Exception as exc:  # noqa: BLE001 —— 网络等错误也只影响这一页

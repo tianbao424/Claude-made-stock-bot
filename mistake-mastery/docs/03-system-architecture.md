@@ -234,9 +234,9 @@ flowchart TB
 
 "原位重做"要求作答空间和原卷一致。切题时取"本题最后一行印刷内容"到"下一题题号"之间的区域作为作答区，按纸张尺寸换算成毫米，记在 `question_instances.answer_area_mm`。错题重做单按这个高度留白。
 
-### 7.3 送出去之前裁掉卷头
+### 7.3 送出去之前涂白卷头（可选）
 
-送给云端接口之前，先把卷头（姓名、班级、学号、学校）区域裁掉或涂白。
+`.env` 里的 `XT_MASK_HEADER_RATIO` 设为大于 0（例如 0.08）时，第 1 页送给云端接口之前，最上方这一比例的区域（姓名、班级、学号所在的卷头）会被涂白。**默认关闭**：很多卷子的第 1 题紧挨着卷头，一刀切容易把题目也涂掉。本地擦除算法（`local_color`）不把图片送出本机。
 
 ---
 
@@ -332,28 +332,25 @@ flowchart LR
 
 ---
 
-## 13. 代码目录规划（公开的代码仓库）
+## 13. 代码目录（公开的代码仓库，v0.1 本地版已实现）
 
 ```
 mistake-mastery/
-├── README.md
+├── README.md · SETUP.md       # 概要；本地版安装与使用
 ├── docs/                      # 本套设计文档
-├── app/                       # 后端（FastAPI）
-│   ├── main.py                # 入口：接口 + 前端静态页面 + 后台任务
-│   ├── core/                  # 配置、数据库、任务队列、日志
-│   ├── modules/
-│   │   ├── capture/ mistakes/ mastery/ variants/ tutor/
-│   │   ├── printing/ curriculum/ settings/ auth/ sync/
-│   ├── adapters/
-│   │   ├── ocr/               # 切题、OCR、去手写的各家接口适配器
-│   │   └── llm/               # 大模型客户端（OpenAI 兼容）
-│   ├── tools/                 # rebuild_index 等命令行工具
-│   ├── prompts/               # 提示词（YAML，带版本号）
-│   ├── templates/print/       # 打印模板（Jinja2 + CSS）
-│   └── curriculum/            # 知识点树、错因字典（YAML，通用资料，见 07）
-├── web/                       # 前端（React + Vite）
-├── tests/                     # 状态机、调度、分页、同步导出等单元测试（只用虚构数据）
-├── evals/                     # 评测脚本（评测数据在私有数据仓库的 evals/ 下）
-├── deploy/                    # docker-compose.yml、Caddyfile、部署说明
+├── app/                       # 后端（FastAPI，uv run python -m app 启动）
+│   ├── main.py · __main__.py  # 应用入口；启动命令（显示局域网地址）
+│   ├── config.py              # 配置（.env，前缀 XT_）
+│   ├── context.py             # 把数据库、存储、AI、任务队列、同步装在一起；空库时自动从数据仓库恢复
+│   ├── db.py · models.py      # SQLite 与数据表（__sync__ 标明是否导出到数据仓库）
+│   ├── auth.py · jobs.py · storage.py · ids.py
+│   ├── api/                   # 接口：auth、core（档案、设置、同步、首页）、capture、mistakes、printing
+│   ├── services/              # capture（采集管线）、mastery（状态机）、printing（排版）、sync（GitHub 同步）、prompts
+│   ├── adapters/              # imaging（OpenCV）、eraser（各家去手写）、llm（OpenAI 兼容客户端）
+│   ├── curriculum/            # 知识点树、错因、北京题位（YAML，通用资料）
+│   └── tools/                 # bakeoff（第 0 步试水）、rebuild_index、hash_password
+├── web/                       # 前端（React + Vite，npm run build 后由后端直接提供）
+├── tests/                     # 37 个测试，只用虚构数据
+├── pyproject.toml · uv.lock
 └── .env.example               # 配置模板（不含真实密钥）
 ```

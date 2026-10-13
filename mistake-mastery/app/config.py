@@ -37,6 +37,10 @@ class Settings(BaseSettings):
 
     daily_cost_cap_cny: float = 5.0
 
+    # 送给外部接口前，把第 1 页最上方这一比例的区域涂白（卷头的姓名、班级、学号）。
+    # 默认 0 = 不涂：很多卷子第 1 题紧挨着卷头，一刀切容易把题目也涂掉。可以试着设成 0.08。
+    mask_header_ratio: float = 0.0
+
     # 生成 PDF 用的 Chromium。留空时用 `playwright install chromium` 安装的那个。
     chromium_path: str = ""
 

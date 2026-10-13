@@ -7,3 +7,7 @@ __pycache__/
 .pytest_cache/
 web/node_modules/
 web/dist/
+# 第 0 步试水的输出（里面是孩子的卷子照片）
+bakeoff-out/
+.bakeoff-tmp.db
+*.tsbuildinfo

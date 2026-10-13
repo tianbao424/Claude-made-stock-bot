@@ -46,7 +46,10 @@ def _doc_dict(d: SourceDocument, pages: list[SourcePage] | None = None) -> dict:
            "mode": d.mode, "status": d.status, "error": d.error, "created_at": d.created_at}
     if pages is not None:
         out["pages"] = [{"id": p.id, "page_no": p.page_no, "erase_status": p.erase_status, "quality": p.quality,
-                         "width": p.width, "height": p.height} for p in pages]
+                         "width": p.width, "height": p.height,
+                         # 矫正后的尺寸：题目坐标（bbox）都以它为准
+                         "cw": (p.transform or {}).get("w") or p.width,
+                         "ch": (p.transform or {}).get("h") or p.height} for p in pages]
     return out
 
 

@@ -19,9 +19,18 @@ def decode(data: bytes) -> np.ndarray:
 
 
 def encode_jpeg(img: np.ndarray, quality: int = 80) -> bytes:
-    ok, buf = cv2.imencode(".jpg", img, [cv2.IMWRITE_JPEG_QUALITY, quality])
+    # 4:4:4 不做色度抽样：细笔画的颜色是区分"红笔、蓝笔、印刷"的关键信号
+    ok, buf = cv2.imencode(".jpg", img, [cv2.IMWRITE_JPEG_QUALITY, quality,
+                                         cv2.IMWRITE_JPEG_SAMPLING_FACTOR, cv2.IMWRITE_JPEG_SAMPLING_FACTOR_444])
     if not ok:
         raise ValueError("JPEG 编码失败")
+    return buf.tobytes()
+
+
+def encode_png(img: np.ndarray) -> bytes:
+    ok, buf = cv2.imencode(".png", img, [cv2.IMWRITE_PNG_COMPRESSION, 3])
+    if not ok:
+        raise ValueError("PNG 编码失败")
     return buf.tobytes()
 
 
@@ -41,7 +50,7 @@ def normalize_upload(data: bytes, max_side: int = MAX_SIDE, quality: int = 80) -
     if scale < 1:
         im = im.resize((round(im.width * scale), round(im.height * scale)), Image.LANCZOS)
     out = io.BytesIO()
-    im.save(out, "JPEG", quality=quality, optimize=True)
+    im.save(out, "JPEG", quality=quality, optimize=True, subsampling=0)  # 4:4:4，保留笔迹颜色
     return out.getvalue(), im.width, im.height
 
 
@@ -83,6 +92,9 @@ def detect_page_transform(img: np.ndarray, min_area_ratio: float = 0.4) -> dict 
         if len(approx) != 4:
             continue
         corners = _order_corners(approx.reshape(4, 2).astype(np.float32) / scale)
+        # 四角向中心收 1%，避免把纸边外的桌面也拉进来（打印出来会是一圈黑框）
+        center = corners.mean(axis=0)
+        corners = (center + (corners - center) * 0.985).astype(np.float32)
         tl, tr, br, bl = corners
         width = int(max(np.linalg.norm(br - bl), np.linalg.norm(tr - tl)))
         height = int(max(np.linalg.norm(tr - br), np.linalg.norm(tl - bl)))
@@ -115,13 +127,23 @@ def flatten_background(img: np.ndarray) -> np.ndarray:
 
 
 def remove_colored_ink(img: np.ndarray, sat_threshold: int = 70) -> np.ndarray:
-    """把饱和度高的像素（红笔、蓝笔等彩色笔迹）涂白。黑色笔迹和铅笔去不掉。"""
+    """把彩色笔迹（红笔、蓝笔等）涂白。黑色笔迹和铅笔去不掉。
+
+    笔画边缘因为抗锯齿颜色变淡、饱和度变低，单用一个阈值会留下一圈"鬼影"，
+    所以在明显的彩色笔画附近，再把饱和度较低的像素和发灰的残留一起清掉。
+    """
     flat = flatten_background(img)
     hsv = cv2.cvtColor(flat, cv2.COLOR_BGR2HSV)
-    mask = (hsv[:, :, 1] > sat_threshold) & (hsv[:, :, 2] > 60)
-    mask = cv2.dilate(mask.astype(np.uint8) * 255, np.ones((3, 3), np.uint8)) > 0
+    sat, val = hsv[:, :, 1], hsv[:, :, 2]
+    strong = ((sat > sat_threshold) & (val > 60)).astype(np.uint8)
+    near = cv2.dilate(strong, cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (9, 9))) > 0
+    weak = (sat > sat_threshold // 3) & (val > 40)
+    mask = (strong > 0) | (weak & near)
+    mask = cv2.dilate(mask.astype(np.uint8), np.ones((3, 3), np.uint8)) > 0
     gray = cv2.cvtColor(flat, cv2.COLOR_BGR2GRAY)
-    gray[mask] = 255
+    printed = (gray < 110) & (sat < 50)  # 深色、不带颜色的是印刷内容，不动它
+    gray[mask & ~printed] = 255
+    gray[near & (gray > 150)] = 255  # 笔画附近发灰的残留
     return gray
 
 
@@ -135,7 +157,7 @@ def crop(img: np.ndarray, bbox: list[float], pad: int = 6) -> np.ndarray:
     return img[y0:y1, x0:x1]
 
 
-def mask_header(img: np.ndarray, ratio: float = 0.07) -> np.ndarray:
+def mask_header(img: np.ndarray, ratio: float) -> np.ndarray:
     """送给外部接口前，把页面最上方（通常是姓名、班级、学校所在的卷头）涂白。"""
     out = img.copy()
     out[: int(out.shape[0] * ratio), :] = 255

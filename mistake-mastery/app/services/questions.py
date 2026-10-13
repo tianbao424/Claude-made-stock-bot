@@ -1,6 +1,7 @@
 """题目相关的小工具：去重哈希、坐标换算、页面图片读取与裁切。"""
 
 import hashlib
+import json
 import re
 import unicodedata
 from typing import TYPE_CHECKING
@@ -42,12 +43,14 @@ def bbox_to_pixels(bbox: list, width: int, height: int) -> list[float]:
 
 def corrected_image(ctx: "AppContext", page: SourcePage) -> np.ndarray:
     """矫正后的整页（由原图 + 变换矩阵生成，缓存在 .local/cache）。"""
-    cache = ctx.storage.cache / "pages" / page.id / "corrected.jpg"
+    # 缓存用无损 PNG：反复 JPEG 编码会冲淡细笔画的颜色，影响去手写。缓存键里带上变换矩阵，重新矫正后自动失效。
+    key = hashlib.sha1(json.dumps(page.transform, sort_keys=True).encode()).hexdigest()[:10]
+    cache = ctx.storage.cache / "pages" / page.id / f"corrected-{key}.png"
     if cache.exists():
         return imaging.decode(cache.read_bytes())
     img = imaging.apply_transform(imaging.decode(ctx.storage.read(page.original_path)), page.transform)
     cache.parent.mkdir(parents=True, exist_ok=True)
-    cache.write_bytes(imaging.encode_jpeg(img, 90))
+    cache.write_bytes(imaging.encode_png(img))
     return img
 
 

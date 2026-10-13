@@ -145,3 +145,15 @@ def test_json_roundtrip_of_curriculum_codes():
     cur = load()
     assert json.loads(json.dumps(list(cur.kps)))
     assert cur.l1_of("P.EXP.INQ.LENS").code == "P.EXP"
+
+
+def test_header_mask_only_first_page_and_only_when_enabled(tmp_path, make_settings):
+    from types import SimpleNamespace
+
+    from app.services.capture import _outbound
+    img = np.zeros((100, 50, 3), np.uint8)
+    on = SimpleNamespace(settings=make_settings(tmp_path, mask_header_ratio=0.1))
+    off = SimpleNamespace(settings=make_settings(tmp_path))
+    assert _outbound(on, img, 1)[:10].min() == 255 and _outbound(on, img, 1)[10:].max() == 0
+    assert _outbound(on, img, 2).max() == 0  # 只处理第 1 页
+    assert _outbound(off, img, 1).max() == 0  # 默认不涂

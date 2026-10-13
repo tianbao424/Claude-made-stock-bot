@@ -154,7 +154,9 @@ CREATE TABLE question_instances (
     bbox            JSON NOT NULL,        -- 在矫正图上的位置；原貌截图和擦除截图都按它现场裁出并缓存
     answer_area_mm  REAL,                 -- 原卷作答区高度（毫米）
     student_answer  JSON,                 -- 识别出的孩子原始作答
-    grading_marks   JSON                  -- 红笔批改：{"mark":"wrong","score":"3/8"}
+    grading_marks   JSON,                 -- 红笔批改：{"mark":"wrong","score":"3/8","cause_suggestions":[...]}
+    status          TEXT NOT NULL,        -- candidate（待确认）| confirmed | discarded
+    preselected     INTEGER NOT NULL      -- 老师判错或半对时，批量确认页默认勾选
 );
 ```
 
@@ -262,8 +264,10 @@ CREATE TABLE print_jobs (
 CREATE TABLE print_job_items (
     print_job_id    TEXT NOT NULL REFERENCES print_jobs(id),
     seq             INTEGER NOT NULL,     -- 打印单上的题号
-    question_id     TEXT NOT NULL REFERENCES questions(id),
+    question_id     TEXT REFERENCES questions(id),
     mistake_id      TEXT REFERENCES mistakes(id),
+    instance_id     TEXT REFERENCES question_instances(id),  -- 打印用哪一次拍到的截图
+    page_id         TEXT REFERENCES source_pages(id),        -- 原卷还原时按页打印（此时没有题目）
     page_no         INTEGER,
     answer_bbox_mm  JSON,                 -- 作答区在页面上的坐标（毫米）
     PRIMARY KEY (print_job_id, seq)
