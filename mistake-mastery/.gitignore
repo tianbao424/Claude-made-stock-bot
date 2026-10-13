@@ -1,0 +1,9 @@
+# 运行数据（孩子的数据只放在私有数据仓库，绝不进本仓库）
+data/
+*.db
+.env
+.venv/
+__pycache__/
+.pytest_cache/
+web/node_modules/
+web/dist/
