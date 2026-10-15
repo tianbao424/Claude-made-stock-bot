@@ -11,6 +11,7 @@ import re
 import shutil
 import threading
 import unicodedata
+from collections import Counter
 from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
@@ -123,7 +124,7 @@ def question_image(ctx: "AppContext", paper: BankPaper, regions: list[dict]) -> 
         img = page_image(ctx, paper.id, paper.files, pg)
         h, w = img.shape[:2]
         x0, y0, x1, y1 = r["bbox"]
-        crops.append(imaging.crop(img, [x0 / 1000 * w, y0 / 1000 * h, x1 / 1000 * w, y1 / 1000 * h]))
+        crops.append(imaging.crop(img, [x0 / 1000 * w, y0 / 1000 * h, x1 / 1000 * w, y1 / 1000 * h], pad=0))
     if not crops:
         raise ValueError("这道题没有位置信息")
     width = max(c.shape[1] for c in crops)
@@ -190,13 +191,16 @@ def _new_question(item: dict, region: dict) -> dict:
         "sub_questions": item.get("sub_questions") or None,
         "has_figure": bool(item.get("has_figure")),
         "points": (str(item.get("points")).strip()[:20] if item.get("points") else None),
+        "answer_shown": bool(item.get("answer_shown")),
         "regions": [region],
     }
 
 
-def _extend(last: dict, item: dict, region: dict) -> None:
-    """跨页（或跨半页）的题：把后半段接到上一道题上。"""
-    last["regions"].append(region)
+def _extend(last: dict, item: dict, region: dict | None) -> None:
+    """跨页（或跨半页）的题：把后半段接到上一道题上（region 为 None 时只合并文字）。"""
+    if region is not None:
+        last["regions"].append(region)
+    last["answer_shown"] = last.get("answer_shown") or bool(item.get("answer_shown"))
     stem = (item.get("stem_md") or "").strip()
     if stem and stem not in last["stem_md"]:
         last["stem_md"] = (last["stem_md"] + "\n\n" + stem).strip()
@@ -216,6 +220,114 @@ def _merge_answer(answers: dict[str, dict], item: dict) -> None:
         cur["final"] = f"{cur['final']}；{final}" if cur["final"] else final
     if sol and sol not in cur["solution"]:
         cur["solution"] = f"{cur['solution']}\n\n{sol}" if cur["solution"] else sol
+
+
+# ---------------------------------------------------------------- 用 PDF 文字层校准题目范围
+#
+# Word / WPS 导出的卷子有文字层，每行的位置是准的。模型给的框只当提示：
+# 题目从"27．"这一行开始，到下一个边界（下一题、【答案】【解答】、大题标题）为止。
+# 答案版卷子（每题后面紧跟【答案】）这样截出来的图里就不会带上答案。
+
+_Q_START = re.compile(r"^\s*(\d{1,3})\s*[．.、](?!\d)")
+_ANS_MARK = re.compile(r"^\s*[【\[]\s*(答案|分析|解答|详解|解析|点评|点睛|考点|专题|分值|难度)")
+_SECTION = re.compile(r"^\s*[一二三四五六七八九十]+\s*[、．.]?\s*\S{0,8}?题")
+_FOOTER = re.compile(r"^\s*第\s*\d+\s*页")
+_POINTS = re.compile(r"[（(]\s*(\d+)\s*分\s*[)）]")
+PAD = 6  # 0–1000 坐标，约 2 毫米
+
+
+@dataclass
+class _Seg:
+    lines: list  # list[pdf.Line]，按从上到下排好
+    images: list  # [(x0, y0, x1, y1)]
+    lo: float
+    hi: float
+
+
+@dataclass
+class _Anchor:
+    bbox: list[float]
+    closed_by: str  # answer（下面是答案）| question（下一题）| section（大题标题）| page_end（接到下一页）
+    points: str | None = None
+
+
+def _layouts(ctx: "AppContext", files: list[dict], pages: list[dict]) -> dict[int, "pdf.Layout"]:
+    """每页的文字层版面；去掉每页都在同一位置出现的页眉页脚（学校名、网站水印、页码）。"""
+    out: dict[int, pdf.Layout] = {}
+    data: dict[int, bytes] = {}
+    for pg in pages:
+        f = files[pg["file"]]
+        if f["kind"] == "pdf":
+            raw = data.setdefault(pg["file"], ctx.storage.read(f["path"]))
+            out[pg["n"]] = pdf.page_layout(raw, pg["index"])
+    key = lambda ln: re.sub(r"\d+", "#", ln.text)  # noqa: E731 —— 页码不同也算同一行
+    counts = Counter(key(ln) for lay in out.values() for ln in lay.lines if ln.y1 < 80 or ln.y0 > 920)
+    running = {k for k, n in counts.items() if len(out) >= 3 and n >= max(3, len(out) // 2)}
+    for lay in out.values():
+        lay.lines = [ln for ln in lay.lines if not _FOOTER.match(ln.text)
+                     and not ((ln.y1 < 80 or ln.y0 > 920) and key(ln) in running)]
+    return out
+
+
+def _seg(layout: "pdf.Layout | None", x0: float, x1: float) -> _Seg | None:
+    if layout is None or not layout.lines:
+        return None
+    lo, hi = x0 * 1000, x1 * 1000
+    return _Seg([ln for ln in layout.lines if lo <= (ln.x0 + ln.x1) / 2 <= hi],
+                [im for im in layout.images if lo <= (im[0] + im[2]) / 2 <= hi], lo, hi)
+
+
+def _boundary(text: str) -> str | None:
+    if _ANS_MARK.match(text):
+        return "answer"
+    if _Q_START.match(text):
+        return "question"
+    if _SECTION.match(text):
+        return "section"
+    return None
+
+
+def _region(seg: _Seg, top: float) -> _Anchor | None:
+    """从 top 往下，到下一个边界为止的范围。"""
+    end, closed = None, "page_end"
+    for ln in seg.lines:
+        if ln.y0 > top + 1 and _boundary(ln.text):
+            end, closed = ln.y0, _boundary(ln.text)
+            break
+    boxes = [(ln.x0, ln.y0, ln.x1, ln.y1) for ln in seg.lines if ln.y0 >= top - 1 and (end is None or ln.y0 < end)]
+    boxes += [im for im in seg.images if (im[1] + im[3]) / 2 >= top and (end is None or (im[1] + im[3]) / 2 < end)]
+    if not boxes:
+        return None
+    bottom = end - 5 if end is not None else max(b[3] for b in boxes) + PAD  # 留出 2 毫米，别切到下一行的字
+    return _Anchor([round(max(seg.lo, min(b[0] for b in boxes) - PAD), 1), round(max(0.0, top - PAD), 1),
+                    round(min(seg.hi, max(b[2] for b in boxes) + PAD), 1), round(min(1000.0, bottom), 1)], closed)
+
+
+def _anchor_question(seg: _Seg, label: object, hint_y: float) -> _Anchor | None:
+    """题号为 label 的那一行开始的范围；同一页有几行都像这个题号时，取离模型给的位置最近的。"""
+    n = norm_label(label)
+    if n is None:
+        return None
+    starts = [ln for ln in seg.lines if (m := _Q_START.match(ln.text)) and str(int(m.group(1))) == n]
+    if not starts:
+        return None
+    start = min(starts, key=lambda ln: abs(ln.y0 - hint_y))
+    anchor = _region(seg, start.y0)
+    if anchor is not None and (m := _POINTS.search(start.text)):
+        anchor.points = f"{m.group(1)}分"
+    return anchor
+
+
+def _anchor_top(seg: _Seg) -> _Anchor | None:
+    """页面最上面、第一个边界之前的内容（上一页那道题的后半段）。"""
+    tops = [ln.y0 for ln in seg.lines] + [im[1] for im in seg.images]
+    if not tops:
+        return None
+    top = min(tops)
+    first = seg.lines[0] if seg.lines else None
+    if first is not None and first.y0 <= top + 1 and _boundary(first.text):
+        return None  # 这一页一开头就是新的题、答案或大题标题
+    return _region(seg, top)
 
 
 def import_paper(ctx: "AppContext", handle: JobHandle, payload: dict) -> dict:
@@ -245,40 +357,60 @@ def _import(ctx: "AppContext", handle: JobHandle, pid: str, *, verify: bool) -> 
     with ctx.db.session() as s:
         s.get(BankPaper, pid).pages = pages
 
+    layouts = _layouts(ctx, files, pages)
     questions: list[dict] = []
     answers: dict[str, dict] = {}
     errors: list[str] = []
     header = None
+    # 上一道题最后一段是怎么结束的：answer = 后面已经是答案，下一页开头的内容只能是解答；
+    # page_end = 题目接到了下一页；None = 没有文字层，只能信模型
+    last_closed: str | None = None
     for i, pg in enumerate(pages):
         handle.progress(f"第 {i + 1}/{len(pages)} 页：识别", 5 + int(i / len(pages) * 55))
         img = page_image(ctx, pid, files, pg)
         text = _page_text(ctx, files, pg)
-        kinds = []
+        has_q = has_a = False
         h, w = img.shape[:2]
         for x0, x1, part in _segments(img):
-            seg = img[:, int(x0 * w):int(x1 * w)]
-            url, _ = imaging.data_url_jpeg(seg)
+            seg_img = img[:, int(x0 * w):int(x1 * w)]
+            seg = _seg(layouts.get(pg["n"]), x0, x1)
+            url, _ = imaging.data_url_jpeg(seg_img)
+            prev_label = questions[-1]["number_label"] if questions else None
             try:
-                out = ctx.llm.chat_json("bank", prompts.bank_page_messages(subject, url, text, pg["role"], part),
-                                        prompt_version=prompts.BANK_PAGE_VERSION) or {}
+                out = ctx.llm.chat_json("bank", prompts.bank_page_messages(
+                    subject, url, text, pg["role"], part, prev_label), prompt_version=prompts.BANK_PAGE_VERSION) or {}
             except CostCapExceeded:
                 raise
             except LLMError as exc:
                 errors.append(f"第 {pg['n']} 页识别失败：{exc}")
                 continue
-            kinds.append(out.get("page_kind"))
             header = header or out.get("header")
-            for item in out.get("questions") or []:
-                region = {"page": pg["n"], "bbox": _seg_bbox(item.get("bbox"), x0, x1, seg.shape[1], seg.shape[0])}
-                same = questions and norm_label(item.get("number_label")) is not None \
-                    and norm_label(item.get("number_label")) == norm_label(questions[-1]["number_label"])
+            items = out.get("questions") or []
+            # 页面开头是不是上一题的后半段，以模型的判断为准（答案版卷子里那可能是答案的图）；
+            # 范围按文字层算，上一题的答案已经开始了的话一律不算题目
+            continued_done = False
+            for item in items:
+                model_bbox = _seg_bbox(item.get("bbox"), x0, x1, seg_img.shape[1], seg_img.shape[0])
+                label = norm_label(item.get("number_label"))
+                same = bool(questions) and label is not None and label == norm_label(questions[-1]["number_label"])
                 if questions and (item.get("continued") or same):
+                    region = None
+                    if not continued_done and last_closed != "answer":  # 上一题的答案已经开始了：这是解答，不算题目
+                        top = _anchor_top(seg) if seg is not None else None
+                        region = {"page": pg["n"], "bbox": top.bbox if top else model_bbox}
+                        last_closed, continued_done = (top.closed_by if top else None), True
                     _extend(questions[-1], item, region)
-                else:
-                    questions.append(_new_question(item, region))
+                    continue
+                anchor = _anchor_question(seg, item.get("number_label"), model_bbox[1]) if seg is not None else None
+                q = _new_question(item, {"page": pg["n"], "bbox": anchor.bbox if anchor else model_bbox})
+                q["points"] = q["points"] or (anchor.points if anchor else None)
+                questions.append(q)
+                last_closed = anchor.closed_by if anchor else None
+                has_q = True
             for item in out.get("answers") or []:
                 _merge_answer(answers, item)
-        pg["kind"] = next((k for k in ("questions", "answers") if k in kinds), "other")
+                has_a = True
+        pg["kind"] = "mixed" if has_q and has_a else "questions" if has_q else "answers" if has_a else "other"
 
     if not questions:
         raise RuntimeError("；".join(errors) or "没有识别出题目。请确认上传的是试卷（不是只有答案）")
@@ -290,6 +422,7 @@ def _import(ctx: "AppContext", handle: JobHandle, pid: str, *, verify: bool) -> 
         if not paper.title:
             paper.title = (str(header or "").strip() or "未命名试卷")[:100]
         qids = []
+        answer_doc = any(pg.get("kind") == "mixed" for pg in pages)
         for seq, q in enumerate(questions, start=1):
             ans = answers.get(norm_label(q["number_label"]) or "") or {}
             final = ans.get("final", "")
@@ -302,8 +435,10 @@ def _import(ctx: "AppContext", handle: JobHandle, pid: str, *, verify: bool) -> 
             )
             s.add(row)
             s.flush()
+            # 答案版卷子的填空题，横线上一般已经填好了答案
+            shown = q["answer_shown"] or (answer_doc and q["type"] == "fill")
             s.add(BankItem(question_id=row.id, paper_id=pid, seq=seq, number_label=q["number_label"],
-                           regions=q["regions"], points=q["points"]))
+                           regions=q["regions"], points=q["points"], flags={"answer_in_crop": True} if shown else None))
             qids.append(row.id)
         labels = {norm_label(q["number_label"]) for q in questions}
         paper.pages = pages

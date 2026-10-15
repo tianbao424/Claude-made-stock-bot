@@ -32,6 +32,9 @@ function QuestionCard({ q, kpName, onChange }: { q: BankQuestion; kpName: (c: st
         </span>
       </div>
       <img className="crop" loading="lazy" alt="" src={runtime.fileUrl(`/api/bank/questions/${q.id}/image`)} />
+      {q.flags?.answer_in_crop && (
+        <div className="muted small">⚠ 截图里能看到答案（答案版卷子的横线上已经填好了）</div>
+      )}
       {!!q.kp_codes.length && (
         <div className="row">{q.kp_codes.map((c) => <span key={c} className="chip">{kpName(c)}</span>)}</div>
       )}

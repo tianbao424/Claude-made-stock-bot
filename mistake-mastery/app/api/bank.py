@@ -28,7 +28,7 @@ def _question_dict(s, item: BankItem, q: Question) -> dict:  # noqa: ANN001
             "pages": sorted({r["page"] for r in item.regions}), "type": q.question_type, "stem_md": q.stem_md,
             "options": q.options, "sub_questions": q.sub_questions, "answer": q.answer, "solution_md": q.solution_md,
             "answer_source": q.answer_source, "verification": q.verification, "needs_review": bank.needs_review(q),
-            "kp_codes": kps, "bj_slot": q.bj_slot, "difficulty": q.difficulty}
+            "kp_codes": kps, "bj_slot": q.bj_slot, "difficulty": q.difficulty, "flags": item.flags or {}}
 
 
 @router.get("/bank/papers")

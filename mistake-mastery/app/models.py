@@ -201,6 +201,8 @@ class BankItem(Base):
     # 跨页的题有多段：[{"page": 1, "bbox": [x0, y0, x1, y1]}]，坐标按页面 0–1000 归一化
     regions: Mapped[list] = mapped_column(JSON, nullable=False, default=list)
     points: Mapped[Optional[str]] = mapped_column(String(20))  # 卷面标注的分值
+    # {"answer_in_crop": true}：截图里能看到答案（答案版卷子的填空题横线上已经填好了）
+    flags: Mapped[Optional[dict]] = mapped_column(JSON)
 
 
 # ---------------------------------------------------------------- 错题与学习

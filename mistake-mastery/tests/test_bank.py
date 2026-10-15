@@ -323,3 +323,101 @@ def test_image_page_upload(bc):
     p = _import(bc, paper=buf.getvalue(), answers=None, verify="false")
     assert p["files"][0]["kind"] == "image" and len(p["questions"]) == 1
     assert bc.get(f"/api/bank/questions/{p['questions'][0]['id']}/image").status_code == 200
+
+
+# ---------------------------------------------------------------- 答案版卷子（每道题后面紧跟【答案】【解答】）
+
+ANSWER_DOC = make_pdf([
+    ["2025-2026学年某校九年级（上）期中数学试卷", "参考答案与试题解析", "一、选择题（每小题2分）",
+     "1．（2分）函数 y＝﹣3（x﹣2）2﹣4 的图象的顶点坐标是（ ）", "A．（3，4） B．（﹣2，4） C．（2，4） D．（2，﹣4）",
+     "【答案】D", "【解答】解：由顶点式可知顶点坐标为（2，﹣4），", "故选：D．",
+     "2．（2分）如图，将△ABC 绕顶点 A 逆时针旋转 30°到△ADE，∠B＝40°，∠DAC＝50°，",
+     "则∠E 的度数为（ ）"],
+    ["A．40° B．50° C．60° D．70°", "【答案】C", "【解答】解：∠DAE＝80°，∠E＝180°﹣80°﹣40°＝60°，",
+     "故选：C．", "二、填空题", "3．（2分）已知 y1＞y2，那么 a 的取值范围是 a＜3 ．", "【答案】a＜3．",
+     "【解答】解：二次函数的开口向上……"],
+    ["接上题的解答：综上所述，a 的取值范围为 a＜3．", "4．（3分）解方程：x2＝4．", "【答案】x1＝2，x2＝﹣2"],
+])
+
+
+def answer_doc_fake(task: str, messages: list[dict]):
+    if task == "bank":
+        prompt = messages[-1]["content"][1]["text"]
+        ref = prompt.split("<<<")[1].split(">>>")[0]
+        if "试题解析" in ref:  # 第 1 页：模型给的框故意偏大，框进了【答案】
+            return {"page_kind": "mixed", "header": "某校期中", "questions": [
+                {"number_label": "1", "bbox": [40, 100, 960, 400], "question_type": "choice_single",
+                 "stem_md": "函数 $y=-3(x-2)^2-4$ 的图象的顶点坐标是（　）", "options": OPT_VERTEX},
+                {"number_label": "2", "bbox": [40, 400, 960, 600], "question_type": "choice_single", "has_figure": True,
+                 "stem_md": "如图，将 $\\triangle ABC$ 绕顶点 $A$ 逆时针旋转 $30°$ 到 $\\triangle ADE$……则 $\\angle E$ 的度数为（　）"}],
+                "answers": [{"number_label": "1", "final_answer": "D", "solution_md": "顶点坐标为 $(2,-4)$"}]}
+        if "∠DAE" in ref:
+            assert "上一页最后一道题是第 2 题" in prompt
+            return {"page_kind": "mixed", "questions": [
+                {"number_label": "", "continued": True, "bbox": [40, 0, 960, 200], "options": [{"key": "A", "md": "40°"}]},
+                {"number_label": "3", "bbox": [40, 150, 960, 300], "question_type": "fill",
+                 "stem_md": "已知 $y_1>y_2$，那么 $a$ 的取值范围是______．"}],
+                "answers": [{"number_label": "2", "final_answer": "C", "solution_md": "……"},
+                            {"number_label": "3", "final_answer": "$a<3$", "solution_md": "开口向上……"}]}
+        # 第 3 页：模型把上一题解答的后半段误报成题目的后半段（第 3 题的答案已经开始了，应该丢掉）
+        return {"page_kind": "mixed", "questions": [
+            {"number_label": "", "continued": True, "bbox": [40, 0, 960, 120]},
+            {"number_label": "4", "bbox": [40, 100, 960, 500], "question_type": "solve", "stem_md": "解方程：$x^2=4$．"}],
+            "answers": [{"number_label": "3", "final_answer": "", "solution_md": "综上所述……"},
+                        {"number_label": "4", "final_answer": "$x_1=2$，$x_2=-2$", "solution_md": None}]}
+    return bank_fake(task, messages)
+
+
+OPT_VERTEX = [{"key": "A", "md": "$(3,4)$"}, {"key": "B", "md": "$(-2,4)$"}, {"key": "C", "md": "$(2,4)$"},
+              {"key": "D", "md": "$(2,-4)$"}]
+
+
+def test_answer_doc_crops_stop_at_answers(bc):
+    from app.adapters import pdf
+    from app.models import BankItem
+
+    bc.app_ctx.llm.fake = answer_doc_fake
+    p = _import(bc, paper=ANSWER_DOC, answers=None, verify="false")
+    assert [pg["kind"] for pg in p["pages"]] == ["mixed", "mixed", "mixed"]
+    q1, q2, q3, q4 = p["questions"]
+    assert [q["answer"]["final"] for q in (q1, q2, q3, q4)] == ["D", "C", "$a<3$", "$x_1=2$，$x_2=-2$"]
+    assert q1["points"] == "2分" and q4["points"] == "3分"  # 分值从文字层读出来
+    lay = [pdf.page_layout(ANSWER_DOC, i) for i in range(3)]
+    marks = [[ln.y0 for ln in page.lines if ln.text.startswith("【答案】")] for page in lay]
+    with bc.app_ctx.db.session() as s:
+        r1 = s.get(BankItem, q1["id"]).regions
+        r2 = s.get(BankItem, q2["id"]).regions
+        r3 = s.get(BankItem, q3["id"]).regions
+        r4 = s.get(BankItem, q4["id"]).regions
+        flags3 = s.get(BankItem, q3["id"]).flags
+    # 模型的框框进了【答案】，按文字层校准后截到【答案】之前
+    assert r1[0]["bbox"][3] < marks[0][0] and r1[0]["bbox"][1] < marks[0][0] - 40
+    # 第 2 题跨页：第 2 页开头的选项接上，同样截到【答案】之前
+    assert [r["page"] for r in r2] == [1, 2] and r2[1]["bbox"][3] < marks[1][0]
+    # 第 3 题的答案已经开始了：第 3 页开头误报的"后半段"被丢掉
+    assert [r["page"] for r in r3] == [2]
+    assert r4[0]["bbox"][3] < marks[2][0]
+    # 答案版卷子的填空题：截图里看得到答案
+    assert flags3 == {"answer_in_crop": True} and q3["flags"] == {"answer_in_crop": True}
+    assert not q1["flags"]
+
+
+def test_scanned_pdf_falls_back_to_model_boxes(bc):
+    """扫描件没有文字层：用模型给的框。"""
+    doc = fitz.open()
+    page = doc.new_page(width=595, height=842)
+    pix = fitz.Pixmap(fitz.csRGB, fitz.IRect(0, 0, 200, 200), False)
+    pix.clear_with(255)
+    page.insert_image(page.rect, pixmap=pix)
+
+    def fake(task, messages):
+        if task == "bank":
+            return {"page_kind": "questions", "questions": [
+                {"number_label": "1", "bbox": [100, 200, 900, 400], "stem_md": "扫描卷子上的一道题，题干足够长"}]}
+        return bank_fake(task, messages)
+
+    bc.app_ctx.llm.fake = fake
+    p = _import(bc, paper=doc.tobytes(), answers=None, verify="false")
+    from app.models import BankItem
+    with bc.app_ctx.db.session() as s:
+        assert s.get(BankItem, p["questions"][0]["id"]).regions[0]["bbox"] == [100.0, 200.0, 900.0, 400.0]

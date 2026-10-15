@@ -283,4 +283,5 @@ export interface BankQuestion {
   kp_codes: string[];
   bj_slot: string | null;
   difficulty: number | null;
+  flags: { answer_in_crop?: boolean };
 }
