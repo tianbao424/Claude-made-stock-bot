@@ -51,9 +51,9 @@ def list_mistakes(student_id: str, subject: str | None = None, status: str | Non
             qry = qry.filter(Mistake.status.in_(status.split(",")))
         if min_wrong:
             qry = qry.filter(Mistake.wrong_count >= min_wrong)
-        if kp:
-            qry = qry.filter(Question.id.in_(
-                s.query(QuestionKp.question_id).filter(QuestionKp.kp_code.like(f"{kp}%"))))
+        if kp:  # 这个知识点及其下级
+            qry = qry.filter(Question.id.in_(s.query(QuestionKp.question_id).filter(
+                (QuestionKp.kp_code == kp) | QuestionKp.kp_code.like(f"{kp}.%"))))
         out = [_summary(s, ctx, m, q) for m, q in qry.order_by(Mistake.last_wrong_at.desc()).limit(500)]
         if source_kind:
             out = [o for o in out if o["document"] and o["document"]["source_kind"] == source_kind]

@@ -1,7 +1,8 @@
 import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
-import { api, subjectName, SyncStatus } from "../api";
+import { api, BlindSpot, subjectName, SyncStatus } from "../api";
 import { fmtTime, useStudent } from "../components/common";
+import { BlindSpotRow } from "./Knowledge";
 
 interface Today {
   counts: Record<string, number>;
@@ -28,10 +29,13 @@ export function SyncChip({ sync }: { sync: SyncStatus }) {
 export default function Home() {
   const { student, students, setStudentId } = useStudent();
   const [data, setData] = useState<Today | null>(null);
+  const [spots, setSpots] = useState<BlindSpot[]>([]);
 
   useEffect(() => {
     setData(null);
+    setSpots([]);
     api.get<Today>(`/api/today?student_id=${student.id}`).then(setData);
+    api.get<BlindSpot[]>(`/api/knowledge/blind-spots?student_id=${student.id}&limit=3`).then(setSpots).catch(() => setSpots([]));
   }, [student.id]);
 
   const c = data?.counts ?? {};
@@ -68,6 +72,16 @@ export default function Home() {
         <Link to="/capture" className="btn primary" style={{ flex: 1 }}>📷 拍照录入</Link>
         <Link to="/print" className="btn" style={{ flex: 1 }}>🖨 打印重做</Link>
       </div>
+
+      {!!spots.length && (
+        <div className="card">
+          <div className="row spread">
+            <h2 style={{ margin: 0 }}>掌握死角</h2>
+            <Link to="/knowledge" className="small">全部知识点 ›</Link>
+          </div>
+          {spots.map((b) => <BlindSpotRow key={b.code} b={b} showSubject />)}
+        </div>
+      )}
 
       {!!data?.pending_documents.length && (
         <div className="card">

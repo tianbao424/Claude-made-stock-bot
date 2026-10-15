@@ -285,3 +285,50 @@ export interface BankQuestion {
   difficulty: number | null;
   flags: { answer_in_crop?: boolean };
 }
+
+// ---------------------------------------------------------------- 知识点整理
+
+export type MasteryLevel = "weak" | "medium" | "good" | "none";
+export const MASTERY_NAMES: Record<MasteryLevel, string> = { weak: "薄弱", medium: "待加强", good: "较好", none: "暂无数据" };
+
+export interface KnowledgeNode {
+  code: string;
+  name: string;
+  level: number;
+  weight: number | null;
+  mastery: number | null;
+  status: MasteryLevel;
+  observations: number;
+  mistakes: number;
+  open: number;
+  mastered: number;
+  stubborn: number;
+  repeat: number;
+  bank: number;
+  last_wrong_at: string | null;
+  children?: KnowledgeNode[];
+}
+
+export interface BlindSpot extends KnowledgeNode {
+  subject: Subject;
+  path: string;
+  risk: number;
+  reasons: string[];
+}
+
+export interface KnowledgeOverview {
+  subject: Subject;
+  summary: { points: number; weak: number; medium: number; good: number; open: number; mastered: number };
+  blind_spots: BlindSpot[];
+  untouched: { code: string; name: string; path: string; weight: number | null; bank: number }[];
+  tree: KnowledgeNode[];
+}
+
+export interface KnowledgeDetail extends KnowledgeNode {
+  subject: Subject;
+  path: string;
+  causes: { code: string; name: string; n: number }[];
+  mistake_list: MistakeSummary[];
+  children: KnowledgeNode[];
+  bank_questions: { id: string; paper_id: string; paper_title: string; number_label: string; primary: boolean; done: boolean }[];
+}

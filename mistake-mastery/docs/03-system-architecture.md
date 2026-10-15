@@ -347,13 +347,13 @@ mistake-mastery/
 │   ├── context.py             # 把数据库、存储、AI、任务队列、同步装在一起；空库时自动从数据仓库恢复
 │   ├── db.py · models.py      # SQLite 与数据表（__sync__ 标明是否导出到数据仓库）
 │   ├── auth.py · jobs.py · storage.py · ids.py
-│   ├── api/                   # 接口：auth、core（档案、设置、同步、首页）、capture、mistakes、printing、bank
-│   ├── services/              # capture（采集管线）、bank（题库导入与匹配）、mastery（状态机）、printing（排版）、sync（GitHub 同步）、prompts
+│   ├── api/                   # 接口：auth、core（档案、设置、同步、首页）、capture、mistakes、knowledge、printing、bank
+│   ├── services/              # capture（采集管线）、bank（题库导入与匹配）、mastery（状态机）、knowledge（知识点掌握度与掌握死角）、printing（排版）、sync（GitHub 同步）、prompts
 │   ├── adapters/              # imaging（OpenCV）、pdf（pdfium 渲染和取文字）、eraser（各家去手写）、llm（OpenAI 兼容客户端）
 │   ├── curriculum/            # 知识点树、错因、北京题位（YAML，通用资料）
 │   └── tools/                 # bakeoff（第 0 步试水）、rebuild_index、hash_password
 ├── web/                       # 前端（React + Vite，npm run build 后由后端直接提供；npm run build:demo 出预览版）
-├── tests/                     # 49 个测试，只用虚构数据
+├── tests/                     # 55 个测试，只用虚构数据
 ├── pyproject.toml · uv.lock
 └── .env.example               # 配置模板（不含真实密钥）
 ```

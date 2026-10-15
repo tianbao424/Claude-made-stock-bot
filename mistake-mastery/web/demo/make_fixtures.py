@@ -370,6 +370,7 @@ def main() -> None:
             "sync": c.get("/api/sync/status").json(),
         }
         fx["curriculum"] = {s: c.get(f"/api/curriculum/{s}").json() for s in ("math", "physics")}
+        fx["kp_weights"] = {k.code: k.bj_weight for k in app.state.ctx.curriculum.kps.values()}
         for q in fx["initial"]["bank"][bank_id]["questions"]:
             fx["images"][f"bankq:{q['id']}"] = jpeg_url(c.get(f"/api/bank/questions/{q['id']}/image").content, 1000, 72)
         for d in (math, phys):

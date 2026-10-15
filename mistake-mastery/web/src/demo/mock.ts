@@ -1,7 +1,8 @@
 // 预览版的"后端"：在浏览器里用示例数据模拟 /api/* 接口。
 // 示例数据由 web/demo/make_fixtures.py 用真实后端生成（AI 部分是固定的模拟结果），
 // 这里只负责记住页面上的操作，并按 v0.1 的规则更新错题状态。
-import type { BankPaperInfo, BankQuestion, Candidate, Curriculum, Doc, MistakeDetail, PrintJobInfo, Student, SyncStatus } from "../api";
+import type { BankPaperInfo, BankQuestion, Candidate, Curriculum, Doc, MistakeDetail, PrintJobInfo, Student, Subject, SyncStatus } from "../api";
+import { KnowledgeIndex } from "./knowledge";
 
 interface Exam {
   id: string;
@@ -29,6 +30,7 @@ export interface Fixtures {
     bank: Record<string, BankPaperInfo>;
   };
   curriculum: Record<string, Curriculum>;
+  kp_weights: Record<string, number | null>; // 每个知识点的中考权重（继承自所在模块）
   math_after_confirm: Record<string, MistakeDetail>;
   redo_order: string[]; // 错题重做单 PDF 按这个顺序排题（每种组合都事先生成好了）
 }
@@ -79,9 +81,11 @@ export class MockServer {
   private bank: Record<string, BankPaperInfo> = {};
   private sync!: SyncStatus;
   private syncTimer: number | undefined;
+  private kp: KnowledgeIndex;
 
   constructor(fx: Fixtures) {
     this.fx = fx;
+    this.kp = new KnowledgeIndex(fx.curriculum, fx.kp_weights ?? {});
     this.reset();
   }
 
@@ -480,12 +484,28 @@ export class MockServer {
       return { ok: true, solving: false };
     }
 
+    // 知识点整理
+    if (p === "/api/knowledge") {
+      const subject = q.get("subject") as Subject;
+      if (!this.fx.curriculum[subject]) throw new HttpError(400, "不支持的学科");
+      return this.kp.overview(this.mistakes, this.bank, subject);
+    }
+    if (p === "/api/knowledge/blind-spots") return this.kp.topBlindSpots(this.mistakes, this.bank, Number(q.get("limit") ?? 3));
+    if ((m = route(/^\/api\/knowledge\/([^/]+)$/))) {
+      const code = decodeURIComponent(m[1]);
+      if (!this.kp.node[code]) throw new HttpError(404, "找不到知识点");
+      const { list, body } = this.kp.detail(code, this.mistakes, this.bank);
+      return { ...body, mistake_list: list.map((x) => this.summary(x)) };
+    }
+
     // 错题
     if (p === "/api/mistakes") {
       const subject = q.get("subject");
       const statuses = q.get("status")?.split(",").filter(Boolean);
+      const kp = q.get("kp");
       return this.mistakes
         .filter((x) => (!subject || x.subject === subject) && (!statuses?.length || statuses.includes(x.status)))
+        .filter((x) => !kp || x.kp_codes.some((c) => c === kp || c.startsWith(kp + ".")))
         .sort((x, y) => y.last_wrong_at.localeCompare(x.last_wrong_at))
         .map((x) => this.summary(x));
     }

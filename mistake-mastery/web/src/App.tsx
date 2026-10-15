@@ -7,6 +7,8 @@ import BankPaper from "./pages/BankPaper";
 import Capture from "./pages/Capture";
 import Confirm from "./pages/Confirm";
 import Home from "./pages/Home";
+import Knowledge from "./pages/Knowledge";
+import KnowledgeDetail from "./pages/KnowledgeDetail";
 import Login from "./pages/Login";
 import MistakeDetail from "./pages/MistakeDetail";
 import Mistakes from "./pages/Mistakes";
@@ -18,12 +20,13 @@ import Settings from "./pages/Settings";
 const STUDENT_KEY = "xt.student";
 
 function Nav() {
+  const { pathname } = useLocation();
   return (
     <nav className="nav">
       <NavLink to="/" end>
         <span className="ico">🏠</span>今日
       </NavLink>
-      <NavLink to="/mistakes">
+      <NavLink to="/mistakes" className={({ isActive }) => (isActive || pathname.startsWith("/knowledge") ? "active" : "")}>
         <span className="ico">📚</span>错题本
       </NavLink>
       <NavLink to="/capture" className="plus">
@@ -97,6 +100,8 @@ export default function App() {
           <Route path="/documents/:id" element={<Confirm />} />
           <Route path="/mistakes" element={<Mistakes />} />
           <Route path="/mistakes/:id" element={<MistakeDetail />} />
+          <Route path="/knowledge" element={<Knowledge />} />
+          <Route path="/knowledge/:code" element={<KnowledgeDetail />} />
           <Route path="/print" element={<Print />} />
           <Route path="/p/:id" element={<PrintJobPage />} />
           <Route path="/settings" element={<Settings />} />

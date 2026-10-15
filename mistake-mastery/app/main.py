@@ -8,7 +8,7 @@ from fastapi import FastAPI
 from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 
-from app.api import auth, bank, capture, core, mistakes, printing
+from app.api import auth, bank, capture, core, knowledge, mistakes, printing
 from app.config import Settings, get_settings
 from app.context import AppContext
 from app.services import bank as bank_service
@@ -36,7 +36,8 @@ def create_app(settings: Settings | None = None, *, start_background: bool = Tru
 
     app = FastAPI(title="学透", lifespan=lifespan, docs_url=None, redoc_url=None)
     app.state.ctx = ctx
-    for r in (auth.router, core.router, capture.router, mistakes.router, printing.router, bank.router):
+    for r in (auth.router, core.router, capture.router, mistakes.router, printing.router, bank.router,
+              knowledge.router):
         app.include_router(r)
 
     @app.middleware("http")

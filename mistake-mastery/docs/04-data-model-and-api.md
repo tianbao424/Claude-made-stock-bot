@@ -234,7 +234,7 @@ CREATE TABLE tutor_messages (
     created_at      TEXT NOT NULL
 );
 
-CREATE TABLE kp_mastery (                 -- 【仅本地】派生数据：由作答记录算出，重建索引时重算
+CREATE TABLE kp_mastery (                 -- 【仅本地】派生数据：由作答记录算出，重建索引时重算（知识点整理页目前现算，见 06 §6.1）
     student_id      TEXT NOT NULL REFERENCES students(id),
     kp_code         TEXT NOT NULL REFERENCES knowledge_points(code),
     score           REAL NOT NULL,        -- 0–1，见 06 §6
@@ -423,7 +423,7 @@ CREATE TABLE ai_calls (                   -- 【仅本地】调试、费用统�
 
 | 方法 | 路径 | 说明 |
 |------|------|------|
-| GET | `/api/mistakes` | 列表；筛选参数：`subject, kp, status, cause, min_wrong, source_kind, from, to` |
+| GET | `/api/mistakes` | 列表；筛选参数：`subject, kp, status, cause, min_wrong, source_kind, from, to`（`kp` 含下级知识点） |
 | GET | `/api/mistakes/{id}` | 详情（含错题旅程） |
 | PATCH | `/api/mistakes/{id}` | 修改知识点、错因、答案 |
 | POST | `/api/mistakes/{id}/attempts` | 回填一次作答 |
@@ -458,6 +458,9 @@ CREATE TABLE ai_calls (                   -- 【仅本地】调试、费用统�
 | 方法 | 路径 | 说明 |
 |------|------|------|
 | GET | `/api/today` | 首页数据：考试倒计时、今日学透单、待处理计数 |
+| GET | `/api/knowledge?student_id&subject` | 知识点整理：汇总（薄弱 / 待加强 / 较好的考点数）、掌握死角、还没有错题记录的常考点、整棵知识点树（每个节点带掌握度和错题数），见 06 §6.1 |
+| GET | `/api/knowledge/blind-spots?student_id&limit=3` | 首页用：两科合在一起最该补的几个考点 |
+| GET | `/api/knowledge/{code}?student_id` | 单个知识点：掌握度、错因、错题列表（`mistake_list`）、下级知识点、题库里的同类题 |
 | GET | `/api/dashboard` | 知识点掌握度、错因分布、反复错 TOP |
 | GET | `/api/weekly?week=2026-W42` | 周小结 |
 

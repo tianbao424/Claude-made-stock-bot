@@ -8,12 +8,24 @@ const STATUS_FILTERS = [
   ["MASTERED", "已学透"], ["STUBBORN", "顽固"],
 ];
 
+/** 筛选条件里显示知识点名字：从列表里任一道题的知识点路径里找，找不到就显示编码。 */
+function kpName(code: string, list: MistakeSummary[] | null): string {
+  for (const m of list ?? []) {
+    const i = m.kp_codes.findIndex((c) => c === code || c.startsWith(code + "."));
+    if (i < 0) continue;
+    const parts = m.kp_names[i].split(" › ");
+    return parts[parts.length - 1 - (m.kp_codes[i].split(".").length - code.split(".").length)] ?? code;
+  }
+  return code;
+}
+
 export default function Mistakes() {
   const { student } = useStudent();
   const navigate = useNavigate();
   const [params, setParams] = useSearchParams();
   const subject = params.get("subject") ?? "";
   const status = params.get("status") ?? "";
+  const kp = params.get("kp") ?? "";
   const [list, setList] = useState<MistakeSummary[] | null>(null);
   const [picking, setPicking] = useState(false);
   const [picked, setPicked] = useState<string[]>([]);
@@ -23,8 +35,9 @@ export default function Mistakes() {
     const q = new URLSearchParams({ student_id: student.id });
     if (subject) q.set("subject", subject);
     if (status) q.set("status", status);
+    if (kp) q.set("kp", kp);
     api.get<MistakeSummary[]>(`/api/mistakes?${q}`).then(setList);
-  }, [student.id, subject, status]);
+  }, [student.id, subject, status, kp]);
 
   const setFilter = (k: string, v: string) => {
     const next = new URLSearchParams(params);
@@ -38,8 +51,17 @@ export default function Mistakes() {
     <>
       <div className="topbar">
         <h1>错题本</h1>
-        <button className="chip" onClick={() => { setPicking(!picking); setPicked([]); }}>{picking ? "取消选择" : "选题打印"}</button>
+        <div className="row" style={{ gap: 6 }}>
+          <Link to={`/knowledge${subject ? `?subject=${subject}` : ""}`} className="chip btn">按知识点看</Link>
+          <button className="chip" onClick={() => { setPicking(!picking); setPicked([]); }}>{picking ? "取消选择" : "选题打印"}</button>
+        </div>
       </div>
+      {kp && (
+        <div className="row" style={{ marginBottom: 6 }}>
+          <span className="muted small">知识点：</span>
+          <button className="chip on" onClick={() => setFilter("kp", "")} title="去掉这个筛选">{kpName(kp, list)} ✕</button>
+        </div>
+      )}
       <div className="row" style={{ marginBottom: 6 }}>
         <button className={`chip ${!subject ? "on" : ""}`} onClick={() => setFilter("subject", "")}>全部学科</button>
         {SUBJECTS.map((s) => (
