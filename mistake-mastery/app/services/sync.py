@@ -8,6 +8,7 @@
 
 import json
 import logging
+import os
 import subprocess
 import threading
 import time
@@ -124,9 +125,11 @@ class Git:
         self.repo = repo
 
     def run(self, *args: str, check: bool = True, timeout: int = 120) -> subprocess.CompletedProcess:
+        # 后台运行没人能输密码：需要输密码时直接报错（显示在"我的"页面），而不是一直卡住
+        env = {**os.environ, "GIT_TERMINAL_PROMPT": "0"}
         return subprocess.run(
             ["git", "-c", "user.name=学透", "-c", "user.email=xuetou@localhost", "-C", str(self.repo), *args],
-            capture_output=True, text=True, timeout=timeout, check=check)
+            capture_output=True, text=True, timeout=timeout, check=check, env=env)
 
     def is_repo(self) -> bool:
         return (self.repo / ".git").exists()

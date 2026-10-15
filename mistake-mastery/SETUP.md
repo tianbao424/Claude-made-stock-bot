@@ -6,56 +6,97 @@
 
 ---
 
-## 1. 准备软件（一次性）
+## 1. 准备软件（一次性，约 20 分钟）
 
-| 软件 | 用途 | 安装 |
-|------|------|------|
-| Git | 下载代码、同步数据 | Mac：终端运行 `xcode-select --install`；Windows：安装 Git for Windows |
-| uv | 管理 Python 环境 | 见 uv 官网的安装说明（一条命令） |
-| Node.js 18+ | 构建手机上看到的网页（只在安装和升级时用） | Node.js 官网下载 LTS 版本 |
+下面的命令都在"终端"里输入：Mac 用"终端"（启动台 → 其他 → 终端），Windows 用 **PowerShell**（开始菜单搜索 PowerShell）。每装完一个软件，**关掉终端再重新打开**，新命令才能用。
+
+| 软件 | 用途 | Mac | Windows |
+|------|------|-----|---------|
+| Git | 下载代码、同步数据 | 终端运行 `xcode-select --install`，弹窗点"安装" | 在 git-scm.com 下载 Git for Windows，一路默认安装 |
+| uv | 管理 Python 环境 | `curl -LsSf https://astral.sh/uv/install.sh \| sh` | `powershell -ExecutionPolicy ByPass -c "irm https://astral.sh/uv/install.ps1 \| iex"` |
+| Node.js 18 以上 | 构建网页（只在安装和升级时用） | nodejs.org 下载 LTS 版安装包 | 同左 |
+| GitHub CLI | 登录 GitHub，让程序能自动推送数据 | cli.github.com 下载 macOS 安装包 | 不需要（Git for Windows 自带登录工具） |
+
+装好后检查一下，能显示版本号就行：
+
+```bash
+git --version
+uv --version
+node --version
+```
 
 ---
 
-## 2. 建私有数据仓库（一次性）
+## 2. 登录 GitHub，建私有数据仓库（一次性）
 
-1. 在 GitHub 新建仓库，名字例如 `xuetou-data`，**一定选 Private（私有）**，不要加协作者。
+1. 在 github.com 新建仓库，名字例如 `xuetou-data`，**一定选 Private（私有）**，勾上"Add a README file"，不要加协作者。
 2. 给 GitHub 账号开启两步验证，并保存好恢复码。
-3. 把它克隆到电脑上，例如：
+3. 让这台电脑登录 GitHub，并把数据仓库下载到用户目录下：
 
-```bash
-git clone git@github.com:<你的账号>/xuetou-data.git ~/xuetou-data
-```
+   **Mac**：
 
-这一步能成功，说明这台电脑已经有推送到 GitHub 的权限，程序之后会用同样的权限自动同步。
+   ```bash
+   gh auth login        # 依次选 GitHub.com → HTTPS → Yes → Login with a web browser，按提示在浏览器里确认
+   gh repo clone <你的账号>/xuetou-data ~/xuetou-data
+   ```
+
+   **Windows**（PowerShell）：
+
+   ```powershell
+   git clone https://github.com/<你的账号>/xuetou-data.git $HOME\xuetou-data
+   ```
+
+   第一次会弹出浏览器让你登录 GitHub，登录一次之后电脑会记住。
+
+这一步成功，说明这台电脑有推送到数据仓库的权限，程序之后会用同样的权限自动同步。
 
 ---
 
 ## 3. 下载代码并安装（一次性）
 
 ```bash
-git clone https://github.com/tianbao424/Claude-made-stock-bot.git
+git clone -b claude/mistake-mastery-product-6xj6q4 https://github.com/tianbao424/Claude-made-stock-bot.git
 cd Claude-made-stock-bot/mistake-mastery
-
-uv sync                                   # 安装 Python 依赖
-uv run playwright install chromium        # 生成 PDF 用的浏览器内核
-cd web && npm install && npm run build && cd ..   # 构建网页
+uv sync
+uv run playwright install chromium
+cd web
+npm install
+npm run build
+cd ..
 ```
+
+- `-b claude/mistake-mastery-product-6xj6q4`：代码现在还在这个分支上。合并进主分支之后，去掉这一段即可。
+- `uv sync` 第一次会自动下载 Python 3.11+ 和依赖，要几分钟。
+- `playwright install chromium` 下载生成 PDF 用的浏览器内核（约 150 MB）。
+
+**下载很慢或失败（国内网络常见）**：
+
+| 卡在哪一步 | 办法 |
+|------------|------|
+| `uv sync` 下载 Python 失败 | 先从 python.org 装 Python 3.12（Windows 安装时勾选"Add python.exe to PATH"），uv 会直接用它 |
+| `uv sync` 下载依赖很慢 | 临时用镜像：Mac 运行 `UV_DEFAULT_INDEX=https://mirrors.aliyun.com/pypi/simple/ uv sync`；Windows 先运行 `$env:UV_DEFAULT_INDEX="https://mirrors.aliyun.com/pypi/simple/"` 再 `uv sync`。这会改动 `uv.lock`，以后升级前先运行 `git checkout uv.lock` |
+| `npm install` 很慢 | 先运行 `npm config set registry https://registry.npmmirror.com` |
+| `playwright install chromium` 失败 | 可以跳过，改用电脑上的 Chrome：第 4 步在 `.env` 里填 `XT_CHROMIUM_PATH`（Mac：`/Applications/Google Chrome.app/Contents/MacOS/Google Chrome`；Windows：`C:/Program Files/Google/Chrome/Application/chrome.exe`） |
 
 ---
 
 ## 4. 填写配置
 
+还在 `mistake-mastery` 目录里：
+
 ```bash
-cp .env.example .env
-uv run python -m app.tools.hash_password   # 设置家庭密码，把输出的一行粘贴到 .env
+cp .env.example .env                          # Windows 用：copy .env.example .env
+uv run python -m app.tools.hash_password      # 设置家庭密码（至少 12 位，输入时不显示）
 ```
 
-然后用文本编辑器打开 `.env`，至少填写：
+第二条命令会输出一行 `XT_FAMILY_PASSWORD_HASH=scrypt$...`，复制下来。然后打开 `.env`（Mac：`open -e .env`；Windows：`notepad .env`），至少填写：
 
-- `XT_DATA_DIR`：第 2 步克隆的数据仓库路径，例如 `/Users/xxx/xuetou-data`
-- `XT_FAMILY_PASSWORD_HASH`：上一步生成的那一行
-- `XT_DASHSCOPE_API_KEY`：阿里云百炼（通义千问）的 API Key，需要实名认证
+- `XT_DATA_DIR`：第 2 步数据仓库的位置。Mac 例如 `/Users/你的用户名/xuetou-data`；Windows 例如 `C:/Users/你的用户名/xuetou-data`（**用正斜杠 /**）
+- `XT_FAMILY_PASSWORD_HASH`：把这一行换成刚才复制的那一行
+- `XT_DASHSCOPE_API_KEY`：阿里云百炼（通义千问）控制台 → API-KEY，需要实名认证
 - 擦除接口：先保持 `XT_ERASER=local_color`（本地算法，只能擦红笔、蓝笔等彩色笔迹），第 5 步试过之后再换成效果最好的一家
+
+`.env` 里有密钥，只留在这台电脑上，不要发给别人，也不要提交到任何仓库（代码仓库已经设置为忽略它）。
 
 ---
 
@@ -72,7 +113,10 @@ uv run python -m app.tools.bakeoff 卷子1.jpg 卷子2.jpg  # 比较各家擦除
 
 ## 6. 启动
 
+每次使用前，打开终端，进入代码目录启动（终端窗口不要关，关了程序就停了）：
+
 ```bash
+cd Claude-made-stock-bot/mistake-mastery
 uv run python -m app
 ```
 
@@ -84,7 +128,9 @@ uv run python -m app
 
 **电脑上用**：在运行程序的这台电脑上打开 `http://localhost:8000`；家里其他电脑、平板用上面那个局域网地址。界面按手机设计，在电脑上显示为居中的一栏。
 
-**手机打不开时**：确认手机和电脑在同一个 Wi-Fi；电脑防火墙允许 8000 端口的入站连接（Mac 首次运行时会弹窗询问，选"允许"）。
+**手机打不开时**：确认手机和电脑在同一个 Wi-Fi；电脑防火墙允许 8000 端口的入站连接（Mac 首次运行时会弹窗询问，选"允许"；Windows 弹出"Windows 安全中心"时勾选"专用网络"并点"允许访问"）。
+
+**电脑别睡着**：电脑睡眠后手机就连不上了。插着电源时把自动睡眠关掉（Mac：系统设置 → 电池/节能 → 接通电源时防止自动进入睡眠；Windows：设置 → 系统 → 电源 → 接通电源时"从不"睡眠）。
 
 ---
 
@@ -107,7 +153,7 @@ uv run python -m app
 
 | 场景 | 做法 |
 |------|------|
-| 升级到新版本 | `git pull`，然后 `uv sync`，`cd web && npm install && npm run build`，再重启 |
+| 升级到新版本 | 停掉程序（终端里按 Ctrl+C），在 `mistake-mastery` 目录依次运行 `git pull`、`uv sync`、`cd web`、`npm install`、`npm run build`、`cd ..`，再启动 |
 | 换电脑或电脑坏了 | 在新电脑上做第 1–4 步（第 2 步只需 clone 已有的数据仓库），启动时会自动从数据仓库恢复全部数据 |
 | 数据库出问题 | `uv run python -m app.tools.rebuild_index`，从数据仓库重建 |
 | GitHub 推送失败 | 提交会先留在本机，程序自动重试；"我的"页面能看到错误信息 |
