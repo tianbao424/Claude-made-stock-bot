@@ -353,7 +353,7 @@ mistake-mastery/
 │   ├── curriculum/            # 知识点树、错因、北京题位（YAML，通用资料）
 │   └── tools/                 # bakeoff（第 0 步试水）、rebuild_index、hash_password
 ├── web/                       # 前端（React + Vite，npm run build 后由后端直接提供；npm run build:demo 出预览版）
-├── tests/                     # 55 个测试，只用虚构数据
+├── tests/                     # 57 个测试，只用虚构数据
 ├── pyproject.toml · uv.lock
 └── .env.example               # 配置模板（不含真实密钥）
 ```

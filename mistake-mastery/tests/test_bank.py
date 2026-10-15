@@ -413,6 +413,7 @@ def test_scanned_pdf_falls_back_to_model_boxes(bc):
     def fake(task, messages):
         if task == "bank":
             return {"page_kind": "questions", "questions": [
+                {"number_label": "1", "material": True, "bbox": [100, 60, 900, 190], "stem_md": "阅读材料"},
                 {"number_label": "1", "bbox": [100, 200, 900, 400], "stem_md": "扫描卷子上的一道题，题干足够长"}]}
         return bank_fake(task, messages)
 
@@ -420,4 +421,70 @@ def test_scanned_pdf_falls_back_to_model_boxes(bc):
     p = _import(bc, paper=doc.tobytes(), answers=None, verify="false")
     from app.models import BankItem
     with bc.app_ctx.db.session() as s:
-        assert s.get(BankItem, p["questions"][0]["id"]).regions[0]["bbox"] == [100.0, 200.0, 900.0, 400.0]
+        regions = s.get(BankItem, p["questions"][0]["id"]).regions
+    # 题号前的阅读材料也只能用模型的框，放在题目前面
+    assert [r["bbox"] for r in regions] == [[100.0, 60.0, 900.0, 190.0], [100.0, 200.0, 900.0, 400.0]]
+    assert p["questions"][0]["stem_md"].startswith("阅读材料")
+
+
+# ---------------------------------------------------------------- 科普阅读：短文在题号前面，而且跨页
+
+READING_DOC = make_pdf([
+    ["2025 某区初三期中 物理", "四、实验探究题", "22. 小明探究串联电路中电压的特点。",
+     "阅读下面的说明，回答问题：电源电压保持不变。", "(1) 闭合开关后两灯都不亮，电压表示数为 3V。",
+     "五、科普阅读题（共4分）", "请阅读《光伏发电》并回答23题。", "光伏发电",
+     "光伏发电是利用半导体界面的光生伏特效应将光能转变为电能的技术。"],
+    ["图乙所示为某光伏发电系统结构图，该系统由太阳能电池组件等组成。", "与火力发电相比，光伏发电无污染排放。",
+     "23. 根据上述材料，回答下列问题：", "(1) 太阳能电池板的下电极相当于电源的____极。", "六、计算题",
+     "24. 电源两端电压保持不变，R1 的阻值为 10Ω。求 R2 的阻值。"],
+])
+
+
+def reading_fake(task: str, messages: list[dict]):
+    if task == "bank":
+        ref = messages[-1]["content"][1]["text"].split("<<<")[1].split(">>>")[0]
+        rough = [40, 30, 960, 970]
+        if "实验探究题" in ref:
+            return {"page_kind": "questions", "questions": [
+                {"number_label": "22", "bbox": rough, "question_type": "experiment", "stem_md": "小明探究串联电路中电压的特点。"},
+                {"number_label": "23", "material": True, "bbox": rough, "stem_md": "光伏发电是利用光生伏特效应……"}]}
+        # 第 2 页：模型把开头接着的短文误报成上一题（第 22 题）的后半段
+        return {"page_kind": "questions", "questions": [
+            {"number_label": "", "continued": True, "bbox": rough, "stem_md": "图乙所示为某光伏发电系统结构图……"},
+            {"number_label": "23", "bbox": rough, "question_type": "reading", "stem_md": "根据上述材料，回答下列问题："},
+            {"number_label": "24", "bbox": rough, "question_type": "calc", "stem_md": "求 $R_2$ 的阻值。"}]}
+    return bank_fake(task, messages)
+
+
+def test_reading_material_before_the_number_goes_with_its_question(bc):
+    from app.adapters import pdf
+    from app.models import BankItem
+
+    bc.app_ctx.llm.fake = reading_fake
+    p = _import(bc, paper=READING_DOC, answers=None, verify="false", subject="physics")
+    q22, q23, q24 = p["questions"]
+    assert [q["number_label"] for q in (q22, q23, q24)] == ["22", "23", "24"]
+    lines = [pdf.page_layout(READING_DOC, i).lines for i in range(2)]
+
+    def ln(page: int, start: str):
+        return next(x for x in lines[page] if x.text.replace(" ", "").startswith(start))
+
+    with bc.app_ctx.db.session() as s:
+        r22, r23, r24 = (s.get(BankItem, q["id"]).regions for q in (q22, q23, q24))
+    # 第 22 题：题目里的"阅读下面的说明……"不算阅读材料；截到"五、科普阅读题"之前，第 2 页开头的短文不接到它后面
+    assert [r["page"] for r in r22] == [1]
+    assert ln(0, "阅读下面的说明").y1 < r22[0]["bbox"][3] < ln(0, "五、科普阅读").y0
+    # 第 23 题：第 1 页从"请阅读……"开始的短文 + 第 2 页开头接着的短文 + 题目本身
+    assert [r["page"] for r in r23] == [1, 2, 2]
+    assert ln(0, "五、科普阅读").y1 < r23[0]["bbox"][1] <= ln(0, "请阅读《光伏").y0
+    assert r23[1]["bbox"][1] <= ln(1, "图乙所示").y0 and r23[1]["bbox"][3] < ln(1, "23.根据").y0
+    assert r23[2]["bbox"][1] <= ln(1, "23.根据").y0 and r23[2]["bbox"][3] < ln(1, "六、计算题").y0
+    assert q23["stem_md"].startswith("光伏发电是利用光生伏特效应") and "图乙" not in q22["stem_md"]
+    assert [r["page"] for r in r24] == [2]
+
+
+def test_material_line_must_name_the_question():
+    m = bank._MATERIAL.match("请阅读《中国的人造太阳》并回答第24～25题。")
+    assert m and bank._material_labels(m) == ["24", "25"]
+    assert bank._MATERIAL.match("阅读下面的材料，回答问题：") is None  # 题目里面的说明，不是题号前的材料
+    assert bank._boundary("请阅读《光伏发电》并回答 24 题。") == "material"

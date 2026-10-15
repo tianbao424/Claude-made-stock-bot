@@ -9,7 +9,7 @@ SUBJECT_NAMES = {"math": "数学", "physics": "物理"}
 RECOGNIZE_VERSION = "recognize-v1"
 CLASSIFY_VERSION = "classify-v1"
 SOLVE_VERSION = "solve-v1"
-BANK_PAGE_VERSION = "bank-page-v2"
+BANK_PAGE_VERSION = "bank-page-v3"
 
 SYSTEM_DATA_ONLY = (
     "你是一位细心的北京初中{subject}老师，负责整理学生的试卷。"
@@ -125,6 +125,7 @@ def bank_page_messages(subject: str, image_url: str, page_text: str, role: str, 
 questions：按阅读顺序（双栏时先左栏再右栏）列出这一页上每一道题的**题目部分**，大题标题（如"一、选择题"）不算题：
 - number_label：题号，如 "8"、"27"
 - continued：图片最上面如果是上一页最后一道题的题目部分的后半段（没有题号，比如这道题的图、选项、后面的小问），这一段单独列出并写 true；其余写 false。如果上一页那道题的【答案】或【解答】已经开始了，最上面的内容属于解答，不要列在 questions 里
+- material：题号前面、属于后面某道题的阅读材料（比如科普阅读题"请阅读《……》并回答第 24 题"下面的短文，常常跨页），单独列一项并写 true：number_label 写它所属那道题的题号，bbox 框住材料，stem_md 写材料原文；它不是上一题的后半段，不要写成 continued。其余各项写 false
 - bbox：题目部分在图片中的范围 [x0, y0, x1, y1]，坐标归一化到 0–1000，左上角为原点；包括题干、图、选项、各小问，以及题目下面留给作答的空白；**不要框进【答案】【分析】【解答】【点评】等答案部分**
 - question_type：choice_single | choice_multi | fill | solve | experiment | reading | calc
 - stem_md：题干（Markdown，公式用 $...$ 的 LaTeX）；横线上如果已经填了答案（答案版卷子常见），stem_md 里写成 ______，答案放到 answers 里

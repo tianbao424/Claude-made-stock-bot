@@ -209,6 +209,34 @@ def _extend(last: dict, item: dict, region: dict | None) -> None:
     last["has_figure"] = last["has_figure"] or bool(item.get("has_figure"))
 
 
+def _add_material(materials: list[dict], label: str | None, item: dict, region: dict | None) -> None:
+    """模型列出的阅读材料：文字总是收下；范围只在没有文字层（扫描件、照片）时用模型给的框。"""
+    if label is None:
+        return
+    cur = next((mt for mt in reversed(materials) if label in mt["labels"]), None)
+    if cur is None:
+        cur = {"labels": [label], "regions": [], "text": ""}
+        materials.append(cur)
+    stem = (item.get("stem_md") or "").strip()
+    if stem and stem not in cur["text"]:
+        cur["text"] = (cur["text"] + "\n\n" + stem).strip()
+    if region is not None:
+        cur["regions"].append(region)
+
+
+def _take_material(materials: list[dict], q: dict, label: str | None) -> list[dict]:
+    """把属于这道题的阅读材料放到题目最前面；返回还没用上的材料。"""
+    if label is None:
+        return materials
+    for mt in materials:
+        if label in mt["labels"]:
+            q["regions"][:0] = mt["regions"]
+            if mt["text"]:
+                q["stem_md"] = (mt["text"] + "\n\n" + q["stem_md"]).strip()
+    # 一段材料对应几道题时，最后一道题用完再丢
+    return [mt for mt in materials if label not in mt["labels"] or label != mt["labels"][-1]]
+
+
 def _merge_answer(answers: dict[str, dict], item: dict) -> None:
     label = norm_label(item.get("number_label"))
     if not label:
@@ -227,10 +255,14 @@ def _merge_answer(answers: dict[str, dict], item: dict) -> None:
 # Word / WPS 导出的卷子有文字层，每行的位置是准的。模型给的框只当提示：
 # 题目从"27．"这一行开始，到下一个边界（下一题、【答案】【解答】、大题标题）为止。
 # 答案版卷子（每题后面紧跟【答案】）这样截出来的图里就不会带上答案。
+# 科普阅读题的短文在题号前面（"请阅读《……》并回答第 24 题"），可能跨页：从这一行到"24．"之间的内容放到第 24 题最前面。
 
 _Q_START = re.compile(r"^\s*(\d{1,3})\s*[．.、](?!\d)")
 _ANS_MARK = re.compile(r"^\s*[【\[]\s*(答案|分析|解答|详解|解析|点评|点睛|考点|专题|分值|难度)")
 _SECTION = re.compile(r"^\s*[一二三四五六七八九十]+\s*[、．.]?\s*\S{0,8}?题")
+# 只认写明了题号的说明行；题目里面的"阅读下面的材料……"不算
+_MATERIAL = re.compile(r"^\s*请?(?:认真)?阅读.{0,40}?(?:回答|完成|解答|作答)\D{0,6}?(\d{1,3})\s*"
+                       r"(?:[-~～—–至到、]\s*第?\s*(\d{1,3}))?\s*小?题")
 _FOOTER = re.compile(r"^\s*第\s*\d+\s*页")
 _POINTS = re.compile(r"[（(]\s*(\d+)\s*分\s*[)）]")
 PAD = 6  # 0–1000 坐标，约 2 毫米
@@ -282,6 +314,8 @@ def _boundary(text: str) -> str | None:
         return "answer"
     if _Q_START.match(text):
         return "question"
+    if _MATERIAL.match(text):
+        return "material"
     if _SECTION.match(text):
         return "section"
     return None
@@ -316,6 +350,12 @@ def _anchor_question(seg: _Seg, label: object, hint_y: float) -> _Anchor | None:
     if anchor is not None and (m := _POINTS.search(start.text)):
         anchor.points = f"{m.group(1)}分"
     return anchor
+
+
+def _material_labels(m: re.Match) -> list[str]:
+    a = int(m.group(1))
+    b = int(m.group(2)) if m.group(2) else a
+    return [str(n) for n in range(a, b + 1)] if a <= b <= a + 5 else [str(a)]
 
 
 def _anchor_top(seg: _Seg) -> _Anchor | None:
@@ -365,6 +405,9 @@ def _import(ctx: "AppContext", handle: JobHandle, pid: str, *, verify: bool) -> 
     # 上一道题最后一段是怎么结束的：answer = 后面已经是答案，下一页开头的内容只能是解答；
     # page_end = 题目接到了下一页；None = 没有文字层，只能信模型
     last_closed: str | None = None
+    # 题号前面的阅读材料，等对应的题出现时放到它最前面：{"labels": [...], "regions": [...], "text": str}
+    materials: list[dict] = []
+    open_material: dict | None = None  # 接到了下一页的那段材料
     for i, pg in enumerate(pages):
         handle.progress(f"第 {i + 1}/{len(pages)} 页：识别", 5 + int(i / len(pages) * 55))
         img = page_image(ctx, pid, files, pg)
@@ -386,14 +429,34 @@ def _import(ctx: "AppContext", handle: JobHandle, pid: str, *, verify: bool) -> 
                 continue
             header = header or out.get("header")
             items = out.get("questions") or []
+            # 阅读材料：有文字层时按"请阅读……回答第 N 题"这一行找；上一页的材料没完的话，这一页开头接着是材料
+            text_material = top_is_material = False
+            if seg is not None:
+                if open_material is not None:
+                    top = _anchor_top(seg)
+                    if top is not None:
+                        open_material["regions"].append({"page": pg["n"], "bbox": top.bbox})
+                        text_material = top_is_material = True
+                    open_material = open_material if top is not None and top.closed_by == "page_end" else None
+                for ln in seg.lines:
+                    if (m := _MATERIAL.match(ln.text)) and (r := _region(seg, ln.y0)) is not None:
+                        mt = {"labels": _material_labels(m), "text": "", "regions": [{"page": pg["n"], "bbox": r.bbox}]}
+                        materials.append(mt)
+                        open_material, text_material = (mt if r.closed_by == "page_end" else None), True
             # 页面开头是不是上一题的后半段，以模型的判断为准（答案版卷子里那可能是答案的图）；
-            # 范围按文字层算，上一题的答案已经开始了的话一律不算题目
-            continued_done = False
+            # 范围按文字层算，上一题的答案已经开始了的话一律不算题目；开头接着是阅读材料的话也不算
+            continued_done = top_is_material
             for item in items:
                 model_bbox = _seg_bbox(item.get("bbox"), x0, x1, seg_img.shape[1], seg_img.shape[0])
                 label = norm_label(item.get("number_label"))
+                if item.get("material"):
+                    _add_material(materials, label, item, None if text_material else
+                                  {"page": pg["n"], "bbox": model_bbox})
+                    continue
                 same = bool(questions) and label is not None and label == norm_label(questions[-1]["number_label"])
                 if questions and (item.get("continued") or same):
+                    if top_is_material and item.get("continued"):
+                        continue  # 模型把接着的阅读材料当成了上一题的后半段
                     region = None
                     if not continued_done and last_closed != "answer":  # 上一题的答案已经开始了：这是解答，不算题目
                         top = _anchor_top(seg) if seg is not None else None
@@ -404,6 +467,7 @@ def _import(ctx: "AppContext", handle: JobHandle, pid: str, *, verify: bool) -> 
                 anchor = _anchor_question(seg, item.get("number_label"), model_bbox[1]) if seg is not None else None
                 q = _new_question(item, {"page": pg["n"], "bbox": anchor.bbox if anchor else model_bbox})
                 q["points"] = q["points"] or (anchor.points if anchor else None)
+                materials = _take_material(materials, q, label)
                 questions.append(q)
                 last_closed = anchor.closed_by if anchor else None
                 has_q = True
