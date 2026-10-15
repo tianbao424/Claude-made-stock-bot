@@ -9,6 +9,7 @@ import Confirm from "./pages/Confirm";
 import Home from "./pages/Home";
 import Knowledge from "./pages/Knowledge";
 import KnowledgeDetail from "./pages/KnowledgeDetail";
+import LessonPage from "./pages/Lesson";
 import Login from "./pages/Login";
 import MistakeDetail from "./pages/MistakeDetail";
 import Mistakes from "./pages/Mistakes";
@@ -102,6 +103,7 @@ export default function App() {
           <Route path="/mistakes/:id" element={<MistakeDetail />} />
           <Route path="/knowledge" element={<Knowledge />} />
           <Route path="/knowledge/:code" element={<KnowledgeDetail />} />
+          <Route path="/knowledge/:code/lesson" element={<LessonPage />} />
           <Route path="/print" element={<Print />} />
           <Route path="/p/:id" element={<PrintJobPage />} />
           <Route path="/settings" element={<Settings />} />

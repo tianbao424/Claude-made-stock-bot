@@ -41,6 +41,7 @@ DEFAULT_MODELS: dict[str, str] = {
     "solve": "qwen:qwen3-vl-plus",
     "verify": "doubao:",  # 交叉校验要换一家；v0.2 起使用，填上豆包的模型名
     "tutor": "qwen:qwen-plus",
+    "lesson": "qwen:qwen-max",  # 知识点讲解：要讲对、讲清楚，用更强的模型（一份约 ¥0.03）
 }
 
 # 估算费用用的单价（元/百万 tokens，输入/输出），只用于费用上限和统计，以账单为准。
@@ -98,9 +99,10 @@ class LLMClient:
     # ------------------------------------------------------------ 公共接口
 
     def chat_json(self, task: str, messages: list[dict], *, prompt_version: str,
-                  temperature: float = 0.1, timeout: float = 180) -> Any:
-        """调用模型并解析 JSON 输出；解析失败时提醒模型重来一次。"""
-        text = self._chat(task, messages, prompt_version=prompt_version, temperature=temperature, timeout=timeout)
+                  temperature: float = 0.1, timeout: float = 180, fresh: bool = False) -> Any:
+        """调用模型并解析 JSON 输出；解析失败时提醒模型重来一次。fresh：不用缓存（"重新生成"）。"""
+        text = self._chat(task, messages, prompt_version=prompt_version, temperature=temperature, timeout=timeout,
+                          fresh=fresh)
         try:
             return parse_json(text)
         except (json.JSONDecodeError, ValueError):
@@ -145,7 +147,7 @@ class LLMClient:
         return hashlib.sha256(raw.encode()).hexdigest()
 
     def _chat(self, task: str, messages: list[dict], *, prompt_version: str, temperature: float,
-              timeout: float) -> str:
+              timeout: float, fresh: bool = False) -> str:
         if self.fake is not None:
             out = self.fake(task, messages)
             self._log(task, "fake", prompt_version, 0, 0, 0.0, 0, "ok")
@@ -154,7 +156,7 @@ class LLMClient:
         provider, model = self.model_for(task)
         key = self._cache_key(model, prompt_version, messages)
         cached = self.cache_dir / f"{key}.txt"
-        if cached.exists():
+        if cached.exists() and not fresh:
             return cached.read_text(encoding="utf-8")
 
         cap = self.settings.daily_cost_cap_cny

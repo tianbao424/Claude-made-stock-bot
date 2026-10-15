@@ -20,7 +20,7 @@ interface Exam {
   exam_date: string;
 }
 
-const TASK_NAMES: Record<string, string> = { recognize: "识别切题", bank: "题库导入（印刷卷切题）", classify: "知识点分类", solve: "解答", verify: "交叉校验（v0.2）", tutor: "讲解（v0.3）" };
+const TASK_NAMES: Record<string, string> = { recognize: "识别切题", bank: "题库导入（印刷卷切题）", classify: "知识点分类", solve: "解答", verify: "交叉校验（v0.2）", tutor: "错题分步讲解（v0.3）", lesson: "知识点讲解" };
 const ERASER_NAMES: Record<string, string> = { local_color: "本地（只擦彩色笔迹）", baidu: "百度", youdao: "有道", textin: "TextIn", none: "不擦除" };
 
 export default function Settings() {

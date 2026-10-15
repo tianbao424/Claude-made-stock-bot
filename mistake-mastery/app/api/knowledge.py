@@ -1,13 +1,14 @@
 """知识点整理：掌握度地图、掌握死角、单个知识点的详情。"""
 
 from fastapi import APIRouter, Depends
+from pydantic import BaseModel
 
 from app.api.deps import LOGIN, bad_request, get_ctx, not_found
 from app.api.mistakes import _summary
 from app.context import AppContext
 from app.curriculum import SUBJECTS
-from app.models import BankItem, BankPaper, Mistake, Question, QuestionKp
-from app.services import knowledge
+from app.models import Mistake, Question
+from app.services import knowledge, lessons
 
 router = APIRouter(prefix="/api", dependencies=LOGIN)
 
@@ -38,7 +39,7 @@ def overview(student_id: str, subject: str, ctx: AppContext = Depends(get_ctx)) 
             "open": len(set().union(*(x.open for x in roots))) if roots else 0,
             "mastered": len(set().union(*(x.mastered for x in roots))) if roots else 0,
         },
-        "blind_spots": knowledge.blind_spots(cur, subject, stats, bank),
+        "blind_spots": _mark_lessons(ctx, student_id, knowledge.blind_spots(cur, subject, stats, bank)),
         "untouched": knowledge.untouched(cur, subject, stats, bank),
         "tree": knowledge.tree(cur, subject, stats, bank),
     }
@@ -54,7 +55,13 @@ def top_blind_spots(student_id: str, limit: int = 3, ctx: AppContext = Depends(g
             bank = knowledge.bank_rollup(ctx.curriculum, s, subject)
             out += knowledge.blind_spots(ctx.curriculum, subject, stats, bank, limit=limit)
     out.sort(key=lambda b: -b["risk"])
-    return out[:max(1, min(limit, 20))]
+    return _mark_lessons(ctx, student_id, out[:max(1, min(limit, 20))])
+
+
+def _mark_lessons(ctx: AppContext, student_id: str, spots: list[dict]) -> list[dict]:
+    with ctx.db.session() as s:
+        have = lessons.lesson_codes(s, student_id)
+    return [{**b, "lesson": b["code"] in have} for b in spots]
 
 
 @router.get("/knowledge/{code}")
@@ -77,27 +84,36 @@ def detail(code: str, student_id: str, ctx: AppContext = Depends(get_ctx)) -> di
         mistakes.sort(key=lambda d: d["last_wrong_at"], reverse=True)
         mistakes.sort(key=lambda d: open_first.get(d["status"], 5))
 
-        # 题库里这个知识点（含下级）的题；孩子已经做错过的排在后面
-        done = {(q.bank_match or {}).get("question_id") for q in s.query(Question).filter(
-            Question.origin == "captured", Question.subject == kp.subject, Question.bank_match.isnot(None))}
-        bank_rows = (s.query(QuestionKp, BankItem, BankPaper)
-                     .join(BankItem, BankItem.question_id == QuestionKp.question_id)
-                     .join(BankPaper, BankPaper.id == BankItem.paper_id)
-                     .filter((QuestionKp.kp_code == code) | QuestionKp.kp_code.like(f"{code}.%")).all())
-        seen, bank_questions = set(), []
-        for k, item, paper in sorted(bank_rows, key=lambda r: (r[1].question_id in done, not r[0].is_primary,
-                                                              -(r[2].year or 0), r[1].seq)):
-            if item.question_id in seen:
-                continue
-            seen.add(item.question_id)
-            bank_questions.append({"id": item.question_id, "paper_id": paper.id, "paper_title": paper.title,
-                                   "number_label": item.number_label, "primary": bool(k.is_primary),
-                                   "done": item.question_id in done})
-
+        bank_questions = [b for b, _ in knowledge.similar_bank(s, code, kp.subject)]
         children = [knowledge.node_json(cur, c.code, stats.get(c.code), bank)
                     for c in cur.for_subject(kp.subject) if c.parent_code == code]
     return {
         **knowledge.node_json(cur, code, x, bank), "subject": kp.subject, "path": cur.path_name(code),
         "causes": [{"code": c, "name": names.get(c, c), "n": n} for c, n in (x.causes.most_common() if x else [])],
-        "mistake_list": mistakes, "children": children, "bank_questions": bank_questions[:20],
+        "mistake_list": mistakes, "children": children, "bank_questions": bank_questions,
     }
+
+
+# ---------------------------------------------------------------- 知识点讲解
+
+
+class LessonBody(BaseModel):
+    student_id: str
+    fresh: bool = False  # 重新生成：不用上次的缓存
+
+
+@router.get("/knowledge/{code}/lesson")
+def get_lesson(code: str, student_id: str, ctx: AppContext = Depends(get_ctx)) -> dict:
+    if code not in ctx.curriculum.kps:
+        raise not_found("知识点")
+    with ctx.db.session() as s:
+        job = lessons.running_job(s, student_id, code)
+        return {"lesson": lessons.lesson_json(s, student_id, code),
+                "job": {"id": job.id, "status": job.status} if job else None}
+
+
+@router.post("/knowledge/{code}/lesson")
+def make_lesson(code: str, body: LessonBody, ctx: AppContext = Depends(get_ctx)) -> dict:
+    if code not in ctx.curriculum.kps:
+        raise not_found("知识点")
+    return {"job_id": lessons.start(ctx, body.student_id, code, fresh=body.fresh)}

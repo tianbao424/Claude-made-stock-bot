@@ -13,6 +13,7 @@ from app.config import Settings, get_settings
 from app.context import AppContext
 from app.services import bank as bank_service
 from app.services import capture as capture_service
+from app.services import lessons as lessons_service
 from app.services import printing as printing_service
 
 WEB_DIST = Path(__file__).resolve().parent.parent / "web" / "dist"
@@ -26,6 +27,7 @@ def create_app(settings: Settings | None = None, *, start_background: bool = Tru
     capture_service.register(ctx)
     bank_service.register(ctx)
     printing_service.register(ctx)
+    lessons_service.register(ctx)
 
     @asynccontextmanager
     async def lifespan(_app: FastAPI):

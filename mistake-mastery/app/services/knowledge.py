@@ -14,7 +14,7 @@ from typing import TYPE_CHECKING
 
 from sqlalchemy import func
 
-from app.models import Attempt, Mistake, Question, QuestionKp
+from app.models import Attempt, BankItem, BankPaper, Mistake, Question, QuestionKp
 from app.services import mastery as m
 
 if TYPE_CHECKING:
@@ -221,6 +221,27 @@ def tree(cur: "Curriculum", subject: str, stats: dict[str, KpStat], bank: dict[s
         return node
 
     return [build(c) for c in children.get(None, [])]
+
+
+def similar_bank(s: "Session", code: str, subject: str, limit: int = 20) -> list[tuple[dict, Question]]:
+    """题库里这个知识点（含下级）的题：以它为主知识点的、年份新的在前，孩子已经做错过的排在后面。"""
+    done = {(q.bank_match or {}).get("question_id") for q in s.query(Question).filter(
+        Question.origin == "captured", Question.subject == subject, Question.bank_match.isnot(None))}
+    rows = (s.query(QuestionKp, BankItem, BankPaper, Question)
+            .join(BankItem, BankItem.question_id == QuestionKp.question_id)
+            .join(BankPaper, BankPaper.id == BankItem.paper_id)
+            .join(Question, Question.id == BankItem.question_id)
+            .filter((QuestionKp.kp_code == code) | QuestionKp.kp_code.like(f"{code}.%")).all())
+    seen, out = set(), []
+    for k, item, paper, q in sorted(rows, key=lambda r: (r[1].question_id in done, not r[0].is_primary,
+                                                         -(r[2].year or 0), r[1].seq)):
+        if item.question_id in seen:
+            continue
+        seen.add(item.question_id)
+        out.append(({"id": item.question_id, "paper_id": paper.id, "paper_title": paper.title,
+                     "number_label": item.number_label, "primary": bool(k.is_primary),
+                     "done": item.question_id in done}, q))
+    return out[:limit]
 
 
 def bank_rollup(cur: "Curriculum", s: "Session", subject: str) -> dict[str, int]:

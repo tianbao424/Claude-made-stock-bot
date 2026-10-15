@@ -12,6 +12,7 @@ import io
 import itertools
 import json
 import os
+import re
 import subprocess
 import sys
 import tempfile
@@ -26,6 +27,10 @@ sys.path.insert(0, str(ROOT))
 
 from app.config import Settings  # noqa: E402
 from app.main import create_app  # noqa: E402
+from app.models import KpLesson  # noqa: E402
+
+sys.path.insert(0, str(Path(__file__).parent))
+from demo_lessons import LESSONS  # noqa: E402
 
 HERE = Path(__file__).parent
 FONT = os.environ.get("XT_DEMO_FONT", "/usr/share/fonts/truetype/wqy/wqy-zenhei.ttc")
@@ -262,6 +267,9 @@ def _bank_page(text: str) -> dict:
 
 
 def fake_llm(task: str, messages: list[dict]):
+    if task == "lesson":
+        name = re.search(r'写一份"(.+?)"的知识点讲解', messages[-1]["content"]).group(1)
+        return LESSONS[name]
     if task == "bank":
         prompt = messages[-1]["content"][1]["text"]
         return _bank_page(prompt.split("<<<")[1].split(">>>")[0] if "<<<" in prompt else "")
@@ -390,6 +398,16 @@ def main() -> None:
         after = {m["instance_id"]: c.get(f"/api/mistakes/{m['id']}").json()
                  for m in c.get(f"/api/mistakes?student_id={sid}&subject=math").json()}
         fx["math_after_confirm"] = after
+        # 知识点讲解：示例数据里几个知识点各写一份（预览版里点"生成讲解"时拿出来）
+        fx["lessons"] = {}
+        codes = {k.code: k.name for k in app.state.ctx.curriculum.kps.values() if k.name in LESSONS}
+        for code in codes:
+            job = c.post(f"/api/knowledge/{code}/lesson", json={"student_id": sid}).json()["job_id"]
+            assert c.get(f"/api/jobs/{job}").json()["status"] == "done", code
+            with app.state.ctx.db.session() as s:
+                ids = s.query(KpLesson).filter_by(student_id=sid, kp_code=code).one().basis["mistake_ids"]
+            fx["lessons"][code] = {"lesson": c.get(f"/api/knowledge/{code}/lesson?student_id={sid}").json()["lesson"],
+                                   "mistake_ids": ids}
         # 错题重做单：预览里可能选到的每一种组合都事先生成好（按 redo_order 排列，带答案页）
         pool = [pm["1"], pm["2"]] + sorted(after.values(), key=lambda m: m["number_label"])
         fx["redo_order"] = [m["instance_id"] for m in pool]

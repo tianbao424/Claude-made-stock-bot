@@ -28,7 +28,7 @@ export function BlindSpotRow({ b, showSubject }: { b: BlindSpot; showSubject?: b
           <MasteryPill node={b} />
         </div>
         <div className="muted small clamp">{showSubject ? `${b.subject === "math" ? "数学" : "物理"} · ` : ""}{b.path.split(" › ").slice(0, -1).join(" › ")}</div>
-        <div className="reason">{b.reasons.join(" · ")}</div>
+        <div className="reason">{b.reasons.join(" · ")}{b.lesson ? " · 📖 有讲解" : ""}</div>
       </div>
       <span className="muted">›</span>
     </Link>

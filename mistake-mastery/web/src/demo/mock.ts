@@ -1,7 +1,7 @@
 // 预览版的"后端"：在浏览器里用示例数据模拟 /api/* 接口。
 // 示例数据由 web/demo/make_fixtures.py 用真实后端生成（AI 部分是固定的模拟结果），
 // 这里只负责记住页面上的操作，并按 v0.1 的规则更新错题状态。
-import type { BankPaperInfo, BankQuestion, Candidate, Curriculum, Doc, MistakeDetail, PrintJobInfo, Student, Subject, SyncStatus } from "../api";
+import type { BankPaperInfo, BankQuestion, BlindSpot, Candidate, Curriculum, Doc, KpLesson, MistakeDetail, PrintJobInfo, Student, Subject, SyncStatus } from "../api";
 import { KnowledgeIndex } from "./knowledge";
 
 interface Exam {
@@ -31,6 +31,7 @@ export interface Fixtures {
   };
   curriculum: Record<string, Curriculum>;
   kp_weights: Record<string, number | null>; // 每个知识点的中考权重（继承自所在模块）
+  lessons: Record<string, { lesson: KpLesson; mistake_ids: string[] }>; // 示例讲解（用真实后端生成，AI 部分是写好的）
   math_after_confirm: Record<string, MistakeDetail>;
   redo_order: string[]; // 错题重做单 PDF 按这个顺序排题（每种组合都事先生成好了）
 }
@@ -82,6 +83,8 @@ export class MockServer {
   private sync!: SyncStatus;
   private syncTimer: number | undefined;
   private kp: KnowledgeIndex;
+  private lessons: Record<string, KpLesson> = {};
+  private lessonJobs: Record<string, string> = {}; // 知识点 → 正在生成的任务
 
   constructor(fx: Fixtures) {
     this.fx = fx;
@@ -104,6 +107,21 @@ export class MockServer {
     this.settings = ini.settings;
     this.sync = ini.sync;
     this.bank = ini.bank ?? {};
+    this.lessons = {};
+    this.lessonJobs = {};
+  }
+
+  private markLessons(spots: BlindSpot[]): BlindSpot[] {
+    return spots.map((b) => ({ ...b, lesson: b.code in this.lessons }));
+  }
+
+  private lessonState(code: string) {
+    const l = this.lessons[code];
+    const basis = new Set(this.fx.lessons?.[code]?.mistake_ids ?? []);
+    const mine = this.mistakes.filter((m) => m.kp_codes.some((c) => c === code || c.startsWith(code + ".")));
+    const jobId = this.lessonJobs[code];
+    const job = jobId && !this.jobs[jobId]?.done ? { id: jobId, status: "running" } : null;
+    return { lesson: l ? { ...l, new_mistakes: mine.filter((m) => !basis.has(m.id)).length } : null, job };
   }
 
   // ------------------------------------------------------------ 图片和 PDF
@@ -488,9 +506,29 @@ export class MockServer {
     if (p === "/api/knowledge") {
       const subject = q.get("subject") as Subject;
       if (!this.fx.curriculum[subject]) throw new HttpError(400, "不支持的学科");
-      return this.kp.overview(this.mistakes, this.bank, subject);
+      const o = this.kp.overview(this.mistakes, this.bank, subject);
+      return { ...o, blind_spots: this.markLessons(o.blind_spots) };
     }
-    if (p === "/api/knowledge/blind-spots") return this.kp.topBlindSpots(this.mistakes, this.bank, Number(q.get("limit") ?? 3));
+    if (p === "/api/knowledge/blind-spots") return this.markLessons(this.kp.topBlindSpots(this.mistakes, this.bank, Number(q.get("limit") ?? 3)));
+    if ((m = route(/^\/api\/knowledge\/([^/]+)\/lesson$/))) {
+      const code = decodeURIComponent(m[1]);
+      if (!this.kp.node[code]) throw new HttpError(404, "找不到知识点");
+      if (method === "POST") {
+        const sample = this.fx.lessons?.[code];
+        if (!sample) {
+          const have = Object.keys(this.fx.lessons ?? {}).map((c) => this.kp.node[c]?.name).filter(Boolean).join("、");
+          throw new HttpError(400, `预览版只准备了这几个知识点的示例讲解：${have}。装好以后，AI 会按孩子自己的错题现写。`);
+        }
+        const running = this.lessonState(code).job;
+        if (running) return { job_id: running.id };
+        const id = this.submit("kp_lesson", 3500, ["整理这个知识点的错题", "AI 正在写讲解"], { kp_code: code }, () => {
+          this.lessons[code] = { ...clone(sample.lesson), created_at: now() };
+        });
+        this.lessonJobs[code] = id;
+        return { job_id: id };
+      }
+      return this.lessonState(code);
+    }
     if ((m = route(/^\/api\/knowledge\/([^/]+)$/))) {
       const code = decodeURIComponent(m[1]);
       if (!this.kp.node[code]) throw new HttpError(404, "找不到知识点");

@@ -22,7 +22,7 @@ const TOUR: { to: string; title: string; text: string }[] = [
   { to: "/print", title: "⑤ 打印", text: "错题重做单或原卷还原，看生成的 A4 页面" },
   { to: "", title: "⑥ 回填", text: "孩子做完，在打印单页面逐题记 ✓ ✗，状态跟着变" },
   { to: "/mistakes", title: "错题本", text: "每道题的三道关、错题旅程、答案" },
-  { to: "/knowledge", title: "🎯 知识点", text: "按知识点看掌握度和死角；确认数学卷、回填几道题后再来看会变" },
+  { to: "/knowledge", title: "🎯 知识点", text: "按知识点看掌握度和死角；点进薄弱的知识点，让 AI 按孩子的错题写一份讲解" },
 ];
 
 function DemoBar({ server, printId, onReset }: { server: MockServer; printId: string; onReset: () => void }) {

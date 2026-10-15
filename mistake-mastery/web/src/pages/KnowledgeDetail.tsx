@@ -3,6 +3,7 @@ import { Link, useNavigate, useParams } from "react-router-dom";
 import { api, KnowledgeDetail as Detail, MASTERY_NAMES, runtime, subjectName } from "../api";
 import { StatusBadge, useStudent } from "../components/common";
 import { MasteryBar } from "./Knowledge";
+import { LessonCard } from "./Lesson";
 
 const monthDay = (iso: string) => `${Number(iso.slice(5, 7))} 月 ${Number(iso.slice(8, 10))} 日`;
 
@@ -49,6 +50,8 @@ export default function KnowledgeDetail() {
           )}
         </div>
       </div>
+
+      <LessonCard code={d.code} weak={d.status === "weak" || d.open > 0} />
 
       {!!d.causes.length && (
         <div className="card">

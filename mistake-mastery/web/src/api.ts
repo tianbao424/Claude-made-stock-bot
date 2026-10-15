@@ -314,6 +314,7 @@ export interface BlindSpot extends KnowledgeNode {
   path: string;
   risk: number;
   reasons: string[];
+  lesson?: boolean; // 已经有讲解
 }
 
 export interface KnowledgeOverview {
@@ -331,4 +332,31 @@ export interface KnowledgeDetail extends KnowledgeNode {
   mistake_list: MistakeSummary[];
   children: KnowledgeNode[];
   bank_questions: { id: string; paper_id: string; paper_title: string; number_label: string; primary: boolean; done: boolean }[];
+}
+
+// 知识点讲解（AI 按孩子在这个知识点上的错题写的）
+export interface LessonRef {
+  kind: "mistake" | "bank";
+  id: string;
+  paper_id?: string;
+  label: string;
+}
+
+export interface KpLesson {
+  id: string;
+  one_line: string;
+  key_points: { title: string; md: string }[];
+  method: string[];
+  pitfalls: { title: string; md: string; refs: string[] }[];
+  example: { ref: string | null; question_md: string; steps_md: string; answer: string } | null;
+  self_check: string[];
+  refs: Record<string, LessonRef>;
+  created_at: string;
+  model: string;
+  new_mistakes: number; // 写讲解之后又录入的这个知识点的错题数
+}
+
+export interface LessonState {
+  lesson: KpLesson | null;
+  job: { id: string; status: string } | null;
 }

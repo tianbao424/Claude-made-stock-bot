@@ -166,3 +166,42 @@ label.field > * { margin-top: 4px; }
 .kp-module + .kp-module { border-top: 1px solid var(--line); }
 .reason { font-size: 12px; color: var(--muted); }
 .big-num { font-size: 34px; font-weight: 700; line-height: 1; color: var(--lvl); font-variant-numeric: tabular-nums; }
+
+/* 知识点讲解 */
+.banner { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin: 8px 0; padding: 8px 10px; border-radius: 8px;
+          background: var(--info-soft); color: var(--info); font-size: 13px; }
+.lesson { margin-top: 8px; }
+.lesson section { margin-top: 14px; }
+.lesson h3 { font-size: 14px; margin: 0 0 6px; color: var(--brand); letter-spacing: .02em; }
+.lesson ol, .lesson ul { margin: 0; padding-left: 1.4em; }
+.lesson li + li { margin-top: 6px; }
+.lesson li .md > p:first-child { margin-top: 0; }
+.lesson li > b + .md { margin-top: 2px; }
+.lesson .md p { margin: 2px 0; }
+.lesson-lead { padding: 10px 12px; border-left: 3px solid var(--brand); background: var(--brand-soft); border-radius: 0 8px 8px 0; font-weight: 600; }
+.lesson-pitfall { padding: 8px 10px; border-radius: 8px; background: var(--warn-soft); }
+.lesson-pitfall + .lesson-pitfall { margin-top: 8px; }
+.lesson-pitfall > b { color: var(--warn); }
+.lesson-refs { gap: 6px; margin-top: 6px; }
+.lesson-refs .chip { font-size: 12px; }
+.lesson-q { padding: 8px 10px; border: 1px solid var(--line); border-radius: 8px; }
+.lesson-a { margin-top: 6px; }
+.lesson-ans { display: flex; gap: 4px; align-items: baseline; margin-top: 6px; }
+.lesson-checks { list-style: none; padding-left: 0 !important; }
+.lesson-checks li { position: relative; padding-left: 1.5em; }
+.lesson-checks li::before { content: "☐"; position: absolute; left: 0; color: var(--muted); }
+
+/* 打印：只留内容，白底黑字 */
+@media print {
+  /* 和深色模式的选择器一样具体，写在后面才能盖过它：深色模式下打印也是白纸 */
+  :root, :root:not([data-theme="light"]), :root[data-theme="dark"] {
+    --bg: #fff; --card: #fff; --ink: #000; --muted: #444; --line: #bbb; --brand: #1f6f5c; --brand-soft: #eef6f3;
+    --warn: #8a3d12; --warn-soft: #fbf3ee; --info: #1a4fa0; --info-soft: #fff; --neutral-soft: #eee; --track: #ddd;
+    color-scheme: light;
+  }
+  body { background: #fff; color: #000; }
+  .nav, .no-print, .demo-bar { display: none !important; }
+  .app { max-width: none; padding: 0; }
+  .card { border: 0; box-shadow: none; padding: 0; }
+  .lesson section, .lesson-pitfall { break-inside: avoid; }
+}

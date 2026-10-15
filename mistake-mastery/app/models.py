@@ -307,6 +307,29 @@ class KpMastery(Base):
     updated_at: Mapped[str] = mapped_column(String(32), nullable=False, default=now_iso)
 
 
+class KpLesson(Base):
+    """知识点讲解：AI 按孩子在这个知识点上的错题写的（要点、方法、易错点、例题），每个孩子每个知识点一份。
+
+    生成要花钱，所以同步到数据仓库；重新生成时覆盖。"""
+
+    __tablename__ = "kp_lessons"
+    __sync__ = "table"
+
+    id: Mapped[str] = _id()
+    student_id: Mapped[str] = mapped_column(ForeignKey("students.id"), nullable=False)
+    kp_code: Mapped[str] = mapped_column(String(40), nullable=False)
+    # {"one_line", "key_points": [{"title","md"}], "method": [md], "pitfalls": [{"title","md","refs"}],
+    #  "example": {"ref","question_md","steps_md","answer"} | null, "self_check": [md]}
+    content: Mapped[dict] = mapped_column(JSON, nullable=False)
+    # 写讲解时用到的材料：{"mistake_ids": [...], "refs": {"M1": {"kind": "mistake", "id": ...}, "B1": {...}}}
+    basis: Mapped[dict] = mapped_column(JSON, nullable=False, default=dict)
+    model: Mapped[str] = mapped_column(String(60), nullable=False, default="")
+    prompt_version: Mapped[str] = mapped_column(String(20), nullable=False, default="")
+    created_at: Mapped[str] = _created()
+
+    __table_args__ = (Index("ix_kp_lessons_student_kp", "student_id", "kp_code", unique=True),)
+
+
 # ---------------------------------------------------------------- 打印
 
 

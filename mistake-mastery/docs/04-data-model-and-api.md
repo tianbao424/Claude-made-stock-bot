@@ -234,6 +234,18 @@ CREATE TABLE tutor_messages (
     created_at      TEXT NOT NULL
 );
 
+CREATE TABLE kp_lessons (                 -- 知识点讲解：每个孩子每个知识点一份，见 06 §6.2
+    id              TEXT PRIMARY KEY,
+    student_id      TEXT NOT NULL REFERENCES students(id),
+    kp_code         TEXT NOT NULL,
+    content         JSON NOT NULL,        -- one_line, key_points, method, pitfalls, example, self_check
+    basis           JSON NOT NULL,        -- 用到了哪些错题；M1/B1 这些编号对应的错题和题库题
+    model           TEXT NOT NULL,
+    prompt_version  TEXT NOT NULL,
+    created_at      TEXT NOT NULL,
+    UNIQUE (student_id, kp_code)
+);
+
 CREATE TABLE kp_mastery (                 -- 【仅本地】派生数据：由作答记录算出，重建索引时重算（知识点整理页目前现算，见 06 §6.1）
     student_id      TEXT NOT NULL REFERENCES students(id),
     kp_code         TEXT NOT NULL REFERENCES knowledge_points(code),
@@ -461,6 +473,8 @@ CREATE TABLE ai_calls (                   -- 【仅本地】调试、费用统�
 | GET | `/api/knowledge?student_id&subject` | 知识点整理：汇总（薄弱 / 待加强 / 较好的考点数）、掌握死角、还没有错题记录的常考点、整棵知识点树（每个节点带掌握度和错题数），见 06 §6.1 |
 | GET | `/api/knowledge/blind-spots?student_id&limit=3` | 首页用：两科合在一起最该补的几个考点 |
 | GET | `/api/knowledge/{code}?student_id` | 单个知识点：掌握度、错因、错题列表（`mistake_list`）、下级知识点、题库里的同类题 |
+| GET | `/api/knowledge/{code}/lesson?student_id` | 知识点讲解（没有时为 null）、写完之后新增的错题数、正在生成的任务 |
+| POST | `/api/knowledge/{code}/lesson` | 生成或重新生成讲解：`{student_id, fresh}` → `job_id`（已经在生成的返回同一个任务），见 06 §6.2 |
 | GET | `/api/dashboard` | 知识点掌握度、错因分布、反复错 TOP |
 | GET | `/api/weekly?week=2026-W42` | 周小结 |
 
