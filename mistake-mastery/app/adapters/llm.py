@@ -9,7 +9,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Callable
 
-from openai import OpenAI
+from openai import APIConnectionError, OpenAI
 from sqlalchemy import func
 
 from app.config import Settings
@@ -48,18 +48,18 @@ DEFAULT_MODELS: dict[str, str] = {
 }
 
 # 一键换一家：各任务的默认模型换成下面哪一套，见 resolve_preset。
-# 要看图的任务（识别切题、题库导入、解答）用能看图的 mimo-v2.5；纯文字的讲解用推理更强的 mimo-v2.5-pro。
-# 设置页里单独改过的任务仍以设置页为准。
+# MiMo：V2.6 的两个型号都能看图。量大的识别、切题、分类、解答用便宜的 mimo-v2.6-flash，讲解用更强的 mimo-v2.6-pro。
+# 旧型号 mimo-v2.5 / mimo-v2.5-pro 在 2026-10-21 停用。设置页里单独改过的任务仍以设置页为准。
 PRESETS: dict[str, dict[str, str]] = {
     "qwen": DEFAULT_MODELS,
     "mimo": {
-        "recognize": "mimo:mimo-v2.5",
-        "bank": "mimo:mimo-v2.5",
-        "classify": "mimo:mimo-v2.5",
-        "solve": "mimo:mimo-v2.5",
+        "recognize": "mimo:mimo-v2.6-flash",
+        "bank": "mimo:mimo-v2.6-flash",
+        "classify": "mimo:mimo-v2.6-flash",
+        "solve": "mimo:mimo-v2.6-flash",
         "verify": "doubao:",  # 交叉校验要换一家
-        "tutor": "mimo:mimo-v2.5-pro",
-        "lesson": "mimo:mimo-v2.5-pro",
+        "tutor": "mimo:mimo-v2.6-pro",
+        "lesson": "mimo:mimo-v2.6-pro",
     },
 }
 
@@ -103,6 +103,29 @@ class CostCapExceeded(RuntimeError):
 
 class LLMError(RuntimeError):
     pass
+
+
+def explain_error(exc: Exception, provider: str, model: str) -> str:
+    """把接口报错翻译成该怎么办，原始报错附在后面方便排查。"""
+    p = PROVIDERS.get(provider)
+    key = f"XT_{p.key_attr.upper()}" if p else "密钥"
+    status = getattr(exc, "status_code", None)
+    raw = str(exc)
+    if status == 429 and "quota" in raw.lower():
+        hint = "这家的额度用完了，或者套餐还没开通：去平台控制台看套餐和剩余额度"
+    elif status == 429:
+        hint = "请求太频繁，被限速了：等一会儿再试"
+    elif status in (401, 403):
+        hint = f"密钥不对、过期或没有权限：检查 .env 里的 {key}"
+    elif status == 402:
+        hint = "账户余额不足或套餐额度用完了：去平台控制台看看"
+    elif status == 404 or (status == 400 and "model" in raw.lower()):
+        hint = f"平台上没有 {model} 这个模型：在设置页的“模型”里改成控制台列出的型号"
+    elif isinstance(exc, APIConnectionError):
+        hint = "连不上接口：检查网络；开着代理软件的话，试试关掉它的增强模式 / TUN 模式"
+    else:
+        return f"{provider}:{model} 调用失败：{raw}"
+    return f"{provider}:{model} 调用失败：{hint}（{raw[:300]}）"
 
 
 def image_part(data_url: str) -> dict:
@@ -214,7 +237,7 @@ class LLMClient:
                 model=model, messages=messages, temperature=temperature, timeout=timeout)
         except Exception as exc:
             self._log(task, model, prompt_version, 0, 0, 0.0, int((time.monotonic() - started) * 1000), "failed")
-            raise LLMError(f"{provider}:{model} 调用失败：{exc}") from exc
+            raise LLMError(explain_error(exc, provider, model)) from exc
         text = resp.choices[0].message.content or ""
         usage = resp.usage
         tin = getattr(usage, "prompt_tokens", 0) or 0

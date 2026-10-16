@@ -171,8 +171,8 @@ def test_model_preset_and_mimo_endpoint(make_settings, tmp_path):
     tmp_path.mkdir(exist_ok=True)
     s = make_settings(tmp_path, model_preset="mimo", mimo_api_key="tp-test")
     models = default_models(s)
-    assert models["recognize"] == models["bank"] == models["solve"] == "mimo:mimo-v2.5"  # 要看图
-    assert models["lesson"] == "mimo:mimo-v2.5-pro"
+    assert models["recognize"] == models["bank"] == models["solve"] == "mimo:mimo-v2.6-flash"  # 要看图
+    assert models["lesson"] == "mimo:mimo-v2.6-pro"
     assert default_models(make_settings(tmp_path))["recognize"].startswith("qwen:")  # 默认还是通义千问
     # 没写 XT_MODEL_PRESET：只填了 MiMo 的密钥就用 MiMo，两家都填了用通义千问；写了就按写的
     assert resolve_preset(make_settings(tmp_path, mimo_api_key="tp-x"))[0] == "mimo"
@@ -183,7 +183,7 @@ def test_model_preset_and_mimo_endpoint(make_settings, tmp_path):
 
     db = Database(s.data_dir / "t.db")
     llm = LLMClient(s, db, s.data_dir / "cache", models={"classify": "qwen:qwen-plus"})
-    assert llm.model_for("bank") == ("mimo", "mimo-v2.5")
+    assert llm.model_for("bank") == ("mimo", "mimo-v2.6-flash")
     assert llm.model_for("classify") == ("qwen", "qwen-plus")  # 设置页里单独改过的仍然生效
     assert str(llm._client("mimo").base_url).startswith("https://token-plan-cn.xiaomimimo.com/v1")
     s2 = make_settings(tmp_path, model_preset="mimo", mimo_api_key="sk-x", mimo_base_url="https://api.example.com/v1")
@@ -210,3 +210,23 @@ def test_bakeoff_key_report_and_unknown_env_names(make_settings, tmp_path, monke
     assert usable and "XT_MODEL_PRESET 改成 mimo" in lines[-1]
     lines, usable = key_report(make_settings(tmp_path))
     assert not usable and "还没有大模型密钥" in lines[-1]
+
+
+def test_explain_api_errors():
+    import httpx
+    from openai import APIConnectionError, APIStatusError
+
+    from app.adapters.llm import explain_error
+
+    req = httpx.Request("POST", "https://example.com/v1/chat/completions")
+
+    def status(code: int, body: str) -> APIStatusError:
+        return APIStatusError(body, response=httpx.Response(code, request=req), body=None)
+
+    quota = explain_error(status(429, "{'message': 'quota exhausted'}"), "mimo", "mimo-v2.6-flash")
+    assert "额度用完了" in quota and "quota exhausted" in quota  # 原始报错也留着
+    assert "限速" in explain_error(status(429, "too many requests"), "mimo", "m")
+    assert "XT_MIMO_API_KEY" in explain_error(status(401, "invalid key"), "mimo", "m")
+    assert "没有 mimo-x 这个模型" in explain_error(status(404, "not found"), "mimo", "mimo-x")
+    assert "代理" in explain_error(APIConnectionError(request=req), "qwen", "m")
+    assert explain_error(ValueError("怪"), "qwen", "m") == "qwen:m 调用失败：怪"
