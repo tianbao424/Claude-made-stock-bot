@@ -488,3 +488,23 @@ def test_material_line_must_name_the_question():
     assert m and bank._material_labels(m) == ["24", "25"]
     assert bank._MATERIAL.match("阅读下面的材料，回答问题：") is None  # 题目里面的说明，不是题号前的材料
     assert bank._boundary("请阅读《光伏发电》并回答 24 题。") == "material"
+
+
+def test_bank_try_tool_writes_report(tmp_path, make_settings):
+    """试导入工具：临时文件夹里跑完整导入，写报告、截图和模型原始输出，不留下数据。"""
+    from app.tools import bank_try
+
+    paper, answers = tmp_path / "海淀一模-数学.pdf", tmp_path / "答案.pdf"
+    paper.write_bytes(PAPER)
+    answers.write_bytes(ANSWERS)
+    data = tmp_path / "data"
+    data.mkdir()
+    out = bank_try.run(paper, answers, "math", tmp_path / "out", settings=make_settings(data), fake=bank_fake)
+    report = (out / "report.txt").read_text(encoding="utf-8")
+    assert "题目 3 道" in report and "第 2 题  第 1、2 页" in report and "⚠ AI 解出" in report
+    assert "没对上题号的答案：['4']" in report
+    assert (out / "index.html").read_text(encoding="utf-8").count("<img src='data:image/jpeg;base64,") == 3
+    raw = [json.loads(line) for line in (out / "raw.jsonl").read_text(encoding="utf-8").splitlines()]
+    assert {r["task"] for r in raw} >= {"bank", "classify", "solve"}
+    assert not any(data.iterdir())  # 用的是临时文件夹
+    assert bank_try._guess_subject("2025朝外初三期中物理.pdf") == "physics"
