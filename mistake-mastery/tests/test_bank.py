@@ -532,3 +532,34 @@ def test_bank_try_ctrl_c_still_writes_report(tmp_path, make_settings):
     assert len((out / "raw.jsonl").read_text(encoding="utf-8").splitlines()) == 1
     from app.jobs import JobHandle
     assert JobHandle.progress.__qualname__ == "JobHandle.progress"  # 打印进度的替身已经还原
+
+
+def test_continued_part_merges_options_and_joins_broken_sentence():
+    """真实模型（家长电脑上的试导入）暴露的三处：跨页题的选项在下一页、句子在页尾断开、只有图的后半段被写了一句说明。"""
+    from app.services.bank import _extend
+
+    q = {"stem_md": "用电压表测得 $R_1$ 两", "options": None, "sub_questions": None, "has_figure": False, "regions": []}
+    _extend(q, {"stem_md": "端的电压大于 $R_2$ 两端的电压。则下列判断中正确的是",
+                "options": [{"key": "A", "md": "甲"}, {"key": "B", "md": "乙"}]}, None)
+    assert q["stem_md"] == "用电压表测得 $R_1$ 两端的电压大于 $R_2$ 两端的电压。则下列判断中正确的是"
+    assert [o["key"] for o in q["options"]] == ["A", "B"]
+    _extend(q, {"stem_md": "（接上一页第 9 题的图：甲为电热水壶，乙为四个电路图）", "has_figure": True,
+                "options": [{"key": "B", "md": "乙"}, {"key": "C", "md": "丙"}]}, None)
+    assert "接上一页" not in q["stem_md"] and q["has_figure"]  # 模型写的看图说明不是卷面上的字
+    assert [o["key"] for o in q["options"]] == ["A", "B", "C"]  # 不重复
+    q2 = {"stem_md": "如图所示，求：", "options": None, "sub_questions": None, "has_figure": False, "regions": []}
+    _extend(q2, {"stem_md": "(1) 电源电压"}, None)
+    assert q2["stem_md"] == "如图所示，求：\n\n(1) 电源电压"  # 说完了的句子、小问另起一段
+
+
+def test_classify_offers_only_finest_points_and_repairs_codes():
+    from app.curriculum import load
+    from app.services import prompts
+
+    cur = load()
+    text = prompts.classify_messages("physics", cur, [{"id": 0, "stem": "x"}])[1]["content"]
+    assert "P.ELEC.OHM.MEASURE" in text and "P.ELEC.OHM  " not in text  # 只列最细的考点
+    assert cur.resolve("P.ELEC.OHM.MEASURE", "physics") == "P.ELEC.OHM.MEASURE"
+    assert cur.resolve("P.ELEC.OHM.MEAS", "physics") == "P.ELEC.OHM.MEASURE"  # 写短了
+    assert cur.resolve("P.ELEC.OHM.XYZ", "physics") == "P.ELEC.OHM"  # 编的：退到上级
+    assert cur.resolve("P.ELEC.OHM.CALC", "math") is None and cur.resolve(None, "physics") is None

@@ -7,9 +7,9 @@ from app.curriculum import Curriculum
 SUBJECT_NAMES = {"math": "数学", "physics": "物理"}
 
 RECOGNIZE_VERSION = "recognize-v1"
-CLASSIFY_VERSION = "classify-v1"
+CLASSIFY_VERSION = "classify-v2"
 SOLVE_VERSION = "solve-v1"
-BANK_PAGE_VERSION = "bank-page-v3"
+BANK_PAGE_VERSION = "bank-page-v4"
 LESSON_VERSION = "lesson-v1"
 
 SYSTEM_DATA_ONLY = (
@@ -46,12 +46,12 @@ def recognize_messages(subject: str, image_url: str, mode: str) -> list[dict]:
 
 
 def classify_messages(subject: str, cur: Curriculum, questions: list[dict]) -> list[dict]:
-    kp_lines = "\n".join(f"{k.code}  {cur.path_name(k.code)}" for k in cur.for_subject(subject) if k.level >= 2)
+    kp_lines = "\n".join(f"{k.code}  {cur.path_name(k.code)}" for k in cur.leaves(subject))
     causes = "\n".join(f"{c['code']}  {c['name']}：{c['hint']}" for c in cur.causes_for(subject))
     slots = "\n".join(f"{s['code']}  {s['name']}" for s in cur.slots_for(subject))
     text = f"""下面是北京初三{SUBJECT_NAMES[subject]}的若干道题，请逐题分类。
 
-【知识点清单】（只能从这里选编码）
+【知识点清单】（都是最细的考点，只能从这里选，编码一字不差地抄）
 {kp_lines}
 
 【北京中考题位】（只能从这里选，不像任何题位就填 null）
@@ -65,7 +65,7 @@ def classify_messages(subject: str, cur: Curriculum, questions: list[dict]) -> l
 
 对每道题输出：
 - id：题目的 id（原样返回）
-- kp_codes：1–3 个知识点编码，主要考点放第一个，尽量选最细的一级
+- kp_codes：1–3 个知识点编码（从清单里原样抄，不要自己编或缩写），主要考点放第一个
 - bj_slot：最像北京中考的哪个题位
 - difficulty：难度 1–5（以北京中考为参照，5 为压轴）
 - error_causes：如果给出了学生作答且做错了，从错因清单里选 1–2 个最可能的错因；否则为 []
@@ -129,7 +129,7 @@ questions：按阅读顺序（双栏时先左栏再右栏）列出这一页上�
 - material：题号前面、属于后面某道题的阅读材料（比如科普阅读题"请阅读《……》并回答第 24 题"下面的短文，常常跨页），单独列一项并写 true：number_label 写它所属那道题的题号，bbox 框住材料，stem_md 写材料原文；它不是上一题的后半段，不要写成 continued。其余各项写 false
 - bbox：题目部分在图片中的范围 [x0, y0, x1, y1]，坐标归一化到 0–1000，左上角为原点；包括题干、图、选项、各小问，以及题目下面留给作答的空白；**不要框进【答案】【分析】【解答】【点评】等答案部分**
 - question_type：choice_single | choice_multi | fill | solve | experiment | reading | calc
-- stem_md：题干（Markdown，公式用 $...$ 的 LaTeX）；横线上如果已经填了答案（答案版卷子常见），stem_md 里写成 ______，答案放到 answers 里
+- stem_md：题干（Markdown，公式用 $...$ 的 LaTeX），只抄卷面上印着的文字，不要自己描述图；continued 的那一段如果只有图、没有文字，写空字符串 ""。横线上如果已经填了答案（答案版卷子常见），stem_md 里写成 ______，答案放到 answers 里
 - options：选择题的选项 [{{"key":"A","md":"..."}}]；不是选择题为 null
 - sub_questions：小问 [{{"no":"(1)","md":"..."}}]；没有为 null
 - has_figure：题目里是否有图

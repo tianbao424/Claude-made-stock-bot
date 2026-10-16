@@ -196,14 +196,27 @@ def _new_question(item: dict, region: dict) -> dict:
     }
 
 
+_SENTENCE_END = set("。？！：；….?!:;）)】」”\"")
+_NEW_PART = re.compile(r"^\s*(?:[（(]\s*\d+\s*[）)]|[①-⑳]|[A-D]\s*[．.、]|\d+\s*[．.、])")  # 小问、选项开头的另起一段
+# 模型有时给只有图的后半段写一句说明，比如"（接上一页第 9 题的图：……）"，那不是卷面上的字
+_DESCRIBED = re.compile(r"^[（(][^（）()]*(?:接上|上一页|续)[^（）()]*[）)]$")
+
+
 def _extend(last: dict, item: dict, region: dict | None) -> None:
     """跨页（或跨半页）的题：把后半段接到上一道题上（region 为 None 时只合并文字）。"""
     if region is not None:
         last["regions"].append(region)
     last["answer_shown"] = last.get("answer_shown") or bool(item.get("answer_shown"))
     stem = (item.get("stem_md") or "").strip()
-    if stem and stem not in last["stem_md"]:
-        last["stem_md"] = (last["stem_md"] + "\n\n" + stem).strip()
+    if stem and stem not in last["stem_md"] and not _DESCRIBED.match(stem):
+        # 上一页最后一句没说完（"……用电压表测得 R1 两" + "端的电压……"）就直接接上，否则另起一段
+        mid = last["stem_md"] and last["stem_md"][-1] not in _SENTENCE_END and not _NEW_PART.match(stem)
+        sep = "" if mid else "\n\n"
+        last["stem_md"] = (last["stem_md"] + sep + stem).strip()
+    if item.get("options"):
+        keys = {o.get("key") for o in last.get("options") or [] if isinstance(o, dict)}
+        last["options"] = (last.get("options") or []) + [o for o in item["options"]
+                                                           if isinstance(o, dict) and o.get("key") not in keys]
     if item.get("sub_questions"):
         last["sub_questions"] = (last["sub_questions"] or []) + list(item["sub_questions"])
     last["has_figure"] = last["has_figure"] or bool(item.get("has_figure"))

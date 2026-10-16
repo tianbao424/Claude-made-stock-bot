@@ -50,6 +50,31 @@ class Curriculum:
             kp = self.kps.get(kp.parent_code) if kp.parent_code else None
         return " › ".join(reversed(names))
 
+    def leaves(self, subject: str) -> list[KP]:
+        """最细的考点（没有下级的知识点），掌握死角只看这些。"""
+        parents = {k.parent_code for k in self.kps.values()}
+        return [k for k in self.for_subject(subject) if k.level >= 2 and k.code not in parents]
+
+    def resolve(self, code: object, subject: str) -> str | None:
+        """模型给的知识点编码对到清单上：原样有就用；写短了（P.ELEC.OHM.MEAS）而清单里只有一个这样开头的
+        （P.ELEC.OHM.MEASURE）就用那个；再不行退到最近的上级；都对不上返回 None。"""
+        if not isinstance(code, str) or not code.strip():
+            return None
+        code = code.strip()
+        kp = self.kps.get(code)
+        if kp is not None:
+            return code if kp.subject == subject else None
+        longer = [k.code for k in self.for_subject(subject) if k.code.startswith(code)]
+        if len(longer) == 1:
+            return longer[0]
+        parts = code.split(".")
+        while len(parts) > 2:
+            parts.pop()
+            kp = self.kps.get(".".join(parts))
+            if kp is not None and kp.subject == subject:
+                return kp.code
+        return None
+
     def causes_for(self, subject: str) -> list[dict]:
         return [c for c in self.error_causes if c["subject"] in ("all", subject)]
 

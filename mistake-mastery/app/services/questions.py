@@ -71,8 +71,8 @@ def instance_crop(ctx: "AppContext", inst: QuestionInstance, page: SourcePage, k
 def apply_classification(ctx: "AppContext", s: "Session", q: Question, item: dict) -> None:
     """写入模型给的知识点、题位和难度（只填还空着的：家长改过或从题库带来的不覆盖）。"""
     subject = q.subject
-    codes = [c for c in item.get("kp_codes") or [] if c in ctx.curriculum.kps
-             and ctx.curriculum.kps[c].subject == subject][:3]
+    resolved = (ctx.curriculum.resolve(c, subject) for c in item.get("kp_codes") or [])
+    codes = list(dict.fromkeys(c for c in resolved if c))[:3]
     if codes and not s.query(QuestionKp).filter_by(question_id=q.id).first():
         for n, code in enumerate(dict.fromkeys(codes)):
             s.add(QuestionKp(question_id=q.id, kp_code=code, is_primary=int(n == 0)))
