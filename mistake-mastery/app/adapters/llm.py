@@ -61,15 +61,16 @@ PRESETS: dict[str, dict[str, str]] = {
         "tutor": "mimo:mimo-v2.6-pro",
         "lesson": "mimo:mimo-v2.6-pro",
     },
-    # DeepSeek：deepseek-v4-flash 能看图（现在由 V4.1-Flash 提供），各任务都用它。
+    # DeepSeek：deepseek-flash（V4.1-Flash）能看图，各任务都用它。旧名 deepseek-v4-flash 现在也转到它，
+    # 但平台的模型列表里已经没有旧名了。纯文字的讲解想用更强的，可以在设置页改成 deepseek:deepseek-v4-pro。
     "deepseek": {
-        "recognize": "deepseek:deepseek-v4-flash",
-        "bank": "deepseek:deepseek-v4-flash",
-        "classify": "deepseek:deepseek-v4-flash",
-        "solve": "deepseek:deepseek-v4-flash",
+        "recognize": "deepseek:deepseek-flash",
+        "bank": "deepseek:deepseek-flash",
+        "classify": "deepseek:deepseek-flash",
+        "solve": "deepseek:deepseek-flash",
         "verify": "doubao:",  # 交叉校验要换一家
-        "tutor": "deepseek:deepseek-v4-flash",
-        "lesson": "deepseek:deepseek-v4-flash",
+        "tutor": "deepseek:deepseek-flash",
+        "lesson": "deepseek:deepseek-flash",
     },
 }
 

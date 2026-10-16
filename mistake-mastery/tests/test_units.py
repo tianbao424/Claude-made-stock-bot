@@ -183,7 +183,7 @@ def test_model_preset_and_mimo_endpoint(make_settings, tmp_path):
     # DeepSeek：只填它就用它；和 MiMo 一起填时按顺序用 MiMo，写了 XT_MODEL_PRESET=deepseek 就用 DeepSeek
     ds = make_settings(tmp_path, deepseek_api_key="sk-d")
     assert resolve_preset(ds)[0] == "deepseek"
-    assert set(default_models(ds).values()) == {"deepseek:deepseek-v4-flash", "doubao:"}
+    assert set(default_models(ds).values()) == {"deepseek:deepseek-flash", "doubao:"}
     assert resolve_preset(make_settings(tmp_path, deepseek_api_key="sk-d", mimo_api_key="tp-x"))[0] == "mimo"
     assert resolve_preset(make_settings(tmp_path, deepseek_api_key="sk-d", mimo_api_key="tp-x",
                                         model_preset="deepseek"))[0] == "deepseek"
