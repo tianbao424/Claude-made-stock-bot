@@ -340,6 +340,7 @@ flowchart LR
 ```
 mistake-mastery/
 ├── README.md · SETUP.md       # 概要；本地版安装与使用
+├── CLAUDE.md                  # 给 AI 编程助手的说明：规则、命令、结构、改动约定
 ├── docs/                      # 本套设计文档
 ├── app/                       # 后端（FastAPI，uv run python -m app 启动）
 │   ├── main.py · __main__.py  # 应用入口；启动命令（显示局域网地址）
@@ -353,7 +354,7 @@ mistake-mastery/
 │   ├── curriculum/            # 知识点树、错因、北京题位（YAML，通用资料）
 │   └── tools/                 # bakeoff（第 0 步试水）、bank_try（试导入一套卷子）、rebuild_index、hash_password
 ├── web/                       # 前端（React + Vite，npm run build 后由后端直接提供；npm run build:demo 出预览版）
-├── tests/                     # 67 个测试，只用虚构数据
+├── tests/                     # pytest，只用虚构数据
 ├── pyproject.toml · uv.lock
 └── .env.example               # 配置模板（不含真实密钥）
 ```
