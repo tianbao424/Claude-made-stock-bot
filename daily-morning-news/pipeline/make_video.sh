@@ -13,11 +13,50 @@ python3 "$HERE/lint_say.py" "$DIR/report.json" "$MODELS"
 python3 "$HERE/synth.py" "$DIR" "$MODELS"
 python3 "$HERE/render.py" "$DIR"
 
+OUT="$DIR/morning_news_$DATE.mp4"
+INTRO="${INTRO_VIDEO:-$HERE/assets/intro.mp4}"   # 片头；设 INTRO_VIDEO= 为空可跳过
+BGM="${BGM_AUDIO:-$HERE/assets/bgm.mp3}"         # 背景音乐（make_bgm.py 生成）；设 BGM_AUDIO= 为空可跳过
+BGM_VOL="${BGM_VOL:-0.4}"                         # 背景音乐音量（人声为 1）
+JOINED="$DIR/build/joined.mp4"
+ENC=(-c:v libx264 -preset medium -crf 28 -g 450 -c:a aac -b:a 64k -ac 1 -ar 44100 -movflags +faststart)
 ffmpeg -y -loglevel error -f concat -safe 0 -i "$DIR/build/frames.txt" -i "$DIR/build/narration.wav" \
-  -vf "fps=15,format=yuv420p" -c:v libx264 -preset medium -crf 28 -tune stillimage -g 450 \
-  -c:a aac -b:a 64k -ac 1 -ar 44100 -movflags +faststart -shortest "$DIR/morning_news_$DATE.mp4"
+  -vf "fps=15,format=yuv420p" -tune stillimage "${ENC[@]}" -shortest "$DIR/build/main.mp4"
 ffmpeg -y -loglevel error -i "$DIR/build/narration.wav" -ac 1 -ar 44100 -c:a libmp3lame -b:a 64k "$DIR/narration.mp3"
-cp "$DIR/build/subtitles.srt" "$DIR/subtitles.srt"
+if [ -n "$INTRO" ] && [ -f "$INTRO" ]; then
+  # 片头统一成正片规格（1080x1920、单声道 44.1kHz），统一 30fps 保证片头动画流畅后拼接，字幕整体后移片头时长
+  ffmpeg -y -loglevel error -i "$INTRO" -i "$DIR/build/main.mp4" -filter_complex \
+    "[0:v]scale=1080:1920:force_original_aspect_ratio=decrease,pad=1080:1920:(ow-iw)/2:(oh-ih)/2,fps=30,setsar=1,format=yuv420p[iv];[1:v]fps=30,setsar=1[mv];\
+     [0:a]aformat=sample_rates=44100:channel_layouts=mono[ia];[1:a]aformat=sample_rates=44100:channel_layouts=mono[ma];\
+     [iv][ia][mv][ma]concat=n=2:v=1:a=1[v][a]" -map "[v]" -map "[a]" "${ENC[@]}" "$JOINED"
+  OFFSET=$(ffprobe -v error -show_entries format=duration -of csv=p=0 "$INTRO")
+  python3 - "$DIR/build/subtitles.srt" "$DIR/subtitles.srt" "$OFFSET" <<'PY'
+import re, sys
+src, dst, off = sys.argv[1], sys.argv[2], float(sys.argv[3])
+def shift(m):
+    t = int(m[1]) * 3600 + int(m[2]) * 60 + int(m[3]) + int(m[4]) / 1000 + off
+    ms = round(t * 1000)
+    return f"{ms // 3600000:02d}:{ms // 60000 % 60:02d}:{ms // 1000 % 60:02d},{ms % 1000:03d}"
+txt = open(src, encoding="utf8").read()
+open(dst, "w", encoding="utf8").write(re.sub(r"(\d+):(\d+):(\d+),(\d+)", shift, txt))
+PY
+else
+  cp "$DIR/build/main.mp4" "$JOINED"
+  cp "$DIR/build/subtitles.srt" "$DIR/subtitles.srt"
+fi
 
-ffprobe -v error -show_entries format=duration,size -of compact=p=0 "$DIR/morning_news_$DATE.mp4"
+if [ -n "$BGM" ] && [ -f "$BGM" ]; then
+  # 背景音乐循环铺满全片：开头 1 秒淡入、结尾 3 秒淡出，有人声时再自动压低（sidechain 闪避）
+  LEN=$(ffprobe -v error -show_entries format=duration -of csv=p=0 "$JOINED")
+  ffmpeg -y -loglevel error -i "$JOINED" -stream_loop -1 -i "$BGM" -filter_complex \
+    "[1:a]aformat=sample_rates=44100:channel_layouts=mono,atrim=0:$LEN,asetpts=PTS-STARTPTS,volume=$BGM_VOL,\
+afade=t=in:d=1,afade=t=out:st=$(python3 -c "print(max(0, $LEN - 3))"):d=3[m];\
+     [0:a]aformat=sample_rates=44100:channel_layouts=mono,asplit[v1][v2];\
+     [m][v1]sidechaincompress=threshold=0.03:ratio=4:attack=30:release=600[md];\
+     [v2][md]amix=inputs=2:duration=first:normalize=0[a]" \
+    -map 0:v -map "[a]" -c:v copy -c:a aac -b:a 96k -ac 1 -ar 44100 -movflags +faststart "$OUT"
+else
+  cp "$JOINED" "$OUT"
+fi
+
+ffprobe -v error -show_entries format=duration,size -of compact=p=0 "$OUT"
 echo "完成: $DIR/morning_news_$DATE.mp4"
