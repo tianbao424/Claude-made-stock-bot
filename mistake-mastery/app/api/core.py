@@ -5,7 +5,7 @@ from fastapi.responses import FileResponse
 from pydantic import BaseModel
 from sqlalchemy import func
 
-from app.adapters.llm import DEFAULT_MODELS
+from app.adapters.llm import default_models
 from app.api.deps import LOGIN, bad_request, get_ctx, not_found
 from app.context import AppContext
 from app.models import ExamEvent, Job, Mistake, PrintJob, SourceDocument, Student
@@ -131,12 +131,12 @@ class SettingsBody(BaseModel):
 @router.get("/settings")
 def get_settings(ctx: AppContext = Depends(get_ctx)) -> dict:
     return {
-        "models": {**DEFAULT_MODELS, **ctx.app_settings.get("models", {})},
+        "models": {**default_models(ctx.settings), **ctx.app_settings.get("models", {})},
         "eraser": ctx.app_settings.get("eraser") or ctx.settings.eraser,
         "erasers": ["local_color", "baidu", "youdao", "textin", "none"],
         "keys": {
             "qwen": bool(ctx.settings.dashscope_api_key), "doubao": bool(ctx.settings.ark_api_key),
-            "deepseek": bool(ctx.settings.deepseek_api_key),
+            "deepseek": bool(ctx.settings.deepseek_api_key), "mimo": bool(ctx.settings.mimo_api_key),
             "baidu": bool(ctx.settings.baidu_api_key), "youdao": bool(ctx.settings.youdao_app_key),
             "textin": bool(ctx.settings.textin_app_id),
         },

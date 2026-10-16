@@ -157,3 +157,29 @@ def test_header_mask_only_first_page_and_only_when_enabled(tmp_path, make_settin
     assert _outbound(on, img, 1)[:10].min() == 255 and _outbound(on, img, 1)[10:].max() == 0
     assert _outbound(on, img, 2).max() == 0  # 只处理第 1 页
     assert _outbound(off, img, 1).max() == 0  # 默认不涂
+
+
+def test_parse_json_skips_reasoning_block():
+    # 推理模型可能把思考过程放在 <think> 里，里面也可能有花括号
+    assert parse_json('<think>设 {x} 为……</think>\n{"ok": true}') == {"ok": True}
+
+
+def test_model_preset_and_mimo_endpoint(make_settings, tmp_path):
+    from app.adapters.llm import LLMClient, default_models
+    from app.db import Database
+
+    tmp_path.mkdir(exist_ok=True)
+    s = make_settings(tmp_path, model_preset="mimo", mimo_api_key="tp-test")
+    models = default_models(s)
+    assert models["recognize"] == models["bank"] == models["solve"] == "mimo:mimo-v2.5"  # 要看图
+    assert models["lesson"] == "mimo:mimo-v2.5-pro"
+    assert default_models(make_settings(tmp_path))["recognize"].startswith("qwen:")  # 默认还是通义千问
+
+    db = Database(s.data_dir / "t.db")
+    llm = LLMClient(s, db, s.data_dir / "cache", models={"classify": "qwen:qwen-plus"})
+    assert llm.model_for("bank") == ("mimo", "mimo-v2.5")
+    assert llm.model_for("classify") == ("qwen", "qwen-plus")  # 设置页里单独改过的仍然生效
+    assert str(llm._client("mimo").base_url).startswith("https://token-plan-cn.xiaomimimo.com/v1")
+    s2 = make_settings(tmp_path, model_preset="mimo", mimo_api_key="sk-x", mimo_base_url="https://api.example.com/v1")
+    assert str(LLMClient(s2, db, s2.data_dir / "cache")._client("mimo").base_url).startswith("https://api.example.com/v1")
+    db.dispose()

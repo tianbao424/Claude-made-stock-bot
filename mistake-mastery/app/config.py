@@ -21,6 +21,10 @@ class Settings(BaseSettings):
     dashscope_api_key: str = ""
     ark_api_key: str = ""
     deepseek_api_key: str = ""
+    mimo_api_key: str = ""  # 小米 MiMo（Token Plan 的密钥以 tp- 开头）
+    mimo_base_url: str = ""  # 留空用 Token Plan 中国区地址
+    # 各任务默认用哪家：qwen（通义千问）| mimo（小米 MiMo），见 app/adapters/llm.py 的 PRESETS
+    model_preset: str = "qwen"
 
     # 去手写接口：none | local_color | baidu | youdao | textin
     eraser: str = "local_color"

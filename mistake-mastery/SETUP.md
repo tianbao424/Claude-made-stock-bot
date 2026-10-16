@@ -94,6 +94,7 @@ uv run python -m app.tools.hash_password      # 设置家庭密码（至少 12 �
 - `XT_DATA_DIR`：第 2 步数据仓库的位置。Mac 例如 `/Users/你的用户名/xuetou-data`；Windows 例如 `C:/Users/你的用户名/xuetou-data`（**用正斜杠 /**）
 - `XT_FAMILY_PASSWORD_HASH`：把这一行换成刚才复制的那一行
 - `XT_DASHSCOPE_API_KEY`：阿里云百炼（通义千问）控制台 → API-KEY，需要实名认证
+  - **改用小米 MiMo**：不填上面这一项，改成填 `XT_MIMO_API_KEY=tp-...`（小米 MiMo 开放平台 Token Plan 的密钥），并把 `XT_MODEL_PRESET=qwen` 改成 `XT_MODEL_PRESET=mimo`。默认连 Token Plan 中国区的地址 `https://token-plan-cn.xiaomimimo.com/v1`；按量付费的账号在 `XT_MIMO_BASE_URL` 里改成控制台给的地址。看图的任务用 `mimo-v2.5`，讲解用 `mimo-v2.5-pro`；型号以控制台为准，不对时在"我的 → 模型"里改
 - 擦除接口：先保持 `XT_ERASER=local_color`（本地算法，只能擦红笔、蓝笔等彩色笔迹），第 5 步试过之后再换成效果最好的一家
 
 `.env` 里有密钥，只留在这台电脑上，不要发给别人，也不要提交到任何仓库（代码仓库已经设置为忽略它）。

@@ -34,11 +34,20 @@ def check(settings) -> None:  # noqa: ANN001
     print("== 大模型 ==")
     db = Database(Path(".bakeoff-tmp.db"))
     llm = LLMClient(settings, db, Path("bakeoff-out/.cache"))
-    for task in ("recognize", "classify", "solve"):
+    # 要看图的任务发一张小图（白底黑方块），确认这个模型真的能看图
+    square = np.full((120, 160, 3), 255, np.uint8)
+    square[30:90, 50:110] = 0
+    image_url, _ = imaging.data_url_jpeg(square)
+    see = [{"type": "image_url", "image_url": {"url": image_url}},
+           {"type": "text", "text": '图片中间有没有一个黑色方块？只输出 JSON：{"ok": true, "black_square": true 或 false}'}]
+    for task, needs_image in (("recognize", True), ("bank", True), ("solve", True), ("classify", False),
+                              ("lesson", False)):
+        content = see if needs_image else '只输出 JSON：{"ok": true}'
         try:
-            out = llm.chat_json(task, [{"role": "user", "content": '只输出 JSON：{"ok": true}'}],
-                                prompt_version=f"check-{time.time()}")
-            print(f"  {task:10s} {llm.models[task]:30s} ✓ {out}")
+            out = llm.chat_json(task, [{"role": "user", "content": content}], prompt_version=f"check-{time.time()}")
+            note = "（看图）" if needs_image else ""
+            bad = needs_image and not (isinstance(out, dict) and out.get("black_square") is True)
+            print(f"  {task:10s} {llm.models[task]:30s} {'⚠ 没认出图里的方块，可能不支持看图' if bad else '✓'}{note} {out}")
         except Exception as exc:  # noqa: BLE001
             print(f"  {task:10s} {llm.models[task]:30s} ✗ {exc}")
     db.dispose()

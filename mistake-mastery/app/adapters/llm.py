@@ -24,12 +24,15 @@ log = logging.getLogger(__name__)
 class Provider:
     base_url: str
     key_attr: str  # Settings 上的密钥字段名
+    base_attr: str | None = None  # Settings 上可以覆盖接口地址的字段名
 
 
 PROVIDERS: dict[str, Provider] = {
     "qwen": Provider("https://dashscope.aliyuncs.com/compatible-mode/v1", "dashscope_api_key"),
     "doubao": Provider("https://ark.cn-beijing.volces.com/api/v3", "ark_api_key"),
     "deepseek": Provider("https://api.deepseek.com", "deepseek_api_key"),
+    # 小米 MiMo：默认是 Token Plan（中国区）的地址；按量付费的账号在 .env 里改 XT_MIMO_BASE_URL
+    "mimo": Provider("https://token-plan-cn.xiaomimimo.com/v1", "mimo_api_key", "mimo_base_url"),
 }
 
 # 每个任务默认用哪个模型（"平台:模型名"），可以在数据仓库的 settings.json 里覆盖。
@@ -43,6 +46,26 @@ DEFAULT_MODELS: dict[str, str] = {
     "tutor": "qwen:qwen-plus",
     "lesson": "qwen:qwen-max",  # 知识点讲解：要讲对、讲清楚，用更强的模型（一份约 ¥0.03）
 }
+
+# 一键换一家：.env 里写 XT_MODEL_PRESET=mimo，各任务的默认模型就换成下面这套。
+# 要看图的任务（识别切题、题库导入、解答）用能看图的 mimo-v2.5；纯文字的讲解用推理更强的 mimo-v2.5-pro。
+# 设置页里单独改过的任务仍以设置页为准。
+PRESETS: dict[str, dict[str, str]] = {
+    "qwen": DEFAULT_MODELS,
+    "mimo": {
+        "recognize": "mimo:mimo-v2.5",
+        "bank": "mimo:mimo-v2.5",
+        "classify": "mimo:mimo-v2.5",
+        "solve": "mimo:mimo-v2.5",
+        "verify": "doubao:",  # 交叉校验要换一家
+        "tutor": "mimo:mimo-v2.5-pro",
+        "lesson": "mimo:mimo-v2.5-pro",
+    },
+}
+
+
+def default_models(settings: Settings) -> dict[str, str]:
+    return dict(PRESETS.get((settings.model_preset or "qwen").strip().lower(), DEFAULT_MODELS))
 
 # 估算费用用的单价（元/百万 tokens，输入/输出），只用于费用上限和统计，以账单为准。
 PRICES: dict[str, tuple[float, float]] = {
@@ -67,8 +90,8 @@ def image_part(data_url: str) -> dict:
 
 
 def parse_json(text: str) -> Any:
-    """从模型输出里取出 JSON：去掉 ``` 代码块标记，找第一个完整的对象或数组。"""
-    text = text.strip()
+    """从模型输出里取出 JSON：去掉推理模型的 <think> 段和 ``` 代码块标记，找第一个完整的对象或数组。"""
+    text = re.sub(r"<think>.*?</think>", "", text, flags=re.S).strip()
     fence = re.search(r"```(?:json)?\s*(.*?)```", text, re.S)
     if fence:
         text = fence.group(1).strip()
@@ -92,7 +115,8 @@ class LLMClient:
         self.db = db
         self.cache_dir = cache_dir / "llm"
         self.cache_dir.mkdir(parents=True, exist_ok=True)
-        self.models = {**DEFAULT_MODELS, **(models or {})}
+        self.defaults = default_models(settings)
+        self.models = {**self.defaults, **(models or {})}
         self.fake: FakeHandler | None = None  # 测试或演示时注入，不调用真实接口
         self._clients: dict[str, OpenAI] = {}
 
@@ -123,7 +147,7 @@ class LLMClient:
         return float(total or 0.0)
 
     def model_for(self, task: str) -> tuple[str, str]:
-        spec = self.models.get(task) or DEFAULT_MODELS[task]
+        spec = self.models.get(task) or self.defaults[task]
         provider, _, model = spec.partition(":")
         if not model:
             raise LLMError(f"任务 {task} 还没有配置模型（设置里填写“平台:模型名”）")
@@ -139,7 +163,8 @@ class LLMClient:
             key = getattr(self.settings, p.key_attr)
             if not key:
                 raise LLMError(f"缺少 {provider} 的接口密钥（.env 里的 XT_{p.key_attr.upper()}）")
-            self._clients[provider] = OpenAI(api_key=key, base_url=p.base_url, max_retries=2)
+            base = (getattr(self.settings, p.base_attr) if p.base_attr else "") or p.base_url
+            self._clients[provider] = OpenAI(api_key=key, base_url=base, max_retries=2)
         return self._clients[provider]
 
     def _cache_key(self, model: str, prompt_version: str, messages: list[dict]) -> str:
