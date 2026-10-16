@@ -490,7 +490,7 @@ def test_material_line_must_name_the_question():
     assert bank._boundary("请阅读《光伏发电》并回答 24 题。") == "material"
 
 
-def test_bank_try_tool_writes_report(tmp_path, make_settings):
+def test_bank_try_tool_writes_report(tmp_path, make_settings, capsys):
     """试导入工具：临时文件夹里跑完整导入，写报告、截图和模型原始输出，不留下数据。"""
     from app.tools import bank_try
 
@@ -507,4 +507,28 @@ def test_bank_try_tool_writes_report(tmp_path, make_settings):
     raw = [json.loads(line) for line in (out / "raw.jsonl").read_text(encoding="utf-8").splitlines()]
     assert {r["task"] for r in raw} >= {"bank", "classify", "solve"}
     assert not any(data.iterdir())  # 用的是临时文件夹
-    assert bank_try._guess_subject("2025朝外初三期中物理.pdf") == "physics"
+    assert bank_try._guess_subject("2025某校初三期中物理.pdf") == "physics"
+    assert "AI 返回（bank" in capsys.readouterr().out  # 一边跑一边显示进度
+
+
+def test_bank_try_ctrl_c_still_writes_report(tmp_path, make_settings):
+    """试导入时按 Ctrl+C：停下来，已经拿到的模型输出照样写进报告。"""
+    from app.tools import bank_try
+
+    calls = []
+
+    def stop_on_second_page(task: str, messages: list) -> object:
+        calls.append(task)
+        if len(calls) == 2:
+            raise KeyboardInterrupt
+        return bank_fake(task, messages)
+
+    paper = tmp_path / "卷子.pdf"
+    paper.write_bytes(PAPER)
+    data = tmp_path / "data"
+    data.mkdir()
+    out = bank_try.run(paper, None, "math", tmp_path / "out", settings=make_settings(data), fake=stop_on_second_page)
+    assert "Ctrl+C" in (out / "report.txt").read_text(encoding="utf-8")
+    assert len((out / "raw.jsonl").read_text(encoding="utf-8").splitlines()) == 1
+    from app.jobs import JobHandle
+    assert JobHandle.progress.__qualname__ == "JobHandle.progress"  # 打印进度的替身已经还原

@@ -9,7 +9,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Callable
 
-from openai import APIConnectionError, OpenAI
+from openai import APIConnectionError, APITimeoutError, OpenAI
 from sqlalchemy import func
 
 from app.config import Settings
@@ -138,6 +138,8 @@ def explain_error(exc: Exception, provider: str, model: str) -> str:
         hint = "账户余额不足或套餐额度用完了：去平台控制台看看"
     elif status == 404 or (status == 400 and "model" in raw.lower()):
         hint = f"平台上没有 {model} 这个模型：在设置页的“模型”里改成控制台列出的型号"
+    elif isinstance(exc, APITimeoutError):
+        hint = "等了太久没有返回：可能是网络慢，或者这一页内容太多，可以再试一次"
     elif isinstance(exc, APIConnectionError):
         hint = "连不上接口：检查网络；开着代理软件的话，试试关掉它的增强模式 / TUN 模式"
     else:

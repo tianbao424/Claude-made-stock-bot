@@ -27,6 +27,7 @@ import pypdfium2 as pdfium
 from app.adapters import imaging
 from app.config import Settings
 from app.context import AppContext
+from app.jobs import JobHandle
 from app.models import AiCall, BankItem, BankPaper, Question
 from app.services import bank
 from app.tools.bakeoff import key_report
@@ -52,12 +53,28 @@ def _guess_subject(name: str) -> str:
     return "physics" if "物理" in name or "physics" in name.lower() else "math"
 
 
+def _page_count(name: str, data: bytes) -> int:
+    try:
+        return len(pdfium.PdfDocument(data)) if name.lower().endswith(".pdf") else 1
+    except Exception:  # noqa: BLE001
+        return 1
+
+
 def run(paper: Path, answers: Path | None, subject: str, out_root: Path, *, pages: str | None = None,
         verify: bool = True, settings: Settings | None = None, fake=None) -> Path:  # noqa: ANN001
-    """导入并写报告，返回报告所在的文件夹。settings / fake 给测试用。"""
+    """导入并写报告，返回报告所在的文件夹。settings / fake 给测试用。
+    一边跑一边打印进度；中途按 Ctrl+C 会停下，已经拿到的结果照样写进报告。"""
     tmp = Path(tempfile.mkdtemp(prefix="xuetou-bank-try-"))
     out = out_root / f"{paper.stem[:40]}-{time.strftime('%m%d-%H%M%S')}"
     out.mkdir(parents=True, exist_ok=True)
+    started = time.time()
+    original_progress = JobHandle.progress
+
+    def progress(self: JobHandle, stage: str, pct: int) -> None:
+        original_progress(self, stage, pct)
+        print(f"  {int(time.time() - started):4d} 秒  {pct:3d}%  {stage}", flush=True)
+
+    JobHandle.progress = progress
     try:
         if settings is None:
             settings = Settings(data_dir=tmp, sync_enabled=False, jobs_inline=True)
@@ -71,27 +88,34 @@ def run(paper: Path, answers: Path | None, subject: str, out_root: Path, *, page
         original = ctx.llm.chat_json
 
         def logged(task, messages, **kw):  # noqa: ANN001, ANN202
-            started = time.time()
+            t0 = time.time()
             try:
                 result = original(task, messages, **kw)
             except Exception as exc:
-                raw.append({"task": task, "seconds": round(time.time() - started, 1), "error": str(exc)})
+                raw.append({"task": task, "seconds": round(time.time() - t0, 1), "error": str(exc)})
+                print(f"                  ✗ AI 调用失败（{time.time() - t0:.0f} 秒）：{str(exc)[:200]}", flush=True)
                 raise
-            raw.append({"task": task, "seconds": round(time.time() - started, 1), "output": result})
+            raw.append({"task": task, "seconds": round(time.time() - t0, 1), "output": result})
+            print(f"                  AI 返回（{task}，{time.time() - t0:.0f} 秒）", flush=True)
             return result
 
         ctx.llm.chat_json = logged
 
-        started = time.time()
         paper_files = [(paper.name, _subset(paper.read_bytes(), pages) if paper.suffix.lower() == ".pdf"
                         else paper.read_bytes())]
         answer_files = [(answers.name, answers.read_bytes())] if answers else []
+        n = sum(_page_count(name, data) for name, data in paper_files + answer_files)
+        print(f"开始导入：一共 {n} 页。AI 每看一页大约要半分钟到两分钟，请耐心等，下面会一直显示进度。\n"
+              "中途按 Ctrl+C 会停下，已经拿到的结果照样写进报告。", flush=True)
         failure = ""
+        pid = None
         try:
             pid, _ = bank.create_paper(ctx, subject=subject, title="", year=None, region=None, exam_kind="other",
                                        paper_files=paper_files, answer_files=answer_files, verify=verify)
+        except KeyboardInterrupt:
+            failure = "中途按 Ctrl+C 停下了，下面是停下前拿到的结果"
         except Exception as exc:  # noqa: BLE001 —— 失败原因也写进报告
-            failure, pid = f"{type(exc).__name__}: {exc}", None
+            failure = f"{type(exc).__name__}: {exc}"
         seconds = time.time() - started
 
         lines: list[str] = []
@@ -99,7 +123,9 @@ def run(paper: Path, answers: Path | None, subject: str, out_root: Path, *, page
         with ctx.db.session() as s:
             spent = sum(c.cost_cny or 0 for c in s.query(AiCall))
             calls = s.query(AiCall).count()
-            p = s.get(BankPaper, pid) if pid else None
+            # 中途出错或停下时 create_paper 没有返回，临时数据库里只有这一套卷子
+            p = s.get(BankPaper, pid) if pid else s.query(BankPaper).first()
+            pid = p.id if p else None
             subj, title = ("物理" if subject == "physics" else "数学"), (p.title if p else paper.name)
             lines.append(f"== {title if subj in title else f'{title}（{subj}）'} ==")
             lines.append(f"文件：{paper.name}{f' + {answers.name}' if answers else ''}{f'（第 {pages} 页）' if pages else ''}")
@@ -107,7 +133,7 @@ def run(paper: Path, answers: Path | None, subject: str, out_root: Path, *, page
                          f"  solve={ctx.llm.models.get('solve')}")
             lines.append(f"用时 {int(seconds // 60)} 分 {int(seconds % 60)} 秒；AI 调用 {calls} 次，估算费用 ¥{spent:.2f}")
             if failure or (p and p.status == "failed"):
-                lines.append(f"❌ 导入失败：{failure or p.error}")
+                lines.append(f"❌ 没有导入完：{failure or p.error}")
             if p:
                 kinds = {"questions": "试题", "answers": "答案", "mixed": "试题+答案", "other": "其他"}
                 lines.append("页面：" + "  ".join(f"{pg['n']}{kinds.get(pg.get('kind'), '?')}" for pg in p.pages))
@@ -152,6 +178,7 @@ def run(paper: Path, answers: Path | None, subject: str, out_root: Path, *, page
         print(report)
         return out
     finally:
+        JobHandle.progress = original_progress
         try:
             ctx.db.dispose()  # type: ignore[possibly-undefined]
         except Exception:  # noqa: BLE001
