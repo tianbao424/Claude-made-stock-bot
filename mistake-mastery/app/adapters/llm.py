@@ -30,7 +30,7 @@ class Provider:
 PROVIDERS: dict[str, Provider] = {
     "qwen": Provider("https://dashscope.aliyuncs.com/compatible-mode/v1", "dashscope_api_key"),
     "doubao": Provider("https://ark.cn-beijing.volces.com/api/v3", "ark_api_key"),
-    "deepseek": Provider("https://api.deepseek.com", "deepseek_api_key"),
+    "deepseek": Provider("https://api.deepseek.com/v1", "deepseek_api_key", "deepseek_base_url"),
     # 小米 MiMo：默认是 Token Plan（中国区）的地址；按量付费的账号在 .env 里改 XT_MIMO_BASE_URL
     "mimo": Provider("https://token-plan-cn.xiaomimimo.com/v1", "mimo_api_key", "mimo_base_url"),
 }
@@ -61,6 +61,16 @@ PRESETS: dict[str, dict[str, str]] = {
         "tutor": "mimo:mimo-v2.6-pro",
         "lesson": "mimo:mimo-v2.6-pro",
     },
+    # DeepSeek：deepseek-v4-flash 能看图（现在由 V4.1-Flash 提供），各任务都用它。
+    "deepseek": {
+        "recognize": "deepseek:deepseek-v4-flash",
+        "bank": "deepseek:deepseek-v4-flash",
+        "classify": "deepseek:deepseek-v4-flash",
+        "solve": "deepseek:deepseek-v4-flash",
+        "verify": "doubao:",  # 交叉校验要换一家
+        "tutor": "deepseek:deepseek-v4-flash",
+        "lesson": "deepseek:deepseek-v4-flash",
+    },
 }
 
 
@@ -68,20 +78,25 @@ PRESETS: dict[str, dict[str, str]] = {
 PRESET_KEYS: dict[str, tuple[str, str, str]] = {
     "qwen": ("dashscope_api_key", "XT_DASHSCOPE_API_KEY", "通义千问"),
     "mimo": ("mimo_api_key", "XT_MIMO_API_KEY", "小米 MiMo"),
+    "deepseek": ("deepseek_api_key", "XT_DEEPSEEK_API_KEY", "DeepSeek"),
 }
 
 
 def resolve_preset(settings: Settings) -> tuple[str, str]:
-    """（用哪套默认模型，为什么）。.env 里写了 XT_MODEL_PRESET 就按它；没写时看填了哪家的密钥：
-    填了通义千问的用通义千问，只填了小米 MiMo 的用 MiMo。"""
+    """（用哪套默认模型，为什么）。.env 里写了 XT_MODEL_PRESET 就按它；没写时看填了哪家的密钥，
+    填了几家时按 通义千问 → 小米 MiMo → DeepSeek 的顺序选。"""
     chosen = (settings.model_preset or "").strip().lower()
     if chosen in PRESETS:
         return chosen, f"XT_MODEL_PRESET={chosen}"
     if chosen:
-        return "qwen", f"XT_MODEL_PRESET={chosen} 不认识（只能是 {' 或 '.join(PRESETS)}），先用 qwen"
-    if not settings.dashscope_api_key.strip() and settings.mimo_api_key.strip():
-        return "mimo", "只填了小米 MiMo 的密钥，自动用 MiMo"
-    return "qwen", "默认"
+        return "qwen", f"XT_MODEL_PRESET={chosen} 不认识（只能是 {'、'.join(PRESETS)}），先用 qwen"
+    filled = [p for p, (attr, _, _) in PRESET_KEYS.items() if getattr(settings, attr).strip()]
+    if not filled:
+        return "qwen", "默认"
+    name = PRESET_KEYS[filled[0]][2]
+    if len(filled) == 1:
+        return filled[0], f"只填了{name}的密钥，自动用它"
+    return filled[0], f"填了好几家的密钥，按顺序用{name}；想换就在 .env 里写 XT_MODEL_PRESET"
 
 
 def default_models(settings: Settings) -> dict[str, str]:
@@ -111,6 +126,7 @@ def explain_error(exc: Exception, provider: str, model: str) -> str:
     key = f"XT_{p.key_attr.upper()}" if p else "密钥"
     status = getattr(exc, "status_code", None)
     raw = str(exc)
+    name = f"{provider}:{model}" if model else provider
     if status == 429 and "quota" in raw.lower():
         hint = "这家的额度用完了，或者套餐还没开通：去平台控制台看套餐和剩余额度"
     elif status == 429:
@@ -124,8 +140,8 @@ def explain_error(exc: Exception, provider: str, model: str) -> str:
     elif isinstance(exc, APIConnectionError):
         hint = "连不上接口：检查网络；开着代理软件的话，试试关掉它的增强模式 / TUN 模式"
     else:
-        return f"{provider}:{model} 调用失败：{raw}"
-    return f"{provider}:{model} 调用失败：{hint}（{raw[:300]}）"
+        return f"{name} 调用失败：{raw}"
+    return f"{name} 调用失败：{hint}（{raw[:300]}）"
 
 
 def image_part(data_url: str) -> dict:
@@ -164,6 +180,10 @@ class LLMClient:
         self._clients: dict[str, OpenAI] = {}
 
     # ------------------------------------------------------------ 公共接口
+
+    def list_models(self, provider: str) -> list[str]:
+        """这家平台现在提供哪些模型（核对型号名用）。"""
+        return sorted(m.id for m in self._client(provider).models.list())
 
     def chat_json(self, task: str, messages: list[dict], *, prompt_version: str,
                   temperature: float = 0.1, timeout: float = 180, fresh: bool = False) -> Any:

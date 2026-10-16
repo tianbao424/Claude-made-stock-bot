@@ -180,6 +180,13 @@ def test_model_preset_and_mimo_endpoint(make_settings, tmp_path):
     assert resolve_preset(make_settings(tmp_path, mimo_api_key="tp-x", model_preset="qwen"))[0] == "qwen"
     assert resolve_preset(make_settings(tmp_path, model_preset="MiMo "))[0] == "mimo"
     assert "不认识" in resolve_preset(make_settings(tmp_path, model_preset="gpt"))[1]
+    # DeepSeek：只填它就用它；和 MiMo 一起填时按顺序用 MiMo，写了 XT_MODEL_PRESET=deepseek 就用 DeepSeek
+    ds = make_settings(tmp_path, deepseek_api_key="sk-d")
+    assert resolve_preset(ds)[0] == "deepseek"
+    assert set(default_models(ds).values()) == {"deepseek:deepseek-v4-flash", "doubao:"}
+    assert resolve_preset(make_settings(tmp_path, deepseek_api_key="sk-d", mimo_api_key="tp-x"))[0] == "mimo"
+    assert resolve_preset(make_settings(tmp_path, deepseek_api_key="sk-d", mimo_api_key="tp-x",
+                                        model_preset="deepseek"))[0] == "deepseek"
 
     db = Database(s.data_dir / "t.db")
     llm = LLMClient(s, db, s.data_dir / "cache", models={"classify": "qwen:qwen-plus"})
@@ -188,6 +195,8 @@ def test_model_preset_and_mimo_endpoint(make_settings, tmp_path):
     assert str(llm._client("mimo").base_url).startswith("https://token-plan-cn.xiaomimimo.com/v1")
     s2 = make_settings(tmp_path, model_preset="mimo", mimo_api_key="sk-x", mimo_base_url="https://api.example.com/v1")
     assert str(LLMClient(s2, db, s2.data_dir / "cache")._client("mimo").base_url).startswith("https://api.example.com/v1")
+    assert str(LLMClient(ds, db, ds.data_dir / "cache")._client("deepseek").base_url).startswith(
+        "https://api.deepseek.com/v1")
     db.dispose()
 
 

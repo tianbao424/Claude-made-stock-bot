@@ -23,8 +23,9 @@ class Settings(BaseSettings):
     deepseek_api_key: str = ""
     mimo_api_key: str = ""  # 小米 MiMo（Token Plan 的密钥以 tp- 开头）
     mimo_base_url: str = ""  # 留空用 Token Plan 中国区地址
-    # 各任务默认用哪家：qwen（通义千问）| mimo（小米 MiMo），见 app/adapters/llm.py 的 PRESETS。
-    # 留空时看填了哪家的密钥：填了通义千问的用通义千问，只填了 MiMo 的用 MiMo。
+    deepseek_base_url: str = ""  # 留空用 https://api.deepseek.com/v1
+    # 各任务默认用哪家：qwen（通义千问）| mimo（小米 MiMo）| deepseek，见 app/adapters/llm.py 的 PRESETS。
+    # 留空时看填了哪家的密钥，填了几家时按 通义千问 → MiMo → DeepSeek 的顺序选。
     model_preset: str = ""
 
     # 去手写接口：none | local_color | baidu | youdao | textin

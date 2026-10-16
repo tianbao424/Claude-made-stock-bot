@@ -21,7 +21,7 @@ import numpy as np
 
 from app.adapters import imaging
 from app.adapters.eraser import make_eraser
-from app.adapters.llm import PRESET_KEYS, LLMClient, resolve_preset
+from app.adapters.llm import PRESET_KEYS, LLMClient, explain_error, resolve_preset
 from app.config import Settings, get_settings, unknown_env_names
 from app.db import Database
 from app.services import prompts
@@ -68,8 +68,15 @@ def check_models(settings: Settings) -> None:
     image_url, _ = imaging.data_url_jpeg(square)
     see = [{"type": "image_url", "image_url": {"url": image_url}},
            {"type": "text", "text": '图片中间有没有一个黑色方块？只输出 JSON：{"ok": true, "black_square": true 或 false}'}]
-    for task, needs_image in (("recognize", True), ("bank", True), ("solve", True), ("classify", False),
-                              ("lesson", False)):
+    tasks = (("recognize", True), ("bank", True), ("solve", True), ("classify", False), ("lesson", False))
+    # 先列出平台上有哪些模型：型号名不对时，照着这里改设置页里的模型
+    for provider in dict.fromkeys(llm.model_for(task)[0] for task, _ in tasks):
+        try:
+            ids = llm.list_models(provider)
+            print(f"  {provider} 平台上的模型（{len(ids)} 个）：{'、'.join(ids[:40])}")
+        except Exception as exc:  # noqa: BLE001
+            print(f"  {provider} 列不出模型：{explain_error(exc, provider, '')}")
+    for task, needs_image in tasks:
         content = see if needs_image else '只输出 JSON：{"ok": true}'
         try:
             out = llm.chat_json(task, [{"role": "user", "content": content}], prompt_version=f"check-{time.time()}")
