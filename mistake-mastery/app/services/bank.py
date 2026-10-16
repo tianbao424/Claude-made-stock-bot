@@ -12,7 +12,9 @@ import shutil
 import threading
 import unicodedata
 from collections import Counter
+from concurrent.futures import CancelledError, ThreadPoolExecutor, as_completed
 from dataclasses import dataclass
+from difflib import SequenceMatcher
 from typing import TYPE_CHECKING
 
 import numpy as np
@@ -596,8 +598,61 @@ def _norm_answer(s: str) -> str:
     return _ANS_DROP.sub("", t)
 
 
+# 分小问的答案："(1) 负；排斥；(2) ap；暗"
+_PART = re.compile(r"[（(]\s*(\d{1,2})\s*[）)]")
+# 物理量的名字和下标（R2、U_1、L1、A1）不是数值；LaTeX 命令（\times、\Omega）先去掉，免得 \times10 被当成名字
+_LATEX_CMD = re.compile(r"\\[a-z]+")
+_VAR = re.compile(r"(?<![0-9.])[a-zα-ω]_?\{?\d+\}?")
+_NUM = re.compile(r"\d+(?:\.\d+)?")
+_NOT_FIXED = re.compile(r"见图|见表|见解析|略|答案不唯一|合理即可")
+
+
+def _parts(s: str) -> dict[str, str]:
+    """按 (1)(2)… 拆成小问；不是从 (1) 开始、或者只有一问的不拆。"""
+    marks = list(_PART.finditer(s))
+    if len(marks) < 2 or marks[0].group(1) != "1":
+        return {}
+    out: dict[str, str] = {}
+    for m, nxt in zip(marks, [*marks[1:], None], strict=True):
+        out.setdefault(m.group(1), s[m.end():nxt.start() if nxt else len(s)])
+    return out
+
+
+def _numbers(s: str) -> set[str]:
+    t = unicodedata.normalize("NFKC", re.sub(r"[①-⑳]", " ", s)).lower()
+    return set(_NUM.findall(_VAR.sub(" ", _LATEX_CMD.sub(" ", t))))
+
+
+def _agree_one(official: str, ai: str) -> bool | None:
+    if _NOT_FIXED.search(official):
+        return None  # "见图""见表"这类没法比
+    official, ai = _PART.sub(" ", official), _PART.sub(" ", ai)
+    na, nb = _norm_answer(official), _norm_answer(ai)
+    if not na or not nb:
+        return None
+    if na == nb:
+        return True
+    short = max(len(na), len(nb)) <= 12  # 短答案（数值、选项、几个字）不一样就是不一样
+    nums_a, nums_b = _numbers(official), _numbers(ai)
+    if nums_a and nums_b:
+        if nums_a == nums_b:
+            return True
+        if nums_a.isdisjoint(nums_b) or short:  # √3 和 2√3 不同
+            return False
+        return None
+    if min(len(na), len(nb)) >= 3 and (na in nb or nb in na):
+        return True
+    ratio = SequenceMatcher(None, na, nb).ratio()
+    if ratio >= 0.6:  # "不同规格的灯泡"和"不同规格的小灯泡（若干）"
+        return True
+    if max(len(na), len(nb)) <= 4 or (short and ratio < 0.35):  # "ap；暗"和"cp，亮"
+        return False
+    return None
+
+
 def answers_agree(official: str, ai: str, qtype: str) -> bool | None:
-    """官方答案和 AI 答案是否一致：True 一致，False 不一致（请家长看一眼），None 没法自动比对（如证明题）。"""
+    """官方答案和 AI 答案是否一致：True 一致，False 不一致（请家长看一眼），None 没法自动比对（如证明题）。
+    分小问的逐问比：有一问对不上就算不一致；小问编号、物理量下标（R2、U1）不当成数值比。"""
     if not official or not ai:
         return None
     if qtype in ("choice_single", "choice_multi"):
@@ -605,68 +660,83 @@ def answers_agree(official: str, ai: str, qtype: str) -> bool | None:
         b = set(re.findall(r"[A-D]", unicodedata.normalize("NFKC", ai).upper()))
         if a and b:
             return a == b
-    na, nb = _norm_answer(official), _norm_answer(ai)
-    if na == nb or (min(len(na), len(nb)) >= 4 and (na in nb or nb in na)):  # 短答案不按包含算，√3 和 2√3 不同
-        return True
-    short = max(len(na), len(nb)) <= 12  # 短答案（数值、选项、几个字）不一样就是不一样
-    nums_a, nums_b = re.findall(r"\d+(?:\.\d+)?", na), re.findall(r"\d+(?:\.\d+)?", nb)
-    if nums_a and nums_b:
-        if nums_a == nums_b:
-            return True
-        if set(nums_a).isdisjoint(nums_b) or short:
+    po, pa = _parts(official), _parts(ai)
+    if po and pa:
+        results = [_agree_one(text, pa[k]) if k in pa else None for k, text in po.items()]
+        if False in results:
             return False
-        return None
-    return False if short else None
+        return True if all(r is True for r in results) else None
+    return _agree_one(official, ai)
+
+
+VERIFY_WORKERS = 4  # 同时问几道题
 
 
 def verify_paper(ctx: "AppContext", handle: JobHandle, paper_id: str, lo: int = 0, hi: int = 100) -> dict:
-    """AI 独立解每道还没核对过的题：有官方答案的比对，没有的把 AI 答案标"待核"。"""
+    """AI 独立解每道还没核对过的题：有官方答案的比对，没有的把 AI 答案标"待核"。
+    几道题同时问（一道题常要半分钟以上，一套卷子一道一道问要十几分钟）。"""
     with ctx.db.session() as s:
         paper = s.get(BankPaper, paper_id)
         subject = paper.subject
-        todo = [q.id for item, q in s.query(BankItem, Question).join(Question, BankItem.question_id == Question.id)
-                .filter(BankItem.paper_id == paper_id).order_by(BankItem.seq)
-                if q.verification is None and q.answer_source in ("official", "none")]
-    paused = False
-    for i, qid in enumerate(todo):
-        handle.progress(f"AI 独立解题核对 {i + 1}/{len(todo)}", lo + int(i / max(1, len(todo)) * (hi - lo)))
-        with ctx.db.session() as s:
-            q = s.get(Question, qid)
-            item = s.get(BankItem, qid)
-            paper = s.get(BankPaper, paper_id)
+        entries = []
+        for item, q in (s.query(BankItem, Question).join(Question, BankItem.question_id == Question.id)
+                        .filter(BankItem.paper_id == paper_id).order_by(BankItem.seq)):
+            if q.verification is not None or q.answer_source not in ("official", "none"):
+                continue
             qdata = {"type": q.question_type, "stem": q.stem_md, "options": q.options,
                      "sub_questions": q.sub_questions}
             try:
                 url, _ = imaging.data_url_jpeg(question_image(ctx, paper, item.regions))
             except ValueError:
                 url = None
-        try:
-            out = ctx.llm.chat_json("solve", prompts.solve_messages(subject, qdata, url),
-                                    prompt_version=prompts.SOLVE_VERSION) or {}
-        except CostCapExceeded:
-            paused = True
-            break
-        except LLMError as exc:
-            log.warning("bank verify failed for %s: %s", qid, exc)
-            continue
-        ai = str(out.get("final_answer") or "").strip()
-        with ctx.db.session() as s:
-            q = s.get(Question, qid)
-            ver = {"solver": ctx.llm.models.get("solve"), "ai_answer": ai, "confidence": out.get("confidence"),
-                   "at": now_iso()}
-            if q.answer_source == "official":
-                ver["agree"] = answers_agree((q.answer or {}).get("final", ""), ai, q.question_type)
-                if ver["agree"] is not True:
-                    ver["ai_solution_md"] = (out.get("solution_md") or "")[:4000]
-            elif q.answer_source == "none" and ai:
-                q.answer = {"final": ai}
-                q.solution_md = out.get("solution_md")
-                q.answer_source = "ai_unverified"
-            q.verification = ver
+            entries.append((q.id, qdata, url))
+
+    def solve(entry: tuple) -> dict:
+        _, qdata, url = entry
+        return ctx.llm.chat_json("solve", prompts.solve_messages(subject, qdata, url),
+                                 prompt_version=prompts.SOLVE_VERSION) or {}
+
+    paused = False
+    handle.progress(f"AI 独立解题核对 0/{len(entries)}", lo)
+    with ThreadPoolExecutor(VERIFY_WORKERS, thread_name_prefix="verify") as pool:
+        futures = {pool.submit(solve, e): e[0] for e in entries}
+        for done, fut in enumerate(as_completed(futures), start=1):
+            qid = futures[fut]
+            handle.progress(f"AI 独立解题核对 {done}/{len(entries)}", lo + int(done / max(1, len(entries)) * (hi - lo)))
+            try:
+                out = fut.result()
+            except CancelledError:
+                continue
+            except CostCapExceeded:
+                paused = True
+                for f in futures:
+                    f.cancel()  # 还没开始的不问了，下次"继续核对"再问
+                continue
+            except LLMError as exc:
+                log.warning("bank verify failed for %s: %s", qid, exc)
+                continue
+            _save_verification(ctx, qid, out)
     with ctx.db.session() as s:
         paper = s.get(BankPaper, paper_id)
         refresh_stats(s, paper, verify_paused=paused)
         return dict(paper.stats or {})
+
+
+def _save_verification(ctx: "AppContext", qid: str, out: dict) -> None:
+    ai = str(out.get("final_answer") or "").strip()
+    with ctx.db.session() as s:
+        q = s.get(Question, qid)
+        ver = {"solver": ctx.llm.models.get("solve"), "ai_answer": ai, "confidence": out.get("confidence"),
+               "at": now_iso()}
+        if q.answer_source == "official":
+            ver["agree"] = answers_agree((q.answer or {}).get("final", ""), ai, q.question_type)
+            if ver["agree"] is not True:
+                ver["ai_solution_md"] = (out.get("solution_md") or "")[:4000]
+        elif q.answer_source == "none" and ai:
+            q.answer = {"final": ai}
+            q.solution_md = out.get("solution_md")
+            q.answer_source = "ai_unverified"
+        q.verification = ver
 
 
 def refresh_stats(s: "Session", paper: BankPaper, **extra: object) -> None:

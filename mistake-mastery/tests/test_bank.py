@@ -276,6 +276,16 @@ def test_answers_agree():
     assert bank.answers_agree("5 A；$3.3\\times10^5$ J", "5A；3.3×10^5J", "calc") is True
     assert bank.answers_agree("60°", "45°", "solve") is False
     assert bank.answers_agree("", "B", "fill") is None
+    # 真实物理卷（家长电脑上 DeepSeek 核对）里的答案：分小问逐问比，小问编号和物理量下标不当数值
+    agree = bank.answers_agree
+    assert agree("(1)1、4；(2)材料；长度；横截面积越大", "(1) 1和4（或4和1）\n(2) 材料；长度；横截面积越大", "experiment")
+    assert agree("(1) 5Ω；(2) 6V", "(1) $R_2=5\\Omega$；(2) 电源两端电压 $U=6V$。", "calc") is True
+    assert agree("(1)负；排斥；(2)ap；暗", "(1) 负，排斥；(2) cp，亮", "experiment") is False
+    assert agree("(1)见图；(2)C；(3)0.5；5", "(1) 电流表串联…… (2) C (3) 0.24，10", "experiment") is False
+    assert agree("(1) 正；(2) 放电；(3) 将直流电转换成交流电；(4) 40",
+                 "(1) 正；(2) 放电；(3) 将直流电转化为交流电；(4) 40", "reading") is True
+    assert agree("(1)L1；断路；(3) 不同规格的灯泡", "(1) L1；断路 (3) 不同规格的小灯泡（若干）", "experiment") is True
+    assert agree("见图", "串联电路（电源、开关S1、灯泡L1依次串联）", "solve") is None
 
 
 def test_norm_label_and_similarity():
