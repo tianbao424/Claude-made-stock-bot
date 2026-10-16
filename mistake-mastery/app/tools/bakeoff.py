@@ -21,8 +21,8 @@ import numpy as np
 
 from app.adapters import imaging
 from app.adapters.eraser import make_eraser
-from app.adapters.llm import LLMClient
-from app.config import get_settings
+from app.adapters.llm import PRESET_KEYS, LLMClient, resolve_preset
+from app.config import Settings, get_settings, unknown_env_names
 from app.db import Database
 from app.services import prompts
 from app.services.questions import bbox_to_pixels
@@ -30,8 +30,36 @@ from app.services.questions import bbox_to_pixels
 ALL_ERASERS = ["local_color", "baidu", "youdao", "textin"]
 
 
-def check(settings) -> None:  # noqa: ANN001
+def key_report(settings: Settings) -> tuple[list[str], bool]:
+    """大模型密钥和默认模型的说明（不显示密钥，只显示开头 3 个字符），以及有没有可用的密钥。"""
+    filled = {p: getattr(settings, attr).strip() for p, (attr, _, _) in PRESET_KEYS.items()}
+    lines = ["  密钥：" + " · ".join(f"{name} {'已填（' + filled[p][:3] + '…）' if filled[p] else '未填'}"
+                                  for p, (_, _, name) in PRESET_KEYS.items())]
+    preset, why = resolve_preset(settings)
+    lines.append(f"  各任务默认用 {preset}（{why}）")
+    for name in unknown_env_names():
+        lines.append(f"  ⚠ .env 里的 {name} 程序不认识（名字拼错了，或者少了 XT_ 前缀），这一行不起作用")
+    if not any(filled.values()):
+        lines.append("  ✗ 还没有大模型密钥：在 .env 里填 " + " 或 ".join(f"{env}（{name}）" for _, env, name
+                                                             in PRESET_KEYS.values()) + "，保存后再运行")
+        return lines, False
+    if not filled[preset]:
+        other = next(p for p in PRESET_KEYS if filled[p])
+        lines.append(f"  ⚠ 用的是 {preset}，但没填它的密钥 {PRESET_KEYS[preset][1]}，填了的是 {PRESET_KEYS[other][1]}："
+                     f"把 .env 里的 XT_MODEL_PRESET 改成 {other}，或者删掉这一行（自动选）")
+    return lines, True
+
+
+def check(settings: Settings) -> None:
     print("== 大模型 ==")
+    lines, usable = key_report(settings)
+    print("\n".join(lines))
+    if usable:
+        check_models(settings)
+    check_services(settings)
+
+
+def check_models(settings: Settings) -> None:
     db = Database(Path(".bakeoff-tmp.db"))
     llm = LLMClient(settings, db, Path("bakeoff-out/.cache"))
     # 要看图的任务发一张小图（白底黑方块），确认这个模型真的能看图
@@ -53,6 +81,8 @@ def check(settings) -> None:  # noqa: ANN001
     db.dispose()
     Path(".bakeoff-tmp.db").unlink(missing_ok=True)
 
+
+def check_services(settings: Settings) -> None:
     print("== 去手写接口（用一张空白小图测连通性）==")
     blank = imaging.encode_jpeg(np.full((200, 300, 3), 255, np.uint8))
     for name in ALL_ERASERS[1:]:

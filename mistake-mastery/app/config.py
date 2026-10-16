@@ -23,8 +23,9 @@ class Settings(BaseSettings):
     deepseek_api_key: str = ""
     mimo_api_key: str = ""  # 小米 MiMo（Token Plan 的密钥以 tp- 开头）
     mimo_base_url: str = ""  # 留空用 Token Plan 中国区地址
-    # 各任务默认用哪家：qwen（通义千问）| mimo（小米 MiMo），见 app/adapters/llm.py 的 PRESETS
-    model_preset: str = "qwen"
+    # 各任务默认用哪家：qwen（通义千问）| mimo（小米 MiMo），见 app/adapters/llm.py 的 PRESETS。
+    # 留空时看填了哪家的密钥：填了通义千问的用通义千问，只填了 MiMo 的用 MiMo。
+    model_preset: str = ""
 
     # 去手写接口：none | local_color | baidu | youdao | textin
     eraser: str = "local_color"
@@ -69,3 +70,19 @@ class Settings(BaseSettings):
 @lru_cache
 def get_settings() -> Settings:
     return Settings()
+
+
+def unknown_env_names(env_file: Path = Path(".env")) -> list[str]:
+    """.env 里程序不认识的名字（拼错了、少了 XT_ 前缀）。这些行不起作用，很容易以为已经填好了。"""
+    if not env_file.is_file():
+        return []
+    known = {f"XT_{name}".upper() for name in Settings.model_fields}
+    out = []
+    for line in env_file.read_text(encoding="utf-8", errors="replace").splitlines():
+        line = line.strip()
+        if not line or line.startswith("#") or "=" not in line:
+            continue
+        name = line.split("=", 1)[0].strip().removeprefix("export ").strip()
+        if name and name.upper() not in known:
+            out.append(name)
+    return out

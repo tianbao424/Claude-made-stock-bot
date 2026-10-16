@@ -10,7 +10,8 @@ from pathlib import Path
 
 import uvicorn
 
-from app.config import get_settings
+from app.adapters.llm import PRESET_KEYS
+from app.config import Settings, get_settings, unknown_env_names
 
 CODE_DIR = Path(__file__).resolve().parents[2]  # 代码仓库（Claude-made-stock-bot）
 # 家里 Wi-Fi 的地址段。代理、VPN 软件的虚拟网卡常用 198.18.x.x、240.x.x.x 这类地址，手机连不上，不算。
@@ -80,6 +81,16 @@ def data_dir_problems(data_dir: Path, code_dir: Path = CODE_DIR) -> tuple[list[s
     return errors, warnings
 
 
+def env_warnings(settings: Settings, env_file: Path = Path(".env")) -> list[str]:
+    """.env 里不起作用的行、还没填大模型密钥：只提醒，不拦着。"""
+    out = [f".env 里的 {name} 程序不认识（名字拼错了，或者少了 XT_ 前缀），这一行不起作用"
+           for name in unknown_env_names(env_file)]
+    if not any(getattr(settings, attr).strip() for attr, _, _ in PRESET_KEYS.values()):
+        out.append("还没填大模型密钥：拍照识别、题库导入、讲解都要用到。在 .env 里填 "
+                   + " 或 ".join(f"{env}（{name}）" for _, env, name in PRESET_KEYS.values()))
+    return out
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description="学透（本地版）")
     parser.add_argument("--host", default="0.0.0.0")
@@ -87,7 +98,9 @@ def main() -> None:
     args = parser.parse_args()
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s")
 
-    errors, warnings = data_dir_problems(get_settings().data_dir)
+    settings = get_settings()
+    errors, warnings = data_dir_problems(settings.data_dir)
+    warnings += env_warnings(settings)
     for w in warnings:
         print(f"\n  ⚠ {w}")
     if errors:

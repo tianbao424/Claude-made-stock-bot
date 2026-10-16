@@ -47,7 +47,7 @@ DEFAULT_MODELS: dict[str, str] = {
     "lesson": "qwen:qwen-max",  # 知识点讲解：要讲对、讲清楚，用更强的模型（一份约 ¥0.03）
 }
 
-# 一键换一家：.env 里写 XT_MODEL_PRESET=mimo，各任务的默认模型就换成下面这套。
+# 一键换一家：各任务的默认模型换成下面哪一套，见 resolve_preset。
 # 要看图的任务（识别切题、题库导入、解答）用能看图的 mimo-v2.5；纯文字的讲解用推理更强的 mimo-v2.5-pro。
 # 设置页里单独改过的任务仍以设置页为准。
 PRESETS: dict[str, dict[str, str]] = {
@@ -64,8 +64,28 @@ PRESETS: dict[str, dict[str, str]] = {
 }
 
 
+# 每套默认模型要哪家的密钥：（Settings 上的字段，.env 里的名字，叫什么）
+PRESET_KEYS: dict[str, tuple[str, str, str]] = {
+    "qwen": ("dashscope_api_key", "XT_DASHSCOPE_API_KEY", "通义千问"),
+    "mimo": ("mimo_api_key", "XT_MIMO_API_KEY", "小米 MiMo"),
+}
+
+
+def resolve_preset(settings: Settings) -> tuple[str, str]:
+    """（用哪套默认模型，为什么）。.env 里写了 XT_MODEL_PRESET 就按它；没写时看填了哪家的密钥：
+    填了通义千问的用通义千问，只填了小米 MiMo 的用 MiMo。"""
+    chosen = (settings.model_preset or "").strip().lower()
+    if chosen in PRESETS:
+        return chosen, f"XT_MODEL_PRESET={chosen}"
+    if chosen:
+        return "qwen", f"XT_MODEL_PRESET={chosen} 不认识（只能是 {' 或 '.join(PRESETS)}），先用 qwen"
+    if not settings.dashscope_api_key.strip() and settings.mimo_api_key.strip():
+        return "mimo", "只填了小米 MiMo 的密钥，自动用 MiMo"
+    return "qwen", "默认"
+
+
 def default_models(settings: Settings) -> dict[str, str]:
-    return dict(PRESETS.get((settings.model_preset or "qwen").strip().lower(), DEFAULT_MODELS))
+    return dict(PRESETS[resolve_preset(settings)[0]])
 
 # 估算费用用的单价（元/百万 tokens，输入/输出），只用于费用上限和统计，以账单为准。
 PRICES: dict[str, tuple[float, float]] = {

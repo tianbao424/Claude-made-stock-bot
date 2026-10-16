@@ -29,6 +29,7 @@ from app.config import Settings
 from app.context import AppContext
 from app.models import AiCall, BankItem, BankPaper, Question
 from app.services import bank
+from app.tools.bakeoff import key_report
 
 
 def _subset(data: bytes, pages: str | None) -> bytes:
@@ -166,6 +167,10 @@ def main() -> None:
     p.add_argument("--pages", help="只试这几页，例如 1-3 或 1,2,5")
     p.add_argument("--no-verify", action="store_true", help="不让 AI 独立解一遍核对答案（省钱）")
     args = p.parse_args()
+    lines, usable = key_report(Settings())
+    print("\n".join(lines))
+    if not usable:
+        raise SystemExit(1)
     out = run(args.paper, args.answers, args.subject or _guess_subject(args.paper.name), Path("bank-try-out"),
               pages=args.pages, verify=not args.no_verify)
     print(f"截图：用浏览器打开 {out.resolve() / 'index.html'}")

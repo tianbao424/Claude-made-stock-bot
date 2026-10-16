@@ -165,7 +165,7 @@ def test_parse_json_skips_reasoning_block():
 
 
 def test_model_preset_and_mimo_endpoint(make_settings, tmp_path):
-    from app.adapters.llm import LLMClient, default_models
+    from app.adapters.llm import LLMClient, default_models, resolve_preset
     from app.db import Database
 
     tmp_path.mkdir(exist_ok=True)
@@ -174,6 +174,12 @@ def test_model_preset_and_mimo_endpoint(make_settings, tmp_path):
     assert models["recognize"] == models["bank"] == models["solve"] == "mimo:mimo-v2.5"  # 要看图
     assert models["lesson"] == "mimo:mimo-v2.5-pro"
     assert default_models(make_settings(tmp_path))["recognize"].startswith("qwen:")  # 默认还是通义千问
+    # 没写 XT_MODEL_PRESET：只填了 MiMo 的密钥就用 MiMo，两家都填了用通义千问；写了就按写的
+    assert resolve_preset(make_settings(tmp_path, mimo_api_key="tp-x"))[0] == "mimo"
+    assert resolve_preset(make_settings(tmp_path, mimo_api_key="tp-x", dashscope_api_key="sk-x"))[0] == "qwen"
+    assert resolve_preset(make_settings(tmp_path, mimo_api_key="tp-x", model_preset="qwen"))[0] == "qwen"
+    assert resolve_preset(make_settings(tmp_path, model_preset="MiMo "))[0] == "mimo"
+    assert "不认识" in resolve_preset(make_settings(tmp_path, model_preset="gpt"))[1]
 
     db = Database(s.data_dir / "t.db")
     llm = LLMClient(s, db, s.data_dir / "cache", models={"classify": "qwen:qwen-plus"})
@@ -183,3 +189,24 @@ def test_model_preset_and_mimo_endpoint(make_settings, tmp_path):
     s2 = make_settings(tmp_path, model_preset="mimo", mimo_api_key="sk-x", mimo_base_url="https://api.example.com/v1")
     assert str(LLMClient(s2, db, s2.data_dir / "cache")._client("mimo").base_url).startswith("https://api.example.com/v1")
     db.dispose()
+
+
+def test_bakeoff_key_report_and_unknown_env_names(make_settings, tmp_path, monkeypatch):
+    from app.config import unknown_env_names
+    from app.tools.bakeoff import key_report
+
+    env = tmp_path / ".env"
+    env.write_text("# 注释\nXT_DATA_DIR=/x\nxt_mimo_api_key=tp-1\nexport XT_ERASER=none\n"
+                   "OPENAI_API_KEY=sk-1\nXT_MIMO_KEY=tp-2\n\nnot a line\n", encoding="utf-8")
+    assert unknown_env_names(env) == ["OPENAI_API_KEY", "XT_MIMO_KEY"]
+    assert unknown_env_names(tmp_path / "nope") == []
+
+    monkeypatch.chdir(tmp_path)  # key_report 读当前目录下的 .env
+    lines, usable = key_report(make_settings(tmp_path, mimo_api_key="tp-secret"))
+    text = "\n".join(lines)
+    assert usable and "小米 MiMo 已填（tp-…）" in text and "secret" not in text  # 不显示密钥
+    assert "默认用 mimo" in text and "OPENAI_API_KEY 程序不认识" in text
+    lines, usable = key_report(make_settings(tmp_path, mimo_api_key="tp-1", model_preset="qwen"))
+    assert usable and "XT_MODEL_PRESET 改成 mimo" in lines[-1]
+    lines, usable = key_report(make_settings(tmp_path))
+    assert not usable and "还没有大模型密钥" in lines[-1]
