@@ -68,6 +68,71 @@ def create_paper(ctx: "AppContext", *, subject: str, title: str, year: int | Non
     return paper_id, ctx.jobs.submit("bank_import", {"paper_id": paper_id, "verify": verify})
 
 
+_TAG = re.compile(r"[【\[][^】\]]{0,12}[】\]]")  # 【试卷】【答案】这类标签（圆括号里的"（上）"是名称的一部分，留着）
+_ANSWER_NAME = re.compile(r"答案|解析|评分标准|参考")
+_NAME_NOISE = re.compile(r"试卷|试题|答案|解析|评分标准|参考|[\s_\-·.．,，()（）\[\]【】]")
+
+
+def _name_key(name: str) -> str:
+    """文件名去掉标签、"试卷""答案"这类词和标点，用来配对试卷和它的答案文件。"""
+    return _NAME_NOISE.sub("", _TAG.sub("", re.sub(r"\.[A-Za-z0-9]{1,5}$", "", name or "")))
+
+
+def clean_title(name: str) -> str:
+    """用文件名当卷子名称：去掉扩展名和【试卷】这类标签。"""
+    return _TAG.sub("", re.sub(r"\.[A-Za-z0-9]{1,5}$", "", name or "")).strip(" _-·")[:100]
+
+
+def create_batch(ctx: "AppContext", *, subject: str, year: int | None, region: str | None, exam_kind: str,
+                 files: list[tuple[str, bytes]], verify: bool = True) -> list[dict]:
+    """一次导入多套：每个试卷文件一套卷子；文件名里带"答案""解析"的当答案文件，按文件名配给最像的那套。
+    返回每套的 paper_id、job_id、名称、配上的答案文件名。"""
+    papers = [(n, d) for n, d in files if not _ANSWER_NAME.search(n)]
+    answers = [(n, d) for n, d in files if _ANSWER_NAME.search(n)]
+    if not papers:
+        raise ValueError("没有试卷文件：文件名里带“答案”的都当成答案文件了")
+    paired: dict[int, tuple[str, bytes]] = {}
+    for an, ad in answers:
+        best, score = None, 0.0
+        for i, (pn, _) in enumerate(papers):
+            if i in paired:
+                continue
+            r = SequenceMatcher(None, _name_key(an), _name_key(pn)).ratio()
+            if r > score:
+                best, score = i, r
+        if best is not None and score >= 0.6:
+            paired[best] = (an, ad)
+        else:
+            papers.append((an, ad))  # 配不上的答案文件自己算一套（也许它本身就是带解析的卷子）
+    out = []
+    for i, (pn, pd) in enumerate(papers):
+        ans = [paired[i]] if i in paired else []
+        paper_id, job_id = create_paper(ctx, subject=subject, title=clean_title(pn), year=year, region=region,
+                                        exam_kind=exam_kind, paper_files=[(pn, pd)], answer_files=ans, verify=verify)
+        out.append({"paper_id": paper_id, "job_id": job_id, "title": clean_title(pn),
+                    "answer_file": ans[0][0] if ans else None})
+    return out
+
+
+def search_questions(s: "Session", *, subject: str | None = None, kp: str | None = None, qtype: str | None = None,
+                     slot: str | None = None, text: str | None = None, limit: int = 200) -> list[tuple]:
+    """按知识点（含下级）、题型、题位、关键字找题库里的题；返回 (BankItem, Question, BankPaper)，新卷子在前。"""
+    qry = (s.query(BankItem, Question, BankPaper).join(Question, BankItem.question_id == Question.id)
+           .join(BankPaper, BankItem.paper_id == BankPaper.id).filter(BankPaper.status == "ready"))
+    if subject:
+        qry = qry.filter(Question.subject == subject)
+    if kp:
+        qry = qry.filter(Question.id.in_(s.query(QuestionKp.question_id).filter(
+            (QuestionKp.kp_code == kp) | QuestionKp.kp_code.like(f"{kp}.%"))))
+    if qtype:
+        qry = qry.filter(Question.question_type == qtype)
+    if slot:
+        qry = qry.filter(Question.bj_slot == slot)
+    for word in (text or "").split():
+        qry = qry.filter(Question.stem_md.like(f"%{word}%"))
+    return qry.order_by(BankPaper.year.desc(), BankPaper.created_at.desc(), BankItem.seq).limit(limit).all()
+
+
 def _save_file(ctx: "AppContext", paper_id: str, role: str, i: int, name: str, data: bytes) -> dict:
     if len(data) > MAX_FILE_BYTES:
         raise ValueError(f"{name} 太大了（超过 60MB）")

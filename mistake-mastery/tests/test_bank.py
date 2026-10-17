@@ -129,6 +129,37 @@ def test_import_paper_with_answers(bc):
     assert (ctx.settings.data_dir / f"files/bank/{p['id']}/paper-1.pdf").exists()
 
 
+def test_search_questions(bc):
+    p = _import(bc)
+    rows = bc.get("/api/bank/questions?subject=math&kp=M.FUN.QUAD").json()  # 含下级
+    assert [r["number_label"] for r in rows] == ["1", "2", "3"] and rows[0]["paper_id"] == p["id"] and rows[0]["paper_title"]
+    assert [r["number_label"] for r in bc.get("/api/bank/questions?type=fill").json()] == ["3"]
+    assert [r["number_label"] for r in bc.get("/api/bank/questions?q=二次函数").json()] == ["1"]
+    assert bc.get("/api/bank/questions?subject=physics").json() == []
+    assert [r["number_label"] for r in bc.get("/api/bank/questions?slot=math.q8.choice_final").json()] == ["1", "2", "3"]
+
+
+def test_batch_import_pairs_answer_files_by_name(bc):
+    files = [("files", ("【试卷】2025北京某区初三（上）期中数学.pdf", PAPER, "application/pdf")),
+             ("files", ("【答案】2025北京某区初三（上）期中数学 .pdf", ANSWERS, "application/pdf")),
+             ("files", ("2024 某区一模数学试题.pdf", PAPER, "application/pdf"))]
+    r = bc.post("/api/bank/papers/batch", data={"subject": "math", "exam_kind": "midterm", "year": "2025"}, files=files)
+    assert r.status_code == 200, r.text
+    papers = r.json()["papers"]
+    assert [x["title"] for x in papers] == ["2025北京某区初三（上）期中数学", "2024 某区一模数学试题"]
+    assert papers[0]["answer_file"] and papers[1]["answer_file"] is None
+    for x in papers:
+        assert bc.get(f"/api/jobs/{x['job_id']}").json()["status"] == "done"
+    a = bc.get(f"/api/bank/papers/{papers[0]['paper_id']}").json()
+    assert a["stats"]["official"] == 3 and [f["role"] for f in a["files"]] == ["paper", "answer"]
+    b = bc.get(f"/api/bank/papers/{papers[1]['paper_id']}").json()
+    assert b["stats"]["official"] == 0 and len(b["files"]) == 1
+    assert bank.clean_title("【试卷】2025北京某区期中物理-1016.pdf") == "2025北京某区期中物理-1016"
+    # 只传了答案文件
+    r = bc.post("/api/bank/papers/batch", data={"subject": "math"}, files=[("files", ("答案.pdf", ANSWERS, "application/pdf"))])
+    assert r.status_code == 400
+
+
 def test_import_without_answers_uses_ai(bc):
     p = _import(bc, answers=None, title="海淀一模（无答案）")
     assert p["title"] == "海淀一模（无答案）"

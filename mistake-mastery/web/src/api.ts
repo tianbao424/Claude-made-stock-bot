@@ -282,6 +282,12 @@ export interface BankPaperInfo {
   questions?: BankQuestion[];
 }
 
+export interface BankHit extends BankQuestion {
+  paper_id: string;
+  paper_title: string;
+  paper_year: number | null;
+}
+
 export interface BankQuestion {
   id: string;
   seq: number;

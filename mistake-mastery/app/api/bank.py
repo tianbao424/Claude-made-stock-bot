@@ -59,6 +59,32 @@ async def create_paper(
     return {"paper_id": paper_id, "job_id": job_id}
 
 
+@router.post("/bank/papers/batch")
+async def create_batch(
+    subject: str = Form(...), year: str = Form(""), region: str = Form(""), exam_kind: str = Form("other"),
+    verify: bool = Form(True), files: list[UploadFile] = File(...), ctx: AppContext = Depends(get_ctx),
+) -> dict:
+    """一次导入多套：每个文件一套卷子，文件名里带"答案"的按文件名配给对应的试卷。"""
+    items = [(f.filename or "", await f.read()) for f in files if f.filename]
+    try:
+        papers = bank.create_batch(
+            ctx, subject=subject, year=int(year) if year.strip().isdigit() else None, region=region.strip() or None,
+            exam_kind=exam_kind, files=items, verify=verify)
+    except ValueError as exc:
+        raise bad_request(str(exc)) from exc
+    return {"papers": papers}
+
+
+@router.get("/bank/questions")
+def search_questions(subject: str | None = None, kp: str | None = None, type: str | None = None,  # noqa: A002
+                     slot: str | None = None, q: str | None = None, ctx: AppContext = Depends(get_ctx)) -> list[dict]:
+    """按知识点（含下级）、题型、题位、关键字找题。"""
+    with ctx.db.session() as s:
+        rows = bank.search_questions(s, subject=subject, kp=kp, qtype=type, slot=slot, text=q)
+        return [{**_question_dict(s, item, qu), "paper_id": paper.id, "paper_title": paper.title,
+                 "paper_year": paper.year} for item, qu, paper in rows]
+
+
 @router.get("/bank/papers/{paper_id}")
 def get_paper(paper_id: str, ctx: AppContext = Depends(get_ctx)) -> dict:
     with ctx.db.session() as s:

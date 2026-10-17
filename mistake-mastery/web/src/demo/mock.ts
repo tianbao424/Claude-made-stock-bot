@@ -450,6 +450,25 @@ export class MockServer {
     }
 
     // 题库（预览版不能上传新卷子，里面放了一套事先导入好的示例卷子）
+    if (p === "/api/bank/papers/batch" && method === "POST") {
+      throw new HttpError(400, "预览版不能上传导入。正式版在这里一次选多个 PDF，每个文件一套卷子，答案文件按文件名自动配对。");
+    }
+    if (p === "/api/bank/questions") {
+      const subject = q.get("subject"); const kp = q.get("kp"); const type = q.get("type"); const slot = q.get("slot");
+      const words = (q.get("q") ?? "").split(/\s+/).filter(Boolean);
+      const out: Record<string, unknown>[] = [];
+      for (const paper of Object.values(this.bank)) {
+        if (subject && paper.subject !== subject) continue;
+        for (const bq of paper.questions ?? []) {
+          if (kp && !bq.kp_codes.some((c) => c === kp || c.startsWith(kp + "."))) continue;
+          if (type && bq.type !== type) continue;
+          if (slot && bq.bj_slot !== slot) continue;
+          if (words.some((w) => !bq.stem_md.includes(w))) continue;
+          out.push({ ...bq, paper_id: paper.id, paper_title: paper.title, paper_year: paper.year });
+        }
+      }
+      return out;
+    }
     if (p === "/api/bank/papers" && method === "POST") {
       throw new HttpError(400, "预览版不能上传导入。题库里已经放了一套用真实流程导入的示例卷子，可以点开看看；正式版在这里上传 PDF，每页约半分钟。");
     }
