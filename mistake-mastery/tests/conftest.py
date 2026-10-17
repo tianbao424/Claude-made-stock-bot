@@ -53,6 +53,10 @@ def fake_llm(task: str, messages: list[dict]):
                           for r in rows]}
     if task == "solve":
         return {"final_answer": "B", "solution_md": "对称轴 $x=1$……", "confidence": 0.8}
+    if task == "tutor":
+        return {"read": "考二次函数图象与系数的关系，关键是 $a>0$ 开口向上。", "idea": "先配方找对称轴和顶点，再逐项核对。",
+                "steps": ["配方：$y=(x-1)^2-1$", "对称轴 $x=1$，顶点 $(1,-1)$"], "where_wrong": "你选了 A，把 $a>0$ 看成开口向下。",
+                "pitfalls": ["先看 $a$ 的正负再判断开口"], "answer": "B"}
     raise AssertionError(f"unexpected task {task}")
 
 

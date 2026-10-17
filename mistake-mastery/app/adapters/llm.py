@@ -43,7 +43,7 @@ DEFAULT_MODELS: dict[str, str] = {
     "classify": "qwen:qwen-plus",
     "solve": "qwen:qwen3-vl-plus",
     "verify": "doubao:",  # 交叉校验要换一家；v0.2 起使用，填上豆包的模型名
-    "tutor": "qwen:qwen-plus",
+    "tutor": "qwen:qwen3-vl-plus",  # 单题讲解要看题目截图（电路图、实验图）
     "lesson": "qwen:qwen-max",  # 知识点讲解：要讲对、讲清楚，用更强的模型（一份约 ¥0.03）
 }
 

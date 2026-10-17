@@ -243,6 +243,7 @@ export class MockServer {
       instance_id: it.instance_id, number_label: it.number_label,
       document: { id: doc.id, title: doc.title, source_kind: doc.source_kind, exam_date: doc.exam_date },
       last_wrong_at: t, created_at: t, next_review_at: null, bank: it.bank ?? null,
+      explain: null, explain_job: null, kp_lessons: [],
       question: { id: q.id, stem_md: q.stem_md, options: q.options, sub_questions: q.sub_questions, answer: q.answer,
         solution_md: null, answer_source: q.answer_source, verification: null },
       instances: [{ id: it.instance_id, page_id: doc.pages![0].id, number_label: it.number_label,
@@ -569,8 +570,29 @@ export class MockServer {
         .sort((x, y) => y.last_wrong_at.localeCompare(x.last_wrong_at))
         .map((x) => this.summary(x));
     }
-    if ((m = route(/^\/api\/mistakes\/([^/]+)(\/attempts|\/solve)?$/))) {
+    if ((m = route(/^\/api\/mistakes\/([^/]+)(\/attempts|\/solve|\/explain|\/tutor-done)?$/))) {
       const mk = this.mistake(m[1]);
+      if (m[2] === "/explain") {
+        return { job_id: this.submit("tutor_explain", 2500, ["整理题目和作答", "AI 正在讲解"], {}, () => {
+          const steps = ["看清题目给了什么条件、问什么", "想一想这个条件对应哪条规律", "按规律一步一步算"];
+          mk.explain = {
+            read: "预览版里的讲解是写好的示例：先看题目考什么、关键条件是什么。", idea: "从关键条件想到对应的规律，再决定先算什么、后算什么。",
+            steps, where_wrong: "孩子的作答错在把条件看反了；正式版会结合他的作答具体讲。", pitfalls: ["动笔前先把条件列出来"], answer: "见正式版",
+            md: "**读题**　预览版里的讲解是写好的示例：先看题目考什么、关键条件是什么。\n\n**思路**　从关键条件想到对应的规律，再决定先算什么、后算什么。\n\n**分步**\n" +
+              steps.map((x, i) => `${i + 1}. ${x}`).join("\n") + "\n\n**错在哪**　孩子的作答错在把条件看反了；正式版会结合他的作答具体讲。\n\n**下次提醒自己**\n- 动笔前先把条件列出来",
+            created_at: new Date().toISOString(), model: "demo",
+          };
+          this.touch();
+        }) };
+      }
+      if (m[2] === "/tutor-done") {
+        if (mk.status === "TO_TUTOR") {
+          mk.status = mk.gates.original ? "TO_VARIANT" : "TO_REDO";
+          mk.status_name = mk.gates.original ? "待变式" : "待重做";
+        }
+        this.touch();
+        return mk;
+      }
       if (m[2] === "/attempts") {
         this.recordResult(mk, b.result, b.context ?? "redo");
         this.touch();

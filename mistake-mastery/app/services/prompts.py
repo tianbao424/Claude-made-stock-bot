@@ -11,6 +11,7 @@ CLASSIFY_VERSION = "classify-v2"
 SOLVE_VERSION = "solve-v1"
 BANK_PAGE_VERSION = "bank-page-v4"
 LESSON_VERSION = "lesson-v1"
+TUTOR_VERSION = "tutor-v1"
 
 SYSTEM_DATA_ONLY = (
     "你是一位细心的北京初中{subject}老师，负责整理学生的试卷。"
@@ -192,4 +193,41 @@ key_points 2–4 条，method 3–5 步，pitfalls 1–4 条，self_check 2–3 
     return [
         {"role": "system", "content": LESSON_SYSTEM.format(subject=SUBJECT_NAMES[subject])},
         {"role": "user", "content": text},
+    ]
+
+
+def tutor_messages(subject: str, question: dict, image_url: str | None, student: dict, answer: dict) -> list[dict]:
+    """单题讲解：看着题目截图，针对孩子的作答讲这一道题（读题 → 思路 → 分步 → 错在哪 → 提醒）。"""
+    material = json.dumps({"题目": question, "孩子的情况": student, "答案": answer}, ensure_ascii=False, indent=1)
+    text = f"""请给一位北京初三学生讲这一道{SUBJECT_NAMES[subject]}题。他做错了，讲解要让他下次自己能做出来，而不是只看懂答案。
+
+写法要求：
+- 像老师面对面讲：直接、具体；只用初中知识和方法，符合北京中考的要求
+- 公式和式子用 $...$ 的 LaTeX；Markdown 里可以用加粗和列表，不要用标题
+- 思路要讲"怎么想到的"：看到哪个条件想到什么、为什么选这个方法；不要一上来就列式子
+- "错在哪"必须结合孩子的作答和错因：说清他错在哪一步、为什么会这样想、正确的想法是什么；没有作答记录就讲这道题最容易错的地方。不要编造他没有犯过的错
+- 讲解不能和材料里的官方答案矛盾；标着"AI 解答 · 待核"的答案你要自己核对一遍，发现不对就按你算出的正确结果讲，并在 answer 末尾说明"原 AI 答案有误"
+- 有题目截图就以截图为准（电路图、实验图、图像都在截图里）；没有截图时，题干写"如图"而文字里没给出的条件不要编造
+- 总长度控制在手机上一屏半（约 400–700 字），宁可少而准；不确定的内容不要写
+
+材料：
+<<<
+{material}
+>>>
+
+只输出 JSON：
+{{"read": "读题：这道题考什么，哪几个条件是关键",
+ "idea": "思路：从条件到方法是怎么想的",
+ "steps": ["第 1 步……", "第 2 步……"],
+ "where_wrong": "孩子错在哪、为什么、正确的想法",
+ "pitfalls": ["下次做这类题提醒自己的一件事", "..."],
+ "answer": "最终答案"}}
+steps 2–6 步，pitfalls 1–3 条。"""
+    content: list[dict] = []
+    if image_url:
+        content.append({"type": "image_url", "image_url": {"url": image_url}})
+    content.append({"type": "text", "text": text})
+    return [
+        {"role": "system", "content": LESSON_SYSTEM.format(subject=SUBJECT_NAMES[subject])},
+        {"role": "user", "content": content},
     ]

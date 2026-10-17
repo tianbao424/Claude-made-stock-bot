@@ -171,6 +171,21 @@ export interface MistakeDetail extends MistakeSummary {
   };
   instances: { id: string; page_id: string; number_label: string; student_answer: string | null; grading: string | null; score: string | null }[];
   attempts: { id: string; round: number; context: string; result: string; graded_by: string; error_cause: string | null; note: string | null; created_at: string }[];
+  explain: Explain | null; // AI 对这道题的讲解
+  explain_job: { id: string; status: string } | null;
+  kp_lessons: string[]; // 这道题的知识点里，已经生成过知识点讲解的
+}
+
+export interface Explain {
+  read: string;
+  idea: string;
+  steps: string[];
+  where_wrong: string;
+  pitfalls: string[];
+  answer: string;
+  md: string;
+  created_at: string;
+  model: string;
 }
 
 export interface PrintJobInfo {

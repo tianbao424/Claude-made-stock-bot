@@ -6,7 +6,7 @@ from pydantic import BaseModel
 from app.api.deps import LOGIN, bad_request, get_ctx, not_found
 from app.context import AppContext
 from app.models import Attempt, Mistake, Question, QuestionInstance, QuestionKp, SourceDocument, SourcePage
-from app.services import bank, mastery
+from app.services import bank, lessons, mastery, tutoring
 
 router = APIRouter(prefix="/api", dependencies=LOGIN)
 
@@ -76,6 +76,9 @@ def get_mistake(mistake_id: str, ctx: AppContext = Depends(get_ctx)) -> dict:
              "student_answer": (i.student_answer or {}).get("text"), "grading": (i.grading_marks or {}).get("mark"),
              "score": (i.grading_marks or {}).get("score")}
             for i in s.query(QuestionInstance).filter_by(question_id=q.id, status="confirmed")]
+        out["explain"] = tutoring.explain_json(s, m.id)
+        out["explain_job"] = (j := tutoring.running_job(s, m.id)) and {"id": j.id, "status": j.status}
+        out["kp_lessons"] = sorted(lessons.lesson_codes(s, m.student_id) & set(out["kp_codes"]))
         out["attempts"] = [
             {"id": a.id, "round": a.round, "context": a.context, "result": a.result, "graded_by": a.graded_by,
              "error_cause": a.error_cause, "note": a.note, "created_at": a.created_at}
@@ -158,6 +161,30 @@ def resolve(mistake_id: str, ctx: AppContext = Depends(get_ctx)) -> dict:
         q.answer_source = "none"
         qid = q.id
     return {"job_id": ctx.jobs.submit("solve", {"question_id": qid})}
+
+
+class ExplainBody(BaseModel):
+    fresh: bool = False
+
+
+@router.post("/mistakes/{mistake_id}/explain")
+def explain(mistake_id: str, body: ExplainBody | None = None, ctx: AppContext = Depends(get_ctx)) -> dict:
+    """AI 讲解这道题（看截图、针对孩子的作答）；已经在生成的话返回那个任务。"""
+    with ctx.db.session() as s:
+        if s.get(Mistake, mistake_id) is None:
+            raise not_found("错题")
+    return {"job_id": tutoring.start(ctx, mistake_id, fresh=bool(body and body.fresh))}
+
+
+@router.post("/mistakes/{mistake_id}/tutor-done")
+def tutor_done(mistake_id: str, ctx: AppContext = Depends(get_ctx)) -> dict:
+    """看完讲解：待讲解 → 待重做。"""
+    with ctx.db.session() as s:
+        m = s.get(Mistake, mistake_id)
+        if m is None:
+            raise not_found("错题")
+        tutoring.tutor_done(s, m)
+    return get_mistake(mistake_id, ctx)
 
 
 @router.delete("/mistakes/{mistake_id}")

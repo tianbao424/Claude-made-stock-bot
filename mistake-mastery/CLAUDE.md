@@ -53,6 +53,7 @@ app/
     mastery.py            错题状态机（三道关 + 回炉）
     knowledge.py          知识点掌握度、掌握死角
     lessons.py            知识点讲解
+    tutoring.py           单题讲解（看截图、针对作答），讲完回到待重做
     printing.py           错题重做单排版（Chromium 生成 PDF）
     sync.py               导出 JSONL、提交并推送到数据仓库
     prompts.py            全部提示词和版本号

@@ -15,6 +15,7 @@ export default function MistakeDetail() {
   const [editAnswer, setEditAnswer] = useState<string | null>(null);
   const [kpOpen, setKpOpen] = useState(false);
   const [solveJob, setSolveJob] = useState<string | null>(null);
+  const [explainJob, setExplainJob] = useState<string | null>(null);
   const [error, setError] = useState("");
   const cur = useCurriculum(m?.subject);
 
@@ -25,6 +26,13 @@ export default function MistakeDetail() {
   const job = useJob(solveJob, (j: Job) => {
     if (j.status === "done") load();
   });
+  const ejob = useJob(explainJob, (j: Job) => {
+    if (j.status === "done") load();
+    setExplainJob(null);
+  });
+  useEffect(() => {
+    if (m?.explain_job && !explainJob) setExplainJob(m.explain_job.id);
+  }, [m?.explain_job, explainJob]);
 
   const act = async (fn: () => Promise<unknown>) => {
     setError("");
@@ -76,6 +84,54 @@ export default function MistakeDetail() {
       </div>
 
       <div className="card stack">
+        <div className="row spread">
+          <h2 style={{ margin: 0 }}>解题思路</h2>
+          {m.explain && <span className="muted small">AI 讲解 · {fmtTime(m.explain.created_at)}</span>}
+        </div>
+        {m.explain ? (
+          <>
+            <Md text={m.explain.md} />
+            <div className="row">
+              {m.status === "TO_TUTOR" && (
+                <button className="primary" style={{ flex: 1 }} onClick={() => act(() => api.post(`/api/mistakes/${m.id}/tutor-done`))}>
+                  讲完了，再重做一次
+                </button>
+              )}
+              <button className="chip" disabled={!!explainJob} onClick={() => act(async () => setExplainJob((await api.post<{ job_id: string }>(`/api/mistakes/${m.id}/explain`, { fresh: true })).job_id))}>
+                重新生成
+              </button>
+            </div>
+          </>
+        ) : (
+          <>
+            <p className="muted small" style={{ margin: 0 }}>
+              AI 看着题目截图、针对孩子的作答讲这道题：怎么读题、怎么想到方法、分几步做、他错在哪。每次约几分钱。
+            </p>
+            <button className="primary block" disabled={!!explainJob} onClick={() => act(async () => setExplainJob((await api.post<{ job_id: string }>(`/api/mistakes/${m.id}/explain`, {})).job_id))}>
+              {explainJob ? "正在讲解…" : "AI 讲解这道题"}
+            </button>
+          </>
+        )}
+        {explainJob && ejob?.status !== "done" && <JobProgress job={ejob} />}
+        {!!m.kp_codes.length && (
+          <div className="small">
+            相关知识点：
+            {m.kp_codes.map((code, i) => (
+              <span key={code}>
+                {i > 0 && "、"}
+                <Link to={`/knowledge/${encodeURIComponent(code)}`}>{m.kp_names[i]?.split(" › ").pop() ?? code}</Link>
+                {(m.kp_lessons ?? []).includes(code) ? (
+                  <>（<Link to={`/knowledge/${encodeURIComponent(code)}/lesson`}>看知识点讲解</Link>）</>
+                ) : (
+                  <>（<Link to={`/knowledge/${encodeURIComponent(code)}`}>生成知识点讲解</Link>）</>
+                )}
+              </span>
+            ))}
+          </div>
+        )}
+      </div>
+
+      <div className="card stack">
         <h2>记录这次重做的结果</h2>
         <div className="row">
           {(["correct", "partial", "wrong"] as const).map((r) => (
@@ -84,7 +140,7 @@ export default function MistakeDetail() {
             </button>
           ))}
         </div>
-        <p className="muted small">做对进入下一关；做错会转到"待讲解"。变式题和 AI 讲解在后续版本加入。</p>
+        <p className="muted small">做对进入下一关；做错会转到"待讲解"，看完上面的讲解再重做。变式题在后续版本加入。</p>
       </div>
 
       <div className="card stack">
