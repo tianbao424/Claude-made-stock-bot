@@ -1,6 +1,7 @@
 import { createContext, CSSProperties, ReactNode, useContext, useEffect, useState } from "react";
 import ReactMarkdown from "react-markdown";
 import rehypeKatex from "rehype-katex";
+import remarkGfm from "remark-gfm";
 import remarkMath from "remark-math";
 import { api, Curriculum, getCurriculum, Job, KpNode, runtime, Student, Subject } from "../api";
 
@@ -21,12 +22,30 @@ export function useStudent(): StudentCtx {
 
 // ---------------------------------------------------------------- 题目文本（Markdown + 公式）
 
+// 模型写表格时常常漏掉表头下面的分隔行（| --- |），Markdown 就不认为是表格；补上
+export function fixTables(text: string): string {
+  const lines = text.split("\n");
+  const out: string[] = [];
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i];
+    out.push(line);
+    const isRow = /^\s*\|.*\|\s*$/.test(line);
+    const prevIsRow = i > 0 && /^\s*\|.*\|\s*$/.test(lines[i - 1]);
+    const nextIsSep = i + 1 < lines.length && /^\s*\|?\s*:?-{2,}/.test(lines[i + 1]);
+    if (isRow && !prevIsRow && !nextIsSep) {
+      const cols = line.trim().split("|").length - 2;
+      if (cols >= 2) out.push(`|${" --- |".repeat(cols)}`);
+    }
+  }
+  return out.join("\n");
+}
+
 export function Md({ text }: { text: string | null | undefined }) {
   if (!text) return null;
   return (
     <div className="md">
-      <ReactMarkdown remarkPlugins={[remarkMath]} rehypePlugins={[rehypeKatex]}>
-        {text}
+      <ReactMarkdown remarkPlugins={[remarkGfm, remarkMath]} rehypePlugins={[rehypeKatex]}>
+        {fixTables(text)}
       </ReactMarkdown>
     </div>
   );

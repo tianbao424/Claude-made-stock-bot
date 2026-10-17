@@ -6,7 +6,7 @@ from app.curriculum import Curriculum
 
 SUBJECT_NAMES = {"math": "数学", "physics": "物理"}
 
-RECOGNIZE_VERSION = "recognize-v2"
+RECOGNIZE_VERSION = "recognize-v3"
 CLASSIFY_VERSION = "classify-v2"
 SOLVE_VERSION = "solve-v1"
 BANK_PAGE_VERSION = "bank-page-v4"
@@ -26,7 +26,7 @@ def recognize_messages(subject: str, image_url: str, mode: str) -> list[dict]:
 - number_label：卷面题号，如 "8"、"27"；没有题号写 ""
 - bbox：这道题在图片中的范围 [x0, y0, x1, y1]，坐标归一化到 0–1000，左上角为原点。范围包括题干、选项、图、各小问，以及题目下方留给学生作答的空白区域，一直到下一道题开始之前
 - question_type：choice_single | choice_multi | fill | solve | experiment | reading | calc
-- stem_md：题干（Markdown，公式用 $...$ 的 LaTeX）；不要包含学生的手写内容
+- stem_md：题干（Markdown，公式用 $...$ 的 LaTeX）；不要包含学生的手写内容。卷面上的表格写成 Markdown 表格：第一行是表头，第二行必须是 | --- | --- | 这样的分隔行，再写数据行
 - options：选择题的选项 [{{"key":"A","md":"..."}}]；不是选择题为 null
 - sub_questions：小问 [{{"no":"(1)","md":"..."}}]；没有为 null
 - has_figure：题目里是否有图（几何图、电路图、实物图、统计图）

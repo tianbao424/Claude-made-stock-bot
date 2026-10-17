@@ -205,3 +205,7 @@ label.field > * { margin-top: 4px; }
   .card { border: 0; box-shadow: none; padding: 0; }
   .lesson section, .lesson-pitfall { break-inside: avoid; }
 }
+
+/* 题目文字里的表格（实验数据表） */
+.md table { border-collapse: collapse; margin: 6px 0; font-size: 0.95em; }
+.md th, .md td { border: 1px solid #c9c4b8; padding: 2px 8px; text-align: center; }
