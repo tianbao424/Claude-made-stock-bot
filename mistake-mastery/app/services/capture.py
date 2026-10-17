@@ -186,12 +186,10 @@ def _recognize(ctx: "AppContext", page_id: str, img, subject: str, mode: str) ->
         if items and items[0].get("continued") and mode == "page":
             item = items.pop(0)
             res.continued = (item, boxes.pop(0) or bbox_to_pixels(item.get("bbox"), w, h))
-        elif mode == "page" and layout is not None and items and _label_int(items[0].get("number_label")) not in (None, 1):
-            # 模型没说有后半段，但 OCR 看到第一道题的题号上面还有内容（常常是上一题只有图的部分）
-            top = bank._anchor_top(bank._seg(layout, 0.0, 1.0))
-            if top is not None and top.bbox[3] - top.bbox[1] >= 15:
-                res.continued = ({"stem_md": "", "has_figure": True},
-                                 [0.0, round(top.bbox[1] / 1000 * h, 1), float(w), round(top.bbox[3] / 1000 * h, 1)])
+        elif mode == "page" and items and _label_int(items[0].get("number_label")) not in (None, 1):
+            top = _top_continuation(img, boxes[0] if boxes else None, layout)
+            if top is not None:  # 模型没说有后半段，但第一道题的题号上面还有内容（常常是上一题只有图的部分）
+                res.continued = ({"stem_md": "", "has_figure": True}, top)
         for item, anchored in zip(items, boxes):
             qtype = item.get("question_type") if item.get("question_type") in VALID_TYPES else "solve"
             stem = item.get("stem_md") or ""
@@ -255,12 +253,36 @@ def _anchor_boxes(layout, items: list[dict], w: int, h: int) -> list[list[float]
             out.append(None)
             continue
         x0, y0, x1, y1 = anchor.bbox
+        if idx == 0 and item.get("continued"):
+            # 后半段从页面最上面开始：图没有文字，OCR 看不见，只按文字行会把图漏掉（2026-10 第 15 题的甲乙图）
+            x0, y0, x1 = 0.0, 0.0, 1000.0
         if anchor.closed_by == "page_end":  # 这一页最后一道题：下面的作答空白按模型的框，但不超过页脚
             y1 = max(y1, min(model[3] / h * 1000, floor))
         # 左右按整页宽度留边：选项、图常常比题号那几行宽，OCR 认不全
         out.append([round(min(x0, model[0] / w * 1000) / 1000 * w, 1), round(y0 / 1000 * h, 1),
                     round(max(x1, model[2] / w * 1000) / 1000 * w, 1), round(y1 / 1000 * h, 1)])
     return out
+
+
+def _top_continuation(img, first_box: list[float] | None, layout=None, min_ratio: float = 0.06,  # noqa: ANN001
+                      min_ink: float = 0.004) -> list[float] | None:
+    """第一道题的题号离页面顶部还有一段，而且那一段有墨（图、表）：那是上一题只有图的后半段。
+    只有图的后半段 OCR 看不见、模型也常常不标，只能按"有没有墨"判断。返回像素框或 None。"""
+    if first_box is None:
+        return None
+    h, w = img.shape[:2]
+    bottom = int(first_box[1]) - int(bank.PAD / 1000 * h)
+    if layout is not None:  # 图下面的字母标注（验电器 A、B）和题号行挨得很近，别把它切掉一半
+        first_y = first_box[1] / h * 1000
+        above = [ln.y1 for ln in layout.lines if (ln.y0 + ln.y1) / 2 < first_y]
+        if above:
+            bottom = max(bottom, int(max(above) / 1000 * h))
+    if bottom < h * min_ratio:
+        return None
+    strip = cv2.cvtColor(imaging.flatten_background(img[int(h * 0.02):bottom, int(w * 0.05):int(w * 0.95)]), cv2.COLOR_BGR2GRAY)
+    if strip.size == 0 or (strip < 110).mean() < min_ink:
+        return None
+    return [0.0, 0.0, float(w), float(bottom)]
 
 
 def _continue(s, inst: QuestionInstance, item: dict, page_id: str, bbox: list[float]) -> None:  # noqa: ANN001

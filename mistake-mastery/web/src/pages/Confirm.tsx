@@ -231,6 +231,7 @@ export default function Confirm() {
                 <summary className="muted small">识别出的题目文字</summary>
                 <Md text={it.question.stem_md} />
                 {it.question.options?.map((o) => <Md key={o.key} text={`${o.key}. ${o.md}`} />)}
+                {it.question.sub_questions?.map((sq) => <Md key={sq.no} text={`${sq.no} ${sq.md}`} />)}
               </details>
             )}
             {!locked && c.selected && (
