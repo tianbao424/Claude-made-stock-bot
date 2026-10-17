@@ -86,8 +86,13 @@ def candidates(document_id: str, ctx: AppContext = Depends(get_ctx)) -> dict:
             kps = [k.kp_code for k in s.query(QuestionKp).filter_by(question_id=q.id)
                    .order_by(QuestionKp.is_primary.desc(), QuestionKp.kp_code)]
             marks = inst.grading_marks or {}
+            extra_pages = [s.get(SourcePage, r.get("page_id")) for r in inst.extra_regions or []]
+            student_text = (inst.student_answer or {}).get("text")
             items.append({
                 "instance_id": inst.id, "page_no": page.page_no, "number_label": inst.number_label,
+                "pages": [page.page_no] + [pg.page_no for pg in extra_pages if pg is not None],
+                # 卷面上没有作答也没有批改：要问家长是没做还是不会，不能当成做错也不能当成没错
+                "blank": not student_text and marks.get("mark") in (None, "none") and bool(q.stem_md),
                 "status": inst.status, "preselected": bool(inst.preselected), "bbox": inst.bbox,
                 "question": {"id": q.id, "type": q.question_type, "stem_md": q.stem_md, "options": q.options,
                              "sub_questions": q.sub_questions, "answer": q.answer, "answer_source": q.answer_source,
@@ -197,5 +202,5 @@ def instance_img(instance_id: str, kind: str = "erased", max_side: int = 1400, c
         if inst is None:
             raise not_found("题目")
         page = s.get(SourcePage, inst.page_id)
-        img = instance_crop(ctx, inst, page, "erased" if kind == "erased" else "original")
-        return _image_response(img, f"{instance_id}:{kind}:{inst.bbox}:{page.erase_status}", min(max_side, 3000))
+        img = instance_crop(ctx, inst, page, "erased" if kind == "erased" else "original", s)
+        return _image_response(img, f"{instance_id}:{kind}:{inst.bbox}:{inst.extra_regions}:{page.erase_status}", min(max_side, 3000))

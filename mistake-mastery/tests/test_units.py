@@ -56,6 +56,19 @@ def test_warm_tinted_photo_keeps_printed_text():
     assert (gray[red & ~text] > 180).mean() > 0.9  # 红笔擦掉了
 
 
+def test_printed_color_figure_kept_thin_pen_erased():
+    """物理卷上彩色的印刷图（大块填充）要留下，细的红笔划线要擦掉。"""
+    img = np.full((500, 700, 3), 255, np.uint8)
+    cv2.circle(img, (150, 150), 60, (0, 200, 240), -1)  # 黄色灯泡那样的印刷填充
+    cv2.circle(img, (450, 150), 60, (40, 40, 210), 14)  # 禁止吸烟标志那样的粗红环
+    cv2.line(img, (60, 400), (640, 420), (40, 40, 210), 4)  # 红笔划线
+    gray = imaging.remove_colored_ink(img)
+    assert gray[150, 150] < 245 and gray[150, 450 - 60] < 200  # 印刷图还在（黄色转成灰度本来就浅，擦掉才是 255）
+    line = np.zeros(img.shape[:2], np.uint8)
+    cv2.line(line, (60, 400), (640, 420), 1, 2)
+    assert (gray[line > 0] > 180).mean() > 0.9  # 红笔擦掉了
+
+
 def test_normalize_upload_limits_size():
     jpeg, w, h = imaging.normalize_upload(synthetic_page(3000, 4000))
     assert max(w, h) == imaging.MAX_SIDE and jpeg[:3] == b"\xff\xd8\xff"

@@ -99,6 +99,8 @@ export interface SubQ {
 export interface Candidate {
   instance_id: string;
   page_no: number;
+  pages?: number[]; // 跨页的题：题干和后半段所在的页
+  blank?: boolean; // 卷面上没作答也没批改：要问家长是没做还是不会
   number_label: string;
   status: string;
   preselected: boolean;

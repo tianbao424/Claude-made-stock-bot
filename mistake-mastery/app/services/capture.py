@@ -64,6 +64,7 @@ def process_document(ctx: "AppContext", handle: JobHandle, payload: dict) -> dic
     created: list[str] = []
     errors: list[str] = []
     header_title = None
+    prev_last: str | None = None  # 上一页最后一道题，这一页开头的"后半段"接到它上面
     for i, page_id in enumerate(page_ids):
         base = int(i / total * 80)
         step = 80 / total
@@ -71,7 +72,8 @@ def process_document(ctx: "AppContext", handle: JobHandle, payload: dict) -> dic
             handle.progress(f"第 {i + 1}/{total} 页：矫正", base)
             img, transform = _correct(ctx, page_id, mode)
             handle.progress(f"第 {i + 1}/{total} 页：识别题目", base + int(step * 0.2))
-            title, new_ids = _recognize(ctx, page_id, _outbound(ctx, img, i + 1), subject, mode)
+            title, new_ids, prev_last = _recognize(ctx, page_id, _outbound(ctx, img, i + 1), subject, mode,
+                                                   prev_last if mode == "page" else None)
             header_title = header_title or title
             created += new_ids
         except (LLMError, ValueError) as exc:
@@ -118,7 +120,10 @@ def _correct(ctx: "AppContext", page_id: str, mode: str):
     return corrected, transform
 
 
-def _recognize(ctx: "AppContext", page_id: str, img, subject: str, mode: str) -> tuple[str | None, list[str]]:
+def _recognize(ctx: "AppContext", page_id: str, img, subject: str, mode: str,
+               prev_last: str | None = None) -> tuple[str | None, list[str], str | None]:
+    """识别一页；返回（卷头、新建的题、这一页最后一道题的实例编号）。
+    页面开头是上一页最后一道题的后半段（题干在上一页、图和选项在这一页）时，接到那道题上，不另算一道。"""
     url, _scale = imaging.data_url_jpeg(img)
     result = ctx.llm.chat_json("recognize", prompts.recognize_messages(subject, url, mode),
                                prompt_version=prompts.RECOGNIZE_VERSION)
@@ -127,9 +132,12 @@ def _recognize(ctx: "AppContext", page_id: str, img, subject: str, mode: str) ->
         items = [{"bbox": [0, 0, 1000, 1000], "stem_md": "", "question_type": "solve"}]
     h, w = img.shape[:2]
     new_ids: list[str] = []
+    last = prev_last
     with ctx.db.session() as s:
         page = s.get(SourcePage, page_id)
         page.layout = {"recognized": len(items), "header": result.get("header") if result else None}
+        if items and items[0].get("continued") and prev_last and s.get(QuestionInstance, prev_last) is not None:
+            _continue(s, s.get(QuestionInstance, prev_last), items.pop(0), page_id, w, h)
         for item in items:
             qtype = item.get("question_type") if item.get("question_type") in VALID_TYPES else "solve"
             stem = item.get("stem_md") or ""
@@ -165,7 +173,36 @@ def _recognize(ctx: "AppContext", page_id: str, img, subject: str, mode: str) ->
             s.add(inst)
             s.flush()
             new_ids.append(inst.id)
-    return (result or {}).get("header"), new_ids
+            last = inst.id
+    return (result or {}).get("header"), new_ids, last
+
+
+def _continue(s, inst: QuestionInstance, item: dict, page_id: str, w: int, h: int) -> None:  # noqa: ANN001
+    """把这一页开头的后半段接到上一页最后一道题上：位置多一段，文字、选项、小问合并，批改和作答补上。"""
+    inst.extra_regions = list(inst.extra_regions or []) + [{"page_id": page_id, "bbox": bbox_to_pixels(item.get("bbox"), w, h)}]
+    q = s.get(Question, inst.question_id)
+    merged = {"stem_md": q.stem_md or "", "options": q.options, "sub_questions": q.sub_questions,
+              "has_figure": bool(q.figures), "regions": [], "answer_shown": False}
+    bank._extend(merged, item, None)
+    q.stem_md, q.options, q.sub_questions = merged["stem_md"], merged["options"] or None, merged["sub_questions"] or None
+    if merged["has_figure"] and not q.figures:
+        q.figures = [{"kind": "in_crop"}]
+    q.content_hash = content_hash(q.subject, q.stem_md, q.options)
+    if not q.answer and (item.get("teacher_answer") or "").strip():
+        q.answer, q.answer_source = {"final": item["teacher_answer"].strip()}, "teacher"
+    text = (item.get("student_answer") or "").strip()
+    if text:
+        prev = (inst.student_answer or {}).get("text") or ""
+        inst.student_answer = {"text": f"{prev}\n{text}".strip()}
+    marks = dict(inst.grading_marks or {})
+    grading = item.get("grading") if item.get("grading") in ("right", "wrong", "partial") else None
+    rank = {"wrong": 3, "partial": 2, "right": 1}  # 两段里只要有一段判错，这道题就是错的
+    if grading and rank[grading] > rank.get(marks.get("mark"), 0):
+        marks["mark"] = grading
+        inst.preselected = grading in ("wrong", "partial")
+    if item.get("score_text") and not marks.get("score"):
+        marks["score"] = item["score_text"]
+    inst.grading_marks = marks
 
 
 def erase_page(ctx: "AppContext", page_id: str) -> str | None:
@@ -309,7 +346,7 @@ def solve_question(ctx: "AppContext", handle: JobHandle, payload: dict) -> dict:
         page = s.get(SourcePage, inst.page_id) if inst else None
         image_url = None
         if inst and page:
-            image_url, _ = imaging.data_url_jpeg(instance_crop(ctx, inst, page, "erased"))
+            image_url, _ = imaging.data_url_jpeg(instance_crop(ctx, inst, page, "erased", s))
         qdata = {"type": q.question_type, "stem": q.stem_md, "options": q.options, "sub_questions": q.sub_questions}
         subject = q.subject
     handle.progress("AI 解答中", 30)

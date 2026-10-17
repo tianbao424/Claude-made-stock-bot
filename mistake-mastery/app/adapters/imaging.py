@@ -155,6 +155,25 @@ def neutralize_ink(flat: np.ndarray, dark_below: int = 110) -> np.ndarray:
     return cv2.merge(out)
 
 
+def _printed_color(strong: np.ndarray, min_radius: float = 6.0, area_radius: float = 4.5, min_area: int = 300) -> np.ndarray:
+    """彩色像素里哪些是印刷的图，而不是笔迹。
+
+    笔迹是细线：红笔、蓝笔在 2000 像素宽的页面上粗 3–6 像素。印刷的彩色图（禁止吸烟标志、
+    滑梯插画、黄色小灯泡、蓝色滑动变阻器）总有大块填充，或者虽小但比笔画粗。
+    按连通块算最粗处的半径（距离变换），够粗的整块保留，笔迹压在图上也随图保留（图不能缺一块）。
+    """
+    n, labels, stats, _ = cv2.connectedComponentsWithStats(strong, connectivity=8)
+    if n <= 1:
+        return np.zeros(strong.shape, bool)
+    dist = cv2.distanceTransform(strong, cv2.DIST_L2, 5)
+    radius = np.zeros(n, np.float32)
+    np.maximum.at(radius, labels.ravel(), dist.ravel())
+    area = stats[:, cv2.CC_STAT_AREA]
+    keep = (radius >= min_radius) | ((radius >= area_radius) & (area >= min_area))
+    keep[0] = False
+    return keep[labels]
+
+
 def remove_colored_ink(img: np.ndarray, sat_threshold: int = 70) -> np.ndarray:
     """把彩色笔迹（红笔、蓝笔等）涂白。黑色笔迹和铅笔去不掉。
 
@@ -165,6 +184,7 @@ def remove_colored_ink(img: np.ndarray, sat_threshold: int = 70) -> np.ndarray:
     hsv = cv2.cvtColor(flat, cv2.COLOR_BGR2HSV)
     sat, val = hsv[:, :, 1], hsv[:, :, 2]
     strong = ((sat > sat_threshold) & (val > 60)).astype(np.uint8)
+    strong[_printed_color(strong)] = 0  # 彩色的印刷图（物理卷的实物图、电路元件、标志）不是笔迹
     near = cv2.dilate(strong, cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (9, 9))) > 0
     weak = (sat > sat_threshold // 3) & (val > 40)
     mask = (strong > 0) | (weak & near)

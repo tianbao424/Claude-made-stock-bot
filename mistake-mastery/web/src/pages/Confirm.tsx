@@ -8,7 +8,13 @@ interface Choice {
   kp_codes: string[];
   error_causes: string[];
   answer: string;
+  blank?: "skip" | "unknown" | "time"; // 没作答的题家长的回答：没做 / 不会 / 没时间
 }
+
+// 没作答的题：家长说"不会"记为错题（错因"方法不会"），"没时间"也记（错因"时间不够"），"没做"跳过
+const BLANK_CHOICES: [NonNullable<Choice["blank"]>, string, string | null][] = [
+  ["skip", "没做，跳过", null], ["unknown", "不会做，记为错题", "METHOD_UNKNOWN"], ["time", "没时间做，记为错题", "TIME"],
+];
 
 type Page = NonNullable<Doc["pages"]>[number];
 
@@ -192,7 +198,7 @@ export default function Confirm() {
                 <input type="checkbox" style={{ width: 22, height: 22 }} checked={c.selected} disabled={locked}
                   onChange={(e) => set(it.instance_id, { selected: e.target.checked })} />
                 <b>第 {it.number_label || "?"} 题</b>
-                <span className="muted small">第 {it.page_no} 页</span>
+                <span className="muted small">第 {(it.pages?.length ? it.pages : [it.page_no]).join("、")} 页</span>
               </label>
               <span className="row" style={{ gap: 4 }}>
                 {it.grading && it.grading !== "none" && <span className={`badge ${it.grading === "right" ? "" : "TO_REDO"}`}>{GRADING[it.grading]}{it.score ? ` ${it.score}` : ""}</span>}
@@ -203,6 +209,17 @@ export default function Confirm() {
               src={runtime.fileUrl(`/api/instances/${it.instance_id}/image?kind=${orig ? "original" : "erased"}`)}
               onClick={() => setShowOriginal((s) => ({ ...s, [it.instance_id]: !orig }))} />
             <div className="muted small">点图片切换{orig ? "擦除后" : "原图"}</div>
+            {it.blank && !locked && (
+              <div className="row" style={{ marginTop: 6, alignItems: "center" }}>
+                <span className="small">这道题卷面上没有作答：</span>
+                {BLANK_CHOICES.map(([k, name, cause]) => (
+                  <button key={k} className={`chip ${c.blank === k ? "on" : ""}`} onClick={() => set(it.instance_id, {
+                    blank: k, selected: k !== "skip",
+                    error_causes: cause ? Array.from(new Set([cause, ...c.error_causes.filter((x) => x !== "METHOD_UNKNOWN" && x !== "TIME")])) : c.error_causes,
+                  })}>{name}</button>
+                ))}
+              </div>
+            )}
             {it.bank && (
               <div className="row small" style={{ marginTop: 6 }}>
                 <span>📚 题库里有这道题：<Link to={`/bank/${it.bank.paper_id}`}>{it.bank.paper_title}</Link> 第 {it.bank.number_label} 题</span>

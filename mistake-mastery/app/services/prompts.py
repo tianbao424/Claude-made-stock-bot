@@ -6,7 +6,7 @@ from app.curriculum import Curriculum
 
 SUBJECT_NAMES = {"math": "数学", "physics": "物理"}
 
-RECOGNIZE_VERSION = "recognize-v1"
+RECOGNIZE_VERSION = "recognize-v2"
 CLASSIFY_VERSION = "classify-v2"
 SOLVE_VERSION = "solve-v1"
 BANK_PAGE_VERSION = "bank-page-v4"
@@ -34,6 +34,7 @@ def recognize_messages(subject: str, image_url: str, mode: str) -> list[dict]:
 - grading：老师红笔批改的判断 right | wrong | partial | none（没有批改痕迹写 none）
 - score_text：卷面上这道题的得分，如 "4/7"；没有为 null
 - teacher_answer：卷面上老师写的正确答案或订正；没有为 null
+- continued：页面最上面那段内容是不是上一页最后一道题的后半段（没有题号，直接是图、选项、小问或表格）：true | false。只有第一道可能是 true，这时 number_label 写 ""，stem_md 只写这一页上有的文字
 
 另外给出 header：卷头上的试卷名称（如 "2026 海淀区九年级第一学期期中"），没有为 null。
 

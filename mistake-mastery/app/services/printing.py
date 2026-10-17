@@ -283,7 +283,7 @@ def _build_redo_sheet(ctx, s, items, layout, title, qr):  # noqa: ANN001
         pg = s.get(SourcePage, inst.page_id)
         q = s.get(Question, it.question_id)
         doc = s.get(SourceDocument, pg.document_id)
-        img = instance_crop(ctx, inst, pg, "erased")
+        img = instance_crop(ctx, inst, pg, "erased", s)
         corrected_w = (pg.transform or {}).get("w") or pg.width
         width_mm = (img.shape[1] / corrected_w) * _paper_width_mm(pg)
         origin = f"原第 {inst.number_label} 题" if inst.number_label else "原题"

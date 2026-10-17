@@ -64,8 +64,19 @@ def page_image(ctx: "AppContext", page: SourcePage, kind: str) -> np.ndarray:
     return corrected_image(ctx, page)
 
 
-def instance_crop(ctx: "AppContext", inst: QuestionInstance, page: SourcePage, kind: str) -> np.ndarray:
-    return imaging.crop(page_image(ctx, page, kind), inst.bbox)
+def instance_crop(ctx: "AppContext", inst: QuestionInstance, page: SourcePage, kind: str,
+                  s: "Session | None" = None) -> np.ndarray:
+    """一道题的截图；跨页的题（extra_regions）把后半段竖着拼在下面，窄的一段右边补白。"""
+    crops = [imaging.crop(page_image(ctx, page, kind), inst.bbox)]
+    for r in (inst.extra_regions or []) if s is not None else []:
+        pg = s.get(SourcePage, r.get("page_id"))
+        if pg is not None:
+            crops.append(imaging.crop(page_image(ctx, pg, kind), r["bbox"]))
+    if len(crops) == 1:
+        return crops[0]
+    width = max(c.shape[1] for c in crops)
+    pad = [((0, 0), (0, width - c.shape[1])) + (((0, 0),) if c.ndim == 3 else ()) for c in crops]
+    return np.vstack([np.pad(c, p, constant_values=255) for c, p in zip(crops, pad)])
 
 
 def apply_classification(ctx: "AppContext", s: "Session", q: Question, item: dict) -> None:

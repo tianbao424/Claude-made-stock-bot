@@ -152,6 +152,7 @@ CREATE TABLE question_instances (
     question_id     TEXT NOT NULL REFERENCES questions(id),
     number_label    TEXT,                 -- 卷面题号 '27'
     bbox            JSON NOT NULL,        -- 在矫正图上的位置；原貌截图和擦除截图都按它现场裁出并缓存
+    extra_regions   JSON,                 -- 跨页的题：后半段 [{"page_id":..,"bbox":[..]}]，截图时竖着拼在 bbox 下面
     answer_area_mm  REAL,                 -- 原卷作答区高度（毫米）
     student_answer  JSON,                 -- 识别出的孩子原始作答
     grading_marks   JSON,                 -- 红笔批改：{"mark":"wrong","score":"3/8","cause_suggestions":[...]}

@@ -141,6 +141,45 @@ def test_full_flow_and_restore(logged_in, tmp_path, make_settings):
         assert c2.get(f"/api/instances/{cand[0]['instance_id']}/image?kind=erased").status_code == 200
 
 
+def test_cross_page_question_merges_and_blank_is_flagged(logged_in):
+    """拍两页：第 2 页开头是第 1 页最后一道题的选项（跨页），要接到那道题上；没作答没批改的题标 blank。"""
+    c = logged_in
+    calls = []
+
+    def fake(task: str, messages: list[dict]):
+        if task != "recognize":
+            return fake_llm(task, messages)
+        calls.append(task)
+        if len(calls) == 1:
+            return fake_llm(task, messages)
+        return {"header": None, "questions": [
+            {"number_label": "", "continued": True, "bbox": [60, 0, 940, 180], "question_type": "fill",
+             "stem_md": "", "options": [{"key": "A", "md": "$\\sqrt{3}$"}, {"key": "B", "md": "$3$"}], "grading": "wrong",
+             "student_answer": "B", "has_figure": True},
+            {"number_label": "4", "bbox": [60, 200, 940, 600], "question_type": "solve",
+             "stem_md": "解方程 $x^2=4$。", "grading": "none", "student_answer": None, "has_figure": False},
+        ]}
+
+    c.app_ctx.llm.fake = fake
+    st = c.post("/api/students", json={"name": "小测"}).json()
+    r = c.post("/api/captures", data={"student_id": st["id"], "subject": "math", "mode": "page", "source_kind": "monthly"},
+               files=[("files", ("p1.jpg", synthetic_page(), "image/jpeg")), ("files", ("p2.jpg", synthetic_page(), "image/jpeg"))])
+    assert r.status_code == 200, r.text
+    assert c.get(f"/api/jobs/{r.json()['job_id']}").json()["status"] == "done"
+    cand = c.get(f"/api/documents/{r.json()['document_id']}/candidates").json()["items"]
+    assert [i["number_label"] for i in cand] == ["1", "2", "3", "4"]  # 后半段没有成为第 5 道
+    third = cand[2]
+    assert third["pages"] == [1, 2] and third["question"]["options"] == [{"key": "A", "md": "$\\sqrt{3}$"}, {"key": "B", "md": "$3$"}]
+    assert third["grading"] == "wrong" and third["preselected"] and third["student_answer"] == "B"
+    assert not third["blank"] and cand[3]["blank"] and not cand[3]["preselected"]
+    # 截图把两页的两段竖着拼起来，比只截第 1 页的高
+    import io
+    from PIL import Image
+    full = Image.open(io.BytesIO(c.get(f"/api/instances/{third['instance_id']}/image?kind=erased&max_side=3000").content))
+    one = Image.open(io.BytesIO(c.get(f"/api/instances/{cand[1]['instance_id']}/image?kind=erased&max_side=3000").content))
+    assert full.height > one.height
+
+
 def test_export_is_deterministic_and_roundtrips(logged_in, tmp_path, make_settings):
     c = logged_in
     st = c.post("/api/students", json={"name": "小测"}).json()

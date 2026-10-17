@@ -154,6 +154,8 @@ class QuestionInstance(Base):
     question_id: Mapped[str] = mapped_column(ForeignKey("questions.id"), nullable=False)
     number_label: Mapped[Optional[str]] = mapped_column(String(20))
     bbox: Mapped[list] = mapped_column(JSON, nullable=False)  # [x0, y0, x1, y1]，矫正图像素
+    # 跨页的题：后半段在别的页上，[{"page_id": ..., "bbox": [...]}]；截图时竖着拼在 bbox 下面
+    extra_regions: Mapped[Optional[list]] = mapped_column(JSON)
     answer_area_mm: Mapped[Optional[float]] = mapped_column(Float)
     student_answer: Mapped[Optional[dict]] = mapped_column(JSON)
     grading_marks: Mapped[Optional[dict]] = mapped_column(JSON)
