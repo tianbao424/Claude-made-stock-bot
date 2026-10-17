@@ -1,0 +1,17 @@
+# 运行数据（孩子的数据只放在私有数据仓库，绝不进本仓库）
+data/
+*.db
+.env
+.venv/
+__pycache__/
+.pytest_cache/
+web/node_modules/
+web/dist/
+# 第 0 步试水的输出（里面是孩子的卷子照片）
+bakeoff-out/
+bank-try-out/
+.bakeoff-tmp.db
+*.tsbuildinfo
+# 预览版构建产物（合成的示例数据）
+web/demo/fixtures.json
+web/dist-demo/

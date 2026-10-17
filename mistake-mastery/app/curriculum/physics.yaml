@@ -1,0 +1,207 @@
+# 初中物理知识点树（北京初三，中考覆盖八、九年级）。见 docs/07-beijing-curriculum.md §5.2。
+# bj_weight 是北京中考权重的初始值（0–1）。实验探究题占笔试 28/70 分，所以 P.EXP 权重高。
+# verified: false 表示必做实验名称按课标结构补全，尚未逐条核对课标原文。
+subject: physics
+nodes:
+  - code: P.MECH
+    name: 力学
+    bj_weight: 0.8
+    children:
+      - code: P.MECH.KIN
+        name: 机械运动
+        children:
+          - {code: P.MECH.KIN.MEASURE, name: 长度与时间的测量}
+          - {code: P.MECH.KIN.SPEED, name: 速度的计算与运动图象}
+          - {code: P.MECH.KIN.REL, name: 参照物与运动的相对性}
+      - code: P.MECH.DENS
+        name: 质量与密度
+        children:
+          - {code: P.MECH.DENS.MASS, name: 质量与天平的使用}
+          - {code: P.MECH.DENS.CALC, name: 密度的计算与应用}
+      - code: P.MECH.FORCE
+        name: 力
+        children:
+          - {code: P.MECH.FORCE.BASIC, name: 力的概念、作用效果与力的示意图}
+          - {code: P.MECH.FORCE.GRAVITY, name: 重力}
+          - {code: P.MECH.FORCE.ELASTIC, name: 弹力与弹簧测力计}
+          - {code: P.MECH.FORCE.FRICTION, name: 摩擦力}
+      - code: P.MECH.NEWTON
+        name: 运动和力
+        children:
+          - {code: P.MECH.NEWTON.INERTIA, name: 牛顿第一定律与惯性}
+          - {code: P.MECH.NEWTON.BALANCE, name: 二力平衡}
+          - {code: P.MECH.NEWTON.ANALYSIS, name: 受力分析}
+      - code: P.MECH.PRES
+        name: 压强
+        children:
+          - {code: P.MECH.PRES.SOLID, name: 固体压强}
+          - {code: P.MECH.PRES.LIQUID, name: 液体压强}
+          - {code: P.MECH.PRES.GAS, name: 大气压强与流体压强（流速与压强）}
+          - {code: P.MECH.PRES.CONNECT, name: 连通器}
+      - code: P.MECH.BUOY
+        name: 浮力
+        children:
+          - {code: P.MECH.BUOY.ARCH, name: 阿基米德原理}
+          - {code: P.MECH.BUOY.COND, name: 物体的浮沉条件}
+          - {code: P.MECH.BUOY.CALC, name: 浮力综合计算}
+      - code: P.MECH.MACH
+        name: 简单机械
+        children:
+          - {code: P.MECH.MACH.LEVER, name: 杠杆平衡条件与力臂作图}
+          - {code: P.MECH.MACH.PULLEY, name: 滑轮与滑轮组}
+          - {code: P.MECH.MACH.EFF, name: 机械效率}
+      - code: P.MECH.WORK
+        name: 功和机械能
+        children:
+          - {code: P.MECH.WORK.WORK, name: 功}
+          - {code: P.MECH.WORK.POWER, name: 功率}
+          - {code: P.MECH.WORK.ENERGY, name: 动能、势能与机械能的转化}
+
+  - code: P.HEAT
+    name: 热学
+    bj_weight: 0.4
+    children:
+      - code: P.HEAT.STATE
+        name: 物态变化
+        children:
+          - {code: P.HEAT.STATE.TEMP, name: 温度与温度计}
+          - {code: P.HEAT.STATE.PHASE, name: 熔化凝固、汽化液化、升华凝华}
+      - code: P.HEAT.INTERNAL
+        name: 内能
+        children:
+          - {code: P.HEAT.INTERNAL.MOLE, name: 分子动理论}
+          - {code: P.HEAT.INTERNAL.CHANGE, name: 改变内能的两种方式}
+      - {code: P.HEAT.SPEC, name: 比热容与热量计算}
+      - code: P.HEAT.ENGINE
+        name: 热机
+        children:
+          - {code: P.HEAT.ENGINE.STROKE, name: 四冲程汽油机}
+          - {code: P.HEAT.ENGINE.EFF, name: 热值与热机效率}
+
+  - code: P.ACOU
+    name: 声学
+    bj_weight: 0.2
+    children:
+      - {code: P.ACOU.WAVE, name: 声的产生与传播}
+      - {code: P.ACOU.CHAR, name: 声音的特性（音调、响度、音色）}
+      - {code: P.ACOU.NOISE, name: 噪声控制与声的利用}
+
+  - code: P.OPT
+    name: 光学
+    bj_weight: 0.4
+    children:
+      - {code: P.OPT.LINE, name: 光的直线传播}
+      - code: P.OPT.REFL
+        name: 光的反射与平面镜
+        children:
+          - {code: P.OPT.REFL.LAW, name: 光的反射定律}
+          - {code: P.OPT.REFL.MIRROR, name: 平面镜成像特点}
+      - {code: P.OPT.REFR, name: 光的折射与色散}
+      - code: P.OPT.LENS
+        name: 透镜
+        children:
+          - {code: P.OPT.LENS.IMAGE, name: 凸透镜成像规律}
+          - {code: P.OPT.LENS.APP, name: 透镜的应用（照相机、投影仪、放大镜、眼睛与眼镜）}
+
+  - code: P.ELEC
+    name: 电学
+    bj_weight: 0.9
+    children:
+      - code: P.ELEC.CIRCUIT
+        name: 电路
+        children:
+          - {code: P.ELEC.CIRCUIT.CHARGE, name: 静电与电荷}
+          - {code: P.ELEC.CIRCUIT.CONNECT, name: 串联与并联、电路识别}
+          - {code: P.ELEC.CIRCUIT.DESIGN, name: 电路设计与实物连接}
+      - code: P.ELEC.UIR
+        name: 电流、电压、电阻
+        children:
+          - {code: P.ELEC.UIR.METER, name: 电流表与电压表的使用}
+          - {code: P.ELEC.UIR.RULE, name: 串并联电路的电流、电压规律}
+          - {code: P.ELEC.UIR.RES, name: 电阻的影响因素与滑动变阻器}
+      - code: P.ELEC.OHM
+        name: 欧姆定律
+        children:
+          - {code: P.ELEC.OHM.CALC, name: 欧姆定律计算}
+          - {code: P.ELEC.OHM.DYNAMIC, name: 动态电路分析}
+          - {code: P.ELEC.OHM.FAULT, name: 电路故障分析}
+          - {code: P.ELEC.OHM.MEASURE, name: 伏安法测电阻}
+      - code: P.ELEC.POWER
+        name: 电功与电功率
+        children:
+          - {code: P.ELEC.POWER.CALC, name: 电功与电功率计算}
+          - {code: P.ELEC.POWER.RANGE, name: 极值与范围问题}
+          - {code: P.ELEC.POWER.MEASURE, name: 测量小灯泡的电功率}
+          - {code: P.ELEC.POWER.JOULE, name: 焦耳定律}
+      - {code: P.ELEC.HOME, name: 家庭电路与安全用电}
+
+  - code: P.EM
+    name: 电与磁
+    bj_weight: 0.5
+    children:
+      - {code: P.EM.FIELD, name: 磁场与磁感线}
+      - code: P.EM.E2M
+        name: 电生磁
+        children:
+          - {code: P.EM.E2M.SOLENOID, name: 通电螺线管}
+          - {code: P.EM.E2M.RELAY, name: 电磁铁与电磁继电器}
+          - {code: P.EM.E2M.MOTOR, name: 磁场对电流的作用与电动机}
+      - {code: P.EM.M2E, name: 电磁感应与发电机}
+      - {code: P.EM.WAVE, name: 电磁波与信息的传递}
+
+  - code: P.ENERGY
+    name: 能量与物质世界
+    bj_weight: 0.3
+    children:
+      - {code: P.ENERGY.CONSERV, name: 能量的转化与守恒}
+      - {code: P.ENERGY.SOURCE, name: 能源与可持续发展}
+      - {code: P.ENERGY.STRUCT, name: 物质的结构与尺度}
+      - {code: P.ENERGY.MATERIAL, name: 新材料及其应用}
+
+  - code: P.EXP
+    name: 实验与方法
+    bj_weight: 0.9
+    children:
+      - code: P.EXP.MEAS
+        name: 测量类必做实验
+        children:
+          - {code: P.EXP.MEAS.LENGTH, name: 用刻度尺测长度、用表测时间}
+          - {code: P.EXP.MEAS.SPEED, name: 测量物体运动的平均速度}
+          - {code: P.EXP.MEAS.MASS, name: 用天平测量物体的质量}
+          - {code: P.EXP.MEAS.DENSITY, name: 测量固体和液体的密度}
+          - {code: P.EXP.MEAS.FORCE, name: 用弹簧测力计测量力}
+          - {code: P.EXP.MEAS.TEMP, name: 用常见温度计测量温度}
+          - {code: P.EXP.MEAS.CURRENT, name: 用电流表测量电流}
+          - {code: P.EXP.MEAS.VOLTAGE, name: 用电压表测量电压, verified: false}
+          - {code: P.EXP.MEAS.RESIST, name: 用电流表和电压表测量电阻, verified: false}
+      - code: P.EXP.INQ
+        name: 探究类必做实验
+        children:
+          - {code: P.EXP.INQ.BOIL, name: 探究水沸腾前后温度变化的特点}
+          - {code: P.EXP.INQ.REFL, name: 探究光的反射定律}
+          - {code: P.EXP.INQ.MIRROR, name: 探究平面镜成像的特点}
+          - {code: P.EXP.INQ.LENS, name: 探究凸透镜成像的规律, verified: false}
+          - {code: P.EXP.INQ.FRICTION, name: 探究滑动摩擦力大小的影响因素, verified: false}
+          - {code: P.EXP.INQ.PRESSURE, name: 探究液体压强的影响因素, verified: false}
+          - {code: P.EXP.INQ.BUOY, name: 探究浮力大小的影响因素, verified: false}
+          - {code: P.EXP.INQ.LEVER, name: 探究杠杆的平衡条件, verified: false}
+          - {code: P.EXP.INQ.SOLENOID, name: 探究通电螺线管外部磁场的方向}
+          - {code: P.EXP.INQ.SERIES, name: 探究串、并联电路中电流和电压的特点}
+          - {code: P.EXP.INQ.OHM, name: 探究电流与电压、电阻的关系, verified: false}
+          - {code: P.EXP.INQ.INDUCTION, name: 探究导体在磁场中运动时产生感应电流的条件, verified: false}
+      - code: P.EXP.METHOD
+        name: 科学方法
+        children:
+          - {code: P.EXP.METHOD.CONTROL, name: 控制变量法}
+          - {code: P.EXP.METHOD.CONVERT, name: 转换法}
+          - {code: P.EXP.METHOD.EQUIV, name: 等效替代法}
+          - {code: P.EXP.METHOD.MODEL, name: 理想模型法与推理法}
+      - {code: P.EXP.DESIGN, name: 实验设计、数据处理与结论表述}
+
+  - code: P.CROSS
+    name: 跨学科实践
+    bj_weight: 0.2
+    children:
+      - {code: P.CROSS.LIFE, name: 物理学与日常生活}
+      - {code: P.CROSS.ENG, name: 物理学与工程实践}
+      - {code: P.CROSS.SOC, name: 物理学与社会发展}

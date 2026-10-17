@@ -1,0 +1,59 @@
+# 错因、题型、北京中考题位。见 docs/07-beijing-curriculum.md §2、§3、§6。
+
+error_causes:
+  - {code: CONCEPT, name: 概念不清, subject: all, hint: 对概念、定理的适用条件理解有误}
+  - {code: FORMULA, name: 公式或定理记错, subject: all, hint: 弧长公式记错；P=I²R 与 P=U²/R 用混}
+  - {code: READING, name: 审题失误, subject: all, hint: 漏看条件、看错所求、误读图表}
+  - {code: CALC, name: 计算错误, subject: all, hint: 符号、去括号、开方、约分出错}
+  - {code: METHOD_UNKNOWN, name: 方法不会, subject: all, hint: 没有思路}
+  - {code: METHOD_WRONG, name: 思路偏了, subject: all, hint: 方法选错或走进死胡同}
+  - {code: INCOMPLETE, name: 分类讨论不全或漏解, subject: all, hint: 等腰三角形没有分类；含参没有讨论}
+  - {code: RIGOR, name: 步骤不规范, subject: all, hint: 推理跳步、缺少依据，丢了步骤分}
+  - {code: CARELESS, name: 抄错或笔误, subject: all, hint: 抄错数字、选项涂错}
+  - {code: TIME, name: 时间不够或未作答, subject: all, hint: ""}
+  - {code: M_AUX, name: 辅助线想不到, subject: math, hint: 几何综合题}
+  - {code: M_NEWDEF, name: 新定义理解偏差, subject: math, hint: 第 28 题型}
+  - {code: M_FIGURE, name: 图形识别或分析错误, subject: math, hint: 看不出隐含的全等、相似关系}
+  - {code: P_UNIT, name: 单位或换算错误, subject: physics, hint: 没统一单位；cm² 换算成 m² 出错}
+  - {code: P_MODEL, name: 物理过程或模型分析错误, subject: physics, hint: 受力分析遗漏；状态判断错}
+  - {code: P_CIRCUIT, name: 电路识别错误, subject: physics, hint: 串并联判断错；电表测量对象判断错}
+  - {code: P_EXP_DESIGN, name: 实验设计不当, subject: physics, hint: 没有控制变量；步骤缺少关键操作}
+  - {code: P_EXP_EXPRESS, name: 实验结论或数据表述不规范, subject: physics, hint: 结论缺少"在……一定时"}
+  - {code: P_ESTIMATE, name: 生活常识估测错误, subject: physics, hint: 估测题}
+  - {code: P_INFO, name: 阅读信息提取错误, subject: physics, hint: 科普阅读题}
+
+question_types:
+  - {code: choice_single, name: 单项选择}
+  - {code: choice_multi, name: 多项选择}
+  - {code: fill, name: 填空}
+  - {code: solve, name: 解答}
+  - {code: experiment, name: 实验探究}
+  - {code: reading, name: 科普阅读}
+  - {code: calc, name: 计算}
+
+bj_slots:
+  - {code: math.q8.choice_final, subject: math, name: 第 8 题 选择压轴}
+  - {code: math.q16.practice_opt, subject: math, name: 第 16 题 方案优化与逻辑推理}
+  - {code: math.basic_calc, subject: math, name: 第 17–21 题 基础解答}
+  - {code: math.q22.equation_model, subject: math, name: 第 22 题 列方程建模}
+  - {code: math.q23.statistics, subject: math, name: 第 23 题 统计}
+  - {code: math.q24.circle, subject: math, name: 第 24 题 圆}
+  - {code: math.q25.function_model, subject: math, name: 第 25 题 函数与数据建模}
+  - {code: math.q26.algebra_synthesis, subject: math, name: 第 26 题 代数综合}
+  - {code: math.q27.geometry_synthesis, subject: math, name: 第 27 题 几何综合}
+  - {code: math.q28.new_definition, subject: math, name: 第 28 题 新定义}
+  - {code: physics.single_choice, subject: physics, name: 单项选择（第 1–12 题）}
+  - {code: physics.multi_choice, subject: physics, name: 多项选择（第 13–15 题）}
+  - {code: physics.experiment, subject: physics, name: 实验探究（第 16–23 题）}
+  - {code: physics.reading, subject: physics, name: 科普阅读（第 24 题）}
+  - {code: physics.calc, subject: physics, name: 计算（第 25–26 题）}
+
+source_kinds:
+  - {code: homework, name: 作业}
+  - {code: quiz, name: 周测}
+  - {code: monthly, name: 月考}
+  - {code: midterm, name: 期中}
+  - {code: final, name: 期末}
+  - {code: mock1, name: 一模}
+  - {code: mock2, name: 二模}
+  - {code: other, name: 其他}
