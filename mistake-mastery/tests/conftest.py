@@ -77,7 +77,7 @@ def synthetic_page(width: int = 1200, height: int = 1600) -> bytes:
 def make_settings(tmp_path):
     def _make(data_dir: Path, **kw) -> Settings:
         return Settings(_env_file=None, data_dir=data_dir, family_password=PASSWORD, jobs_inline=True,
-                        eraser="local_color", sync_debounce_seconds=3600, chromium_path=CHROMIUM, **kw)
+                        eraser="local_color", ocr_enabled=False, sync_debounce_seconds=3600, chromium_path=CHROMIUM, **kw)
     return _make
 
 

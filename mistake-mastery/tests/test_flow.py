@@ -180,6 +180,47 @@ def test_cross_page_question_merges_and_blank_is_flagged(logged_in):
     assert full.height > one.height
 
 
+def test_ocr_anchors_question_boxes_and_reversed_pages_are_reordered(logged_in, monkeypatch):
+    """模型给的框不准：有 OCR 文字层时，每道题从题号那一行开始、到下一道题的题号之前；
+    照片倒着传（第 1 张是后面的题）时按题号把页码倒过来。"""
+    from app.adapters.pdf import Layout, Line
+    from app.services import capture
+
+    c = logged_in
+    c.app_ctx.settings = c.app_ctx.settings.model_copy(update={"ocr_enabled": True})
+    # 合成页上三道题的题号行在 y=120/540/960（纸张 1414 高）→ 归一化约 85/382/679；模型的框故意给偏
+    rows = [(85, "1. Question text line for test number 1"), (382, "2. Question text line for test number 2"),
+            (679, "3. Question text line for test number 3"), (960, "第 1 页 / 共 2 页")]
+    monkeypatch.setattr(capture.ocr, "page_layout", lambda img: Layout(
+        lines=[Line(y0=y, y1=y + 12, x0=60, x1=700, text=t) for y, t in rows]))
+    calls = []
+
+    def fake(task: str, messages: list[dict]):
+        if task != "recognize":
+            return fake_llm(task, messages)
+        calls.append(task)
+        base = fake_llm(task, messages)
+        for q in base["questions"]:
+            q["bbox"] = [q["bbox"][0], q["bbox"][1] + 120, q["bbox"][2], q["bbox"][3] + 120]  # 偏下 12%
+        if len(calls) == 1:  # 第一张照片却是后面的题：4、5、6
+            for q in base["questions"]:
+                q["number_label"] = str(int(q["number_label"]) + 3)
+        return base
+
+    c.app_ctx.llm.fake = fake
+    st = c.post("/api/students", json={"name": "小测"}).json()
+    r = c.post("/api/captures", data={"student_id": st["id"], "subject": "math", "mode": "page", "source_kind": "monthly"},
+               files=[("files", ("p1.jpg", synthetic_page(), "image/jpeg")), ("files", ("p2.jpg", synthetic_page(), "image/jpeg"))])
+    assert c.get(f"/api/jobs/{r.json()['job_id']}").json()["status"] == "done"
+    cand = c.get(f"/api/documents/{r.json()['document_id']}/candidates").json()["items"]
+    assert [i["number_label"] for i in cand] == ["1", "2", "3", "4", "5", "6"]  # 页码倒过来了
+    assert [i["page_no"] for i in cand] == [1, 1, 1, 2, 2, 2]
+    h = c.get(f"/api/documents/{r.json()['document_id']}").json()["pages"][0]["ch"]
+    tops = [i["bbox"][1] / h * 1000 for i in cand[:3]]
+    assert all(abs(t - (y - 6)) < 3 for t, y in zip(tops, (85, 382, 679)))  # 题号行往上留 2 毫米
+    assert cand[0]["bbox"][3] / h * 1000 < 382 and cand[2]["bbox"][3] / h * 1000 <= 960 - 6 + 0.5  # 到下一题、页脚之前
+
+
 def test_export_is_deterministic_and_roundtrips(logged_in, tmp_path, make_settings):
     c = logged_in
     st = c.post("/api/students", json={"name": "小测"}).json()

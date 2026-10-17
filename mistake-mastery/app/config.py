@@ -28,6 +28,9 @@ class Settings(BaseSettings):
     # 留空时看填了哪家的密钥，填了几家时按 通义千问 → MiMo → DeepSeek 的顺序选。
     model_preset: str = ""
 
+    # 拍照切题时用本地 OCR 按题号行定位（模型给的框不准）；测试里关掉
+    ocr_enabled: bool = True
+
     # 去手写接口：none | local_color | baidu | youdao | textin
     eraser: str = "local_color"
     baidu_api_key: str = ""

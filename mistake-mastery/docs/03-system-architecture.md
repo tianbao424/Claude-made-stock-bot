@@ -214,7 +214,7 @@ GitHub 建议单个仓库保持在 1GB 左右以内、单个文件不超过 50MB
 flowchart TB
     U["手机压缩后上传<br/>（系统相机，多张）"] --> S1["① 清晰度检查<br/>太模糊时提示重拍"]
     S1 --> S2["② 透视矫正 + 去阴影 + 增强<br/>OpenCV，或云接口自带"]
-    S2 --> S3["③ 切题<br/>云端切题接口：题号 · 题干 · 选项 · 图 · 作答区"]
+    S2 --> S3["③ 切题<br/>视觉模型认题：题号 · 题干 · 选项 · 作答 · 批改<br/>本地 OCR 定位：题号那一行到下一题之前"]
     S3 --> S4a["④a 整页去手写<br/>云端擦除接口 → 擦除图"]
     S3 --> S4b["④b 题目结构化<br/>OCR 文本 + 视觉大模型 → 题目 JSON（公式为 LaTeX）"]
     S3 --> S4c["④c 图形位置<br/>几何图、电路图的区域（从擦除图上裁）"]
@@ -228,7 +228,7 @@ flowchart TB
 |------|------|------|
 | 原图 | `pages/…/original.jpg` | 工作副本 → 同步到数据仓库 |
 | ② 矫正 | 变换矩阵（矫正图需要时再生成） | `source_pages.layout` |
-| ③ 切题 | 每道题的位置、题号、子区域 | `question_instances.bbox`、`source_pages.layout` |
+| ③ 切题（模型认题 + 本地 OCR 定位，2026-10 改） | 每道题的位置、题号、子区域 | `question_instances.bbox`、`source_pages.layout` |
 | ④a 擦除 | `pages/…/erased.png` | 工作副本 → 同步到数据仓库 |
 | ④b 结构化 | 题干、选项、小问（Markdown + LaTeX） | `questions` |
 | ④c 图形 | 图形区域坐标（打印和讲解时从擦除图上裁） | `questions.figures` |

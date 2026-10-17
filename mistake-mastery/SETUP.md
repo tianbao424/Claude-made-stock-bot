@@ -97,6 +97,7 @@ uv run python -m app.tools.hash_password      # 设置家庭密码（至少 12 �
   - **改用小米 MiMo**：不填上面这一项，改成填 `XT_MIMO_API_KEY=tp-...`（小米 MiMo 开放平台 Token Plan 的密钥；`.env` 是早先复制的、里面没有这一行的，自己加一行），只填了 MiMo 的密钥时自动用 MiMo（两家都填了还想用 MiMo，再加一行 `XT_MODEL_PRESET=mimo`）。默认连 Token Plan 中国区的地址 `https://token-plan-cn.xiaomimimo.com/v1`；按量付费的账号在 `XT_MIMO_BASE_URL` 里改成控制台给的地址。识别、切题、解答用 `mimo-v2.6-flash`，讲解用 `mimo-v2.6-pro`（两个都能看图；旧的 `mimo-v2.5` 系列 2026 年 10 月 21 日停用）；型号以控制台为准，不对时在"我的 → 模型"里改
   - **改用 DeepSeek**：填 `XT_DEEPSEEK_API_KEY=sk-...`（DeepSeek 开放平台 → API keys），连 `https://api.deepseek.com/v1`，各任务都用能看图的 `deepseek-flash`。同时填了别家的密钥时，再加一行 `XT_MODEL_PRESET=deepseek`（已经有 `XT_MODEL_PRESET=...` 这一行的，改掉它）
   - 填了几家时按 通义千问 → MiMo → DeepSeek 的顺序选；`XT_MODEL_PRESET` 写了就按写的。第 5 步的 `bakeoff --check` 会列出用的是哪家、平台上有哪些型号
+- 切题定位用本地 OCR（随 `uv sync` 一起装好，约 100 MB，不联网、不收费）；`XT_OCR_ENABLED=false` 可以关掉，关掉后只用模型给的框，位置会不准
 - 擦除接口：先保持 `XT_ERASER=local_color`（本地算法，只能擦红笔、蓝笔等彩色笔迹；黑笔作答擦不掉），第 5 步试过之后再换成效果最好的一家。换过之后，已经录入的错题在详情页点"重新擦除这一页"就能用新设置重擦
 
 `.env` 里有密钥，只留在这台电脑上，不要发给别人，也不要提交到任何仓库（代码仓库已经设置为忽略它）。

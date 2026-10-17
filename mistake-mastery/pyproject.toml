@@ -21,6 +21,7 @@ dependencies = [
     "playwright>=1.45",
     "sympy>=1.12",
     "pypdfium2>=4.30",
+    "rapidocr-onnxruntime>=1.4.4",
 ]
 
 [dependency-groups]

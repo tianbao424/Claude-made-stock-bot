@@ -48,7 +48,7 @@ app/
   jobs.py                 进程内持久任务队列（ctx.jobs.register / submit）
   api/                    接口：auth、core、capture、mistakes、knowledge、printing、bank
   services/
-    capture.py            拍照采集管线：矫正 → 识别切题 → 分类 → 确认
+    capture.py            拍照采集管线：矫正 → 模型认题 + OCR 定位 → 跨页合并 → 擦除 → 分类 → 确认
     bank.py               题库导入（PDF 文字层定位、跨页合并、阅读材料、答案对应、AI 核对与答案比对）、录入时匹配
     mastery.py            错题状态机（三道关 + 回炉）
     knowledge.py          知识点掌握度、掌握死角
@@ -56,7 +56,7 @@ app/
     printing.py           错题重做单排版（Chromium 生成 PDF）
     sync.py               导出 JSONL、提交并推送到数据仓库
     prompts.py            全部提示词和版本号
-  adapters/               imaging（OpenCV）、pdf（pdfium）、eraser（各家去手写）、llm（OpenAI 兼容客户端）
+  adapters/               imaging（OpenCV）、pdf（pdfium）、ocr（RapidOCR，本地文字层）、eraser（各家去手写）、llm（OpenAI 兼容客户端）
   curriculum/             知识点树、错因、题型、北京中考题位（YAML）
   tools/                  bakeoff、bank_try、rebuild_index、hash_password
 web/src/                  React 前端：pages/、api.ts（接口类型）、demo/（预览版的浏览器内模拟后端）

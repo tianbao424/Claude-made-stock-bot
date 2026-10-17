@@ -5,7 +5,7 @@ from typing import TYPE_CHECKING
 
 import cv2
 
-from app.adapters import imaging
+from app.adapters import imaging, ocr
 from app.adapters.eraser import EraseError
 from app.adapters.llm import LLMError
 from app.ids import now_iso
@@ -64,7 +64,7 @@ def process_document(ctx: "AppContext", handle: JobHandle, payload: dict) -> dic
     created: list[str] = []
     errors: list[str] = []
     header_title = None
-    prev_last: str | None = None  # 上一页最后一道题，这一页开头的"后半段"接到它上面
+    recognized: dict[str, _PageResult] = {}
     for i, page_id in enumerate(page_ids):
         base = int(i / total * 80)
         step = 80 / total
@@ -72,10 +72,10 @@ def process_document(ctx: "AppContext", handle: JobHandle, payload: dict) -> dic
             handle.progress(f"第 {i + 1}/{total} 页：矫正", base)
             img, transform = _correct(ctx, page_id, mode)
             handle.progress(f"第 {i + 1}/{total} 页：识别题目", base + int(step * 0.2))
-            title, new_ids, prev_last = _recognize(ctx, page_id, _outbound(ctx, img, i + 1), subject, mode,
-                                                   prev_last if mode == "page" else None)
+            title, res = _recognize(ctx, page_id, _outbound(ctx, img, i + 1), subject, mode)
             header_title = header_title or title
-            created += new_ids
+            created += res.new_ids
+            recognized[page_id] = res
         except (LLMError, ValueError) as exc:
             errors.append(f"第 {i + 1} 页识别失败：{exc}")
             log.warning("recognize failed for page %s: %s", page_id, exc)
@@ -84,6 +84,9 @@ def process_document(ctx: "AppContext", handle: JobHandle, payload: dict) -> dic
         err = erase_page(ctx, page_id)
         if err:
             errors.append(f"第 {i + 1} 页擦除失败：{err}")
+
+    if mode == "page" and len(recognized) > 1:
+        _join_pages(ctx, [p for p in page_ids if p in recognized], recognized)
 
     if created:
         handle.progress("分类知识点", 85)
@@ -120,10 +123,51 @@ def _correct(ctx: "AppContext", page_id: str, mode: str):
     return corrected, transform
 
 
-def _recognize(ctx: "AppContext", page_id: str, img, subject: str, mode: str,
-               prev_last: str | None = None) -> tuple[str | None, list[str], str | None]:
-    """识别一页；返回（卷头、新建的题、这一页最后一道题的实例编号）。
-    页面开头是上一页最后一道题的后半段（题干在上一页、图和选项在这一页）时，接到那道题上，不另算一道。"""
+class _PageResult:
+    """一页识别完的结果，等所有页都识别完再处理跨页。"""
+
+    def __init__(self) -> None:
+        self.new_ids: list[str] = []
+        self.first_label: int | None = None  # 这一页第一道有数字题号的题
+        self.last_label: int | None = None
+        self.last_id: str | None = None
+        self.continued: tuple[dict, list[float]] | None = None  # 页面开头的"后半段"（模型结果、像素框）
+
+
+def _label_int(label: object) -> int | None:
+    n = bank.norm_label(label)
+    return int(n) if n and n.isdigit() else None
+
+
+def _join_pages(ctx: "AppContext", page_ids: list[str], results: dict[str, "_PageResult"]) -> None:
+    """多页之间的处理：照片顺序和题号顺序相反（手机相册新的在前）时把页码倒过来；
+    再把每页开头的"后半段"接到前一页最后一道题上——只在题号接得上时接（前一页最后是 21 题、
+    这一页第一道是 22 题），接不上说明页面顺序不对或中间缺页，宁可不接。"""
+    firsts = [results[p].first_label for p in page_ids]
+    known = [x for x in firsts if x is not None]
+    if len(known) >= 2 and all(a > b for a, b in zip(known, known[1:])):
+        page_ids = list(reversed(page_ids))
+        with ctx.db.session() as s:  # 页码有唯一约束，先挪到负数再换
+            for n, pid in enumerate(page_ids, start=1):
+                s.get(SourcePage, pid).page_no = -n
+            s.flush()
+            for n, pid in enumerate(page_ids, start=1):
+                s.get(SourcePage, pid).page_no = n
+    for prev_id, cur_id in zip(page_ids, page_ids[1:]):
+        prev, cur = results[prev_id], results[cur_id]
+        if cur.continued is None or prev.last_id is None:
+            continue
+        if prev.last_label is not None and cur.first_label is not None and cur.first_label != prev.last_label + 1:
+            continue
+        item, bbox = cur.continued
+        with ctx.db.session() as s:
+            inst = s.get(QuestionInstance, prev.last_id)
+            if inst is not None:
+                _continue(s, inst, item, cur_id, bbox)
+
+
+def _recognize(ctx: "AppContext", page_id: str, img, subject: str, mode: str) -> tuple[str | None, "_PageResult"]:
+    """识别一页；返回（卷头、这一页的结果）。位置以本地 OCR 按题号行锚定为准，锚不到才用模型的框。"""
     url, _scale = imaging.data_url_jpeg(img)
     result = ctx.llm.chat_json("recognize", prompts.recognize_messages(subject, url, mode),
                                prompt_version=prompts.RECOGNIZE_VERSION)
@@ -131,18 +175,28 @@ def _recognize(ctx: "AppContext", page_id: str, img, subject: str, mode: str,
     if mode == "single" and not items:
         items = [{"bbox": [0, 0, 1000, 1000], "stem_md": "", "question_type": "solve"}]
     h, w = img.shape[:2]
-    new_ids: list[str] = []
-    last = prev_last
+    res = _PageResult()
+    layout = ocr.page_layout(img) if mode == "page" and ctx.settings.ocr_enabled else None
+    boxes = _anchor_boxes(layout, items, w, h)
     with ctx.db.session() as s:
         page = s.get(SourcePage, page_id)
-        page.layout = {"recognized": len(items), "header": result.get("header") if result else None}
-        if items and items[0].get("continued") and prev_last and s.get(QuestionInstance, prev_last) is not None:
-            _continue(s, s.get(QuestionInstance, prev_last), items.pop(0), page_id, w, h)
-        for item in items:
+        page.layout = {"recognized": len(items), "header": result.get("header") if result else None,
+                       "ocr_lines": len(layout.lines) if layout else None,
+                       "anchored": sum(b is not None for b in boxes)}
+        if items and items[0].get("continued") and mode == "page":
+            item = items.pop(0)
+            res.continued = (item, boxes.pop(0) or bbox_to_pixels(item.get("bbox"), w, h))
+        elif mode == "page" and layout is not None and items and _label_int(items[0].get("number_label")) not in (None, 1):
+            # 模型没说有后半段，但 OCR 看到第一道题的题号上面还有内容（常常是上一题只有图的部分）
+            top = bank._anchor_top(bank._seg(layout, 0.0, 1.0))
+            if top is not None and top.bbox[3] - top.bbox[1] >= 15:
+                res.continued = ({"stem_md": "", "has_figure": True},
+                                 [0.0, round(top.bbox[1] / 1000 * h, 1), float(w), round(top.bbox[3] / 1000 * h, 1)])
+        for item, anchored in zip(items, boxes):
             qtype = item.get("question_type") if item.get("question_type") in VALID_TYPES else "solve"
             stem = item.get("stem_md") or ""
             options = item.get("options") or None
-            bbox = [0.0, 0.0, float(w), float(h)] if mode == "single" else bbox_to_pixels(item.get("bbox"), w, h)
+            bbox = [0.0, 0.0, float(w), float(h)] if mode == "single" else anchored or bbox_to_pixels(item.get("bbox"), w, h)
             chash = content_hash(subject, stem, options)
             existing = s.query(Question).filter_by(content_hash=chash, subject=subject, origin="captured").first() \
                 if stem.strip() else None
@@ -172,14 +226,46 @@ def _recognize(ctx: "AppContext", page_id: str, img, subject: str, mode: str,
             )
             s.add(inst)
             s.flush()
-            new_ids.append(inst.id)
-            last = inst.id
-    return (result or {}).get("header"), new_ids, last
+            res.new_ids.append(inst.id)
+            res.last_id = inst.id
+            if (n := _label_int(item.get("number_label"))) is not None:
+                res.first_label = n if res.first_label is None else res.first_label
+                res.last_label = n
+    return (result or {}).get("header"), res
 
 
-def _continue(s, inst: QuestionInstance, item: dict, page_id: str, w: int, h: int) -> None:  # noqa: ANN001
+def _anchor_boxes(layout, items: list[dict], w: int, h: int) -> list[list[float] | None]:  # noqa: ANN001
+    """用 OCR 文字层给每道题定位：题号那一行开始，到下一道题的题号（或大题标题、页脚）之前。
+    页面开头的后半段取第一个题号之前的内容。最后一道题下面留给作答的空白，取模型框的下边
+    （模型对"空白到哪里"比对"题从哪里开始"靠谱）。"""
+    if layout is None or not layout.lines:
+        return [None] * len(items)
+    footers = [ln.y0 for ln in layout.lines if bank._FOOTER.match(ln.text) and ln.y0 > 850]
+    floor = min(footers) - bank.PAD if footers else 1000.0  # 页脚（"第 1 页/共 10 页"）以上才是内容
+    layout.lines = [ln for ln in layout.lines if not bank._FOOTER.match(ln.text)]
+    seg = bank._seg(layout, 0.0, 1.0)
+    out: list[list[float] | None] = []
+    for idx, item in enumerate(items):
+        model = bbox_to_pixels(item.get("bbox"), w, h)
+        if idx == 0 and item.get("continued"):
+            anchor = bank._anchor_top(seg)
+        else:
+            anchor = bank._anchor_question(seg, item.get("number_label"), model[1] / h * 1000)
+        if anchor is None:
+            out.append(None)
+            continue
+        x0, y0, x1, y1 = anchor.bbox
+        if anchor.closed_by == "page_end":  # 这一页最后一道题：下面的作答空白按模型的框，但不超过页脚
+            y1 = max(y1, min(model[3] / h * 1000, floor))
+        # 左右按整页宽度留边：选项、图常常比题号那几行宽，OCR 认不全
+        out.append([round(min(x0, model[0] / w * 1000) / 1000 * w, 1), round(y0 / 1000 * h, 1),
+                    round(max(x1, model[2] / w * 1000) / 1000 * w, 1), round(y1 / 1000 * h, 1)])
+    return out
+
+
+def _continue(s, inst: QuestionInstance, item: dict, page_id: str, bbox: list[float]) -> None:  # noqa: ANN001
     """把这一页开头的后半段接到上一页最后一道题上：位置多一段，文字、选项、小问合并，批改和作答补上。"""
-    inst.extra_regions = list(inst.extra_regions or []) + [{"page_id": page_id, "bbox": bbox_to_pixels(item.get("bbox"), w, h)}]
+    inst.extra_regions = list(inst.extra_regions or []) + [{"page_id": page_id, "bbox": bbox}]
     q = s.get(Question, inst.question_id)
     merged = {"stem_md": q.stem_md or "", "options": q.options, "sub_questions": q.sub_questions,
               "has_figure": bool(q.figures), "regions": [], "answer_shown": False}
