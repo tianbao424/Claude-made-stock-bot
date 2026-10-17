@@ -327,6 +327,18 @@ def test_landscape_pages_are_split_in_halves(bc):
 # ---------------------------------------------------------------- 纯函数
 
 
+def test_merge_final_answer_across_pages():
+    """解答跨页时同一道题的答案报了两次：不要拼成"(1) y=x-1；(1) y=x-1；(2) …"。"""
+    f = bank._merge_final
+    assert f("(1) $y=x-1$", "(1) $y=x-1$；(2) $0<a\\le\\frac{1}{3}$") == "(1) $y=x-1$；(2) $0<a\\le\\frac{1}{3}$"
+    assert f("(1) 证明见解析；(2) $6\\sqrt{3}$", "（1）$\\triangle BCD\\cong\\triangle BAE$；（2）$6\\sqrt{3}$") == \
+        "(1) $\\triangle BCD\\cong\\triangle BAE$；(2) $6\\sqrt{3}$"
+    assert f("(1)① $(1,2.25)$", "(1) ① $(1,2.25)$；② $y=-(x-1)^2$；(2) $0\\le h\\le 2$") == "(1) ① $(1,2.25)$；② $y=-(x-1)^2$；(2) $0\\le h\\le 2$"
+    assert f("B", "B") == "B" and f("", "C") == "C"
+    assert f("20m", "AB=20；距离是20m") == "AB=20；距离是20m"  # 短的被长的包含：取长的
+    assert f("20m", "AB=20") == "20m；AB=20"  # 分不出小问、互不包含：照旧拼起来
+
+
 def test_answers_agree():
     assert bank.answers_agree("B", "选 B", "choice_single") is True
     assert bank.answers_agree("B", "C", "choice_single") is False

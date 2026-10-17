@@ -324,10 +324,33 @@ def _merge_answer(answers: dict[str, dict], item: dict) -> None:
     final = str(item.get("final_answer") or "").strip()
     sol = (item.get("solution_md") or "").strip()
     cur = answers.setdefault(label, {"final": "", "solution": ""})
-    if final and final not in cur["final"]:
-        cur["final"] = f"{cur['final']}；{final}" if cur["final"] else final
+    if final:
+        cur["final"] = _merge_final(cur["final"], final)
     if sol and sol not in cur["solution"]:
         cur["solution"] = f"{cur['solution']}\n\n{sol}" if cur["solution"] else sol
+
+
+_PART_HEAD = re.compile(r"^\s*[（(]\s*\d{1,2}\s*[）)]")
+
+
+def _merge_final(old: str, new: str) -> str:
+    """同一道题的答案在两页上各报了一次（解答跨页：上一页只有 (1)，下一页是完整的 (1)(2)）：
+    一个包含另一个就取长的；都分小问的按小问合并，同一问取更完整的；其余才拼在一起。"""
+    old, new = old.strip(), new.strip()
+    if not old or new in old:
+        return old or new
+    if old in new:
+        return new
+    po, pn = _parts(old), _parts(new)
+    if po and pn:
+        merged = dict(po)
+        for k, v in pn.items():
+            if k not in merged or len(v.strip()) > len(merged[k].strip()):
+                merged[k] = v
+        return "；".join(f"({k}) {v.strip(' ；;，,')}" for k, v in sorted(merged.items(), key=lambda kv: int(kv[0])))
+    if (po or pn) and not (po and pn):  # 一边只有第 (1) 问、另一边是完整的：取分了小问的那个
+        return new if pn else old
+    return f"{old}；{new}"
 
 
 # ---------------------------------------------------------------- 用 PDF 文字层校准题目范围
