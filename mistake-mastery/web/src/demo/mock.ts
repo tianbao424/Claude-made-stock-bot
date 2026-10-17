@@ -1,6 +1,7 @@
 // 预览版的"后端"：在浏览器里用示例数据模拟 /api/* 接口。
 // 示例数据由 web/demo/make_fixtures.py 用真实后端生成（AI 部分是固定的模拟结果），
 // 这里只负责记住页面上的操作，并按 v0.1 的规则更新错题状态。
+import { EXAM_KINDS } from "../api";
 import type { BankPaperInfo, BankQuestion, BlindSpot, Candidate, Curriculum, Doc, KpLesson, MistakeDetail, PrintJobInfo, Student, Subject, SyncStatus } from "../api";
 import { KnowledgeIndex } from "./knowledge";
 
@@ -440,6 +441,9 @@ export class MockServer {
       this.touch();
       return { created, merged: 0, solving };
     }
+    if (route(/^\/api\/pages\/[^/]+\/erase$/) && method === "POST") {
+      return { ok: true }; // 预览版的擦除图是事先生成好的
+    }
     if (route(/^\/api\/pages\/[^/]+\/regions$/)) {
       throw new HttpError(400, "预览版不能手动框题。正式版里在这里拖出题目范围，就会新增一道题。");
     }
@@ -461,6 +465,24 @@ export class MockServer {
         delete this.bank[paper.id];
         this.touch();
         return { ok: true };
+      }
+      if (method === "PATCH") {
+        if (typeof b.title === "string" && b.title.trim()) paper.title = b.title.trim().slice(0, 100);
+        if (typeof b.year === "number") paper.year = b.year || null;
+        if (typeof b.region === "string") paper.region = b.region || null;
+        if (typeof b.exam_kind === "string") {
+          paper.exam_kind = b.exam_kind;
+          paper.exam_kind_name = EXAM_KINDS.find(([v]) => v === b.exam_kind)?.[1] ?? b.exam_kind;
+        }
+        if (b.subject === "math" || b.subject === "physics") {
+          paper.subject = b.subject;
+          for (const bq of paper.questions ?? []) {
+            bq.kp_codes = [];
+            bq.bj_slot = null;
+          }
+        }
+        this.touch();
+        return { ...paper, job_id: null };
       }
       return paper;
     }

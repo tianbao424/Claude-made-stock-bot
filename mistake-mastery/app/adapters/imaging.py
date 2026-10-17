@@ -126,13 +126,42 @@ def flatten_background(img: np.ndarray) -> np.ndarray:
     return cv2.merge(out)
 
 
+def neutralize_ink(flat: np.ndarray, dark_below: int = 110) -> np.ndarray:
+    """把拍照带来的偏色从深色像素上去掉，让印刷的黑字真的是灰色的。
+
+    去阴影只能把纸面（白色）校正回来；在暖光或台灯下拍的照片里，黑色印刷字会偏棕、偏橙，
+    在 HSV 里饱和度比红笔还高，原来会被整页当成彩色笔迹擦掉（2026-10 家长拍的一页卷子，
+    印刷字只剩下 6%）。一页卷子上最深的像素绝大多数是印刷字，所以用它们的中位颜色估计偏色，
+    每个通道各用一条幂曲线（白色 255 不动、把这个中位数拉到灰色）校正。
+    红笔、蓝笔的颜色和印刷字的偏色方向不同，校正后仍然是明显的彩色。
+    """
+    gray = cv2.cvtColor(flat, cv2.COLOR_BGR2GRAY)
+    dark = gray < dark_below
+    if dark.sum() < 500:  # 几乎没有深色内容（空白页），没什么可估计的
+        return flat
+    # 用"每个像素的通道差"的中位数估计偏色，而不是每个通道各取中位数：
+    # 红笔占深色像素两成时，各通道单独取中位数会把红色通道抬高，反而给黑字染上颜色。
+    b, g, r = (flat[:, :, c][dark].astype(np.int16) for c in range(3))
+    level = float(np.median(g))
+    med = np.array([level + np.median(b - g), level, level + np.median(r - g)])
+    if med.max() - med.min() < 12:  # 本来就是灰的，不用动
+        return flat
+    target = max(float(med.mean()), 1.0)
+    out = []
+    for c in range(3):
+        gamma = float(np.clip(np.log(target / 255) / np.log(max(med[c], 1.0) / 255), 0.5, 2.0))
+        lut = np.clip(255 * (np.arange(256) / 255) ** gamma, 0, 255).astype(np.uint8)
+        out.append(cv2.LUT(flat[:, :, c], lut))
+    return cv2.merge(out)
+
+
 def remove_colored_ink(img: np.ndarray, sat_threshold: int = 70) -> np.ndarray:
     """把彩色笔迹（红笔、蓝笔等）涂白。黑色笔迹和铅笔去不掉。
 
     笔画边缘因为抗锯齿颜色变淡、饱和度变低，单用一个阈值会留下一圈"鬼影"，
     所以在明显的彩色笔画附近，再把饱和度较低的像素和发灰的残留一起清掉。
     """
-    flat = flatten_background(img)
+    flat = neutralize_ink(flatten_background(img))
     hsv = cv2.cvtColor(flat, cv2.COLOR_BGR2HSV)
     sat, val = hsv[:, :, 1], hsv[:, :, 2]
     strong = ((sat > sat_threshold) & (val > 60)).astype(np.uint8)
@@ -141,7 +170,10 @@ def remove_colored_ink(img: np.ndarray, sat_threshold: int = 70) -> np.ndarray:
     mask = (strong > 0) | (weak & near)
     mask = cv2.dilate(mask.astype(np.uint8), np.ones((3, 3), np.uint8)) > 0
     gray = cv2.cvtColor(flat, cv2.COLOR_BGR2GRAY)
-    printed = (gray < 110) & (sat < 50)  # 深色、不带颜色的是印刷内容，不动它
+    # 深色、不带颜色的是印刷内容，不动它。深色像素的 HSV 饱和度是"通道差 / 最大通道"，
+    # 很小的通道差也会算出很高的饱和度，所以这里按通道差本身判断
+    chroma = flat.max(axis=2).astype(np.int16) - flat.min(axis=2).astype(np.int16)
+    printed = (gray < 110) & (chroma < 45)
     gray[mask & ~printed] = 255
     gray[near & (gray > 150)] = 255  # 笔画附近发灰的残留
     return gray

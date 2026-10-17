@@ -463,7 +463,7 @@ CREATE TABLE ai_calls (                   -- 【仅本地】调试、费用统�
 
 ### 5.5a 题库
 
-见 [10 §5](10-question-bank.md)：`/api/bank/papers`（列表、上传、详情、删除、重新识别、继续核对）、`/api/bank/questions/{id}`（改答案、标记已核对）、`/api/questions/{id}/bank-match`（取消录入时的自动匹配）。
+见 [10 §5](10-question-bank.md)：`/api/bank/papers`（列表、上传、详情、修改信息含改学科、删除、重新识别、继续核对）、`/api/bank/questions/{id}`（改答案、标记已核对）、`/api/questions/{id}/bank-match`（取消录入时的自动匹配）。
 
 ### 5.6 学情
 

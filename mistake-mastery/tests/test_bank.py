@@ -218,6 +218,38 @@ def test_capture_matches_bank_and_reject(bc):
         assert not bank.attach_match(bc.app_ctx, s, q)
 
 
+def test_change_paper_subject_reclassifies_and_detaches_matches(bc):
+    """导入时把物理卷选成了数学：改学科后题目换学科、按原学科分的知识点清掉重分，跨学科对上的错题取消匹配。"""
+    p = _import(bc)
+    st = bc.post("/api/students", json={"name": "小测"}).json()
+    doc = _capture(bc, st["id"], {"header": "期中", "questions": [PHOTO_Q1]})
+    item = bc.get(f"/api/documents/{doc}/candidates").json()["items"][0]
+    assert item["bank"]["paper_id"] == p["id"]
+    bc.post(f"/api/documents/{doc}/confirm", json={"items": [{"instance_id": item["instance_id"], "selected": True}]})
+    m = bc.get(f"/api/mistakes?student_id={st['id']}").json()[0]
+
+    # 改名称、年份、考试类型不动学科
+    r = bc.patch(f"/api/bank/papers/{p['id']}", json={"title": "改过的名字", "year": 2026, "exam_kind": "midterm"}).json()
+    assert (r["title"], r["year"], r["exam_kind"], r["job_id"]) == ("改过的名字", 2026, "midterm", None)
+
+    r = bc.patch(f"/api/bank/papers/{p['id']}", json={"subject": "physics"}).json()
+    assert r["subject"] == "physics" and r["job_id"]
+    assert bc.get(f"/api/jobs/{r['job_id']}").json()["status"] == "done"
+    p2 = bc.get(f"/api/bank/papers/{p['id']}").json()
+    assert p2["subject"] == "physics" and p2["stats"]["questions"] == 3
+    assert all(q["kp_codes"] == [] and q["bj_slot"] is None for q in p2["questions"])  # 假模型给的是数学编码，物理里对不上
+    assert [x["id"] for x in bc.get("/api/bank/papers?subject=physics").json()] == [p["id"]]
+    assert bc.get("/api/bank/papers?subject=math").json() == []
+    # 数学错题和物理卷子的匹配取消了，答案恢复成匹配前的
+    d = bc.get(f"/api/mistakes/{m['id']}").json()
+    assert d["bank"] is None and d["question"]["answer_source"] != "official"
+    with bc.app_ctx.db.session() as s:
+        from app.models import Question
+        assert s.get(Question, d["question"]["id"]).bank_match is None
+
+    assert bc.patch(f"/api/bank/papers/{p['id']}", json={"subject": "chemistry"}).status_code == 400
+
+
 def test_import_after_capture_backfills_answers(bc):
     st = bc.post("/api/students", json={"name": "小测"}).json()
     doc = _capture(bc, st["id"], {"header": "期中", "questions": [PHOTO_Q1]})

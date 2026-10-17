@@ -3,6 +3,7 @@
 import base64
 import json
 
+import cv2
 import httpx
 import numpy as np
 import pytest
@@ -37,6 +38,22 @@ def test_colored_ink_removed_black_kept():
     assert (gray[red] > 150).mean() > 0.95  # 红笔 ✗ 被擦掉
     black = (r < 60) & (g < 60) & (b < 60)
     assert (gray[black] < 100).mean() > 0.9  # 黑色印刷线条还在
+
+
+def test_warm_tinted_photo_keeps_printed_text():
+    """台灯下拍的卷子：印刷黑字偏棕（饱和度比红笔还高），不能被当成彩色笔迹擦掉；红笔仍要擦掉。"""
+    img = np.full((600, 800, 3), (150, 205, 235), np.uint8)  # 发黄的纸面（BGR）
+    for i in range(12):  # 偏棕的"印刷字"：横线
+        cv2.line(img, (40, 40 + i * 45), (760, 40 + i * 45), (35, 58, 82), 3)
+    cv2.line(img, (100, 60), (700, 520), (40, 40, 200), 6)  # 红笔划线
+    gray = imaging.remove_colored_ink(img)
+    text = np.zeros(img.shape[:2], bool)
+    for i in range(12):
+        text[40 + i * 45 - 1: 40 + i * 45 + 2, 40:760] = True
+    red = np.zeros_like(text)
+    cv2.line(red.view(np.uint8), (100, 60), (700, 520), 1, 4)
+    assert (gray[text & ~red] < 120).mean() > 0.9  # 印刷字还在
+    assert (gray[red & ~text] > 180).mean() > 0.9  # 红笔擦掉了
 
 
 def test_normalize_upload_limits_size():

@@ -1,8 +1,9 @@
 import { useCallback, useEffect, useState } from "react";
 import { useNavigate, useParams, useSearchParams } from "react-router-dom";
-import { ANSWER_SOURCE, api, BankPaperInfo, BankQuestion, runtime } from "../api";
+import { ANSWER_SOURCE, api, BankPaperInfo, BankQuestion, EXAM_KINDS, runtime, Subject, subjectName, SUBJECTS } from "../api";
 import { ConfirmButton, JobProgress, Md, useCurriculum, useJob } from "../components/common";
-import { paperMeta } from "./Bank";
+import { paperMeta, regionName } from "./Bank";
+import { DISTRICTS } from "./Onboarding";
 
 const TYPE_NAMES: Record<string, string> = {
   choice_single: "单选", choice_multi: "多选", fill: "填空", solve: "解答", experiment: "实验探究", reading: "科普阅读",
@@ -107,6 +108,79 @@ function QuestionCard({ q, kpName, onChange }: { q: BankQuestion; kpName: (c: st
   );
 }
 
+function PaperEditForm({ paper, onDone, onCancel }: {
+  paper: BankPaperInfo; onDone: (p: BankPaperInfo, jobId: string | null) => void; onCancel: () => void;
+}) {
+  const [subject, setSubject] = useState<Subject>(paper.subject);
+  const [title, setTitle] = useState(paper.title);
+  const [year, setYear] = useState(paper.year ? String(paper.year) : "");
+  const [region, setRegion] = useState(paper.region ?? "");
+  const [kind, setKind] = useState(paper.exam_kind);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState("");
+  const kindName = EXAM_KINDS.find(([v]) => v === kind)?.[1] ?? "";
+  const auto = `${year ? `${year} ` : ""}${regionName(region || null)}${kindName} · ${subjectName(subject)}`;
+  const subjectChanged = subject !== paper.subject;
+
+  const save = async () => {
+    setBusy(true);
+    setError("");
+    try {
+      const r = await api.patch<BankPaperInfo & { job_id: string | null }>(`/api/bank/papers/${paper.id}`, {
+        title: title.trim() || auto, year: year ? Number(year) : 0, region, exam_kind: kind,
+        ...(subjectChanged ? { subject } : {}),
+      });
+      const { job_id, ...rest } = r;
+      onDone(rest, job_id);
+    } catch (err) {
+      setError((err as Error).message);
+      setBusy(false);
+    }
+  };
+
+  return (
+    <div className="card stack">
+      <h2 style={{ margin: 0 }}>修改卷子信息</h2>
+      <div className="seg">
+        {SUBJECTS.map((s) => (
+          <button key={s.code} className={subject === s.code ? "on" : ""} onClick={() => setSubject(s.code)}>{s.name}</button>
+        ))}
+      </div>
+      {subjectChanged && (
+        <div className="notice">
+          改成{subjectName(subject)}之后，这套卷子的每道题会按{subjectName(subject)}的知识点重新分类（AI 分类，费用很少）；
+          之前按{subjectName(paper.subject)}对上的错题会取消匹配。
+        </div>
+      )}
+      <div className="row">
+        <label className="field" style={{ flex: 1 }}>年份
+          <input inputMode="numeric" value={year} onChange={(e) => setYear(e.target.value.replace(/\D/g, "").slice(0, 4))} />
+        </label>
+        <label className="field" style={{ flex: 1 }}>地区
+          <select value={region} onChange={(e) => setRegion(e.target.value)}>
+            <option value="">不填</option>
+            <option value="beijing">北京（全市）</option>
+            {DISTRICTS.filter(([v]) => v !== "other").map(([v, n]) => <option key={v} value={v}>{n}</option>)}
+          </select>
+        </label>
+        <label className="field" style={{ flex: 1 }}>考试
+          <select value={kind} onChange={(e) => setKind(e.target.value)}>
+            {EXAM_KINDS.map(([v, n]) => <option key={v} value={v}>{n}</option>)}
+          </select>
+        </label>
+      </div>
+      <label className="field">名称（清空就用"{auto}"）
+        <input value={title} onChange={(e) => setTitle(e.target.value)} placeholder={auto} />
+      </label>
+      {error && <div className="error">{error}</div>}
+      <div className="row">
+        <button className="chip" onClick={onCancel} disabled={busy}>取消</button>
+        <button className="primary" style={{ flex: 1 }} onClick={save} disabled={busy}>{busy ? "保存中…" : "保存"}</button>
+      </div>
+    </div>
+  );
+}
+
 export default function BankPaper() {
   const { id } = useParams();
   const [params] = useSearchParams();
@@ -114,6 +188,7 @@ export default function BankPaper() {
   const [paper, setPaper] = useState<BankPaperInfo | null>(null);
   const [filter, setFilter] = useState<"all" | "review" | "noanswer">("all");
   const [jobId, setJobId] = useState<string | null>(params.get("job"));
+  const [editing, setEditing] = useState(false);
   const [error, setError] = useState("");
   const cur = useCurriculum(paper?.subject);
 
@@ -155,10 +230,20 @@ export default function BankPaper() {
     <>
       <div className="topbar">
         <h1>{paper.title}</h1>
+        {paper.status !== "processing" && !jobId && !editing && (
+          <button className="chip" onClick={() => setEditing(true)}>修改信息</button>
+        )}
       </div>
       <div className="muted small" style={{ marginTop: -6, marginBottom: 10 }}>
         {paperMeta(paper)} · {paper.pages.length} 页（{paper.files.map((f) => f.name).filter(Boolean).join("、")}）
       </div>
+      {editing && (
+        <PaperEditForm paper={paper} onCancel={() => setEditing(false)} onDone={(p, job) => {
+          setEditing(false);
+          setPaper((old) => old && { ...old, ...p });
+          if (job) setJobId(job);
+        }} />
+      )}
 
       {(jobId || paper.status === "processing") && (
         <div className="card stack">

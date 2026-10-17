@@ -894,6 +894,14 @@ def rematch_captured(ctx: "AppContext", paper_id: str) -> int:
     return n
 
 
+def _restore_answer(q: Question, bm: dict) -> None:
+    """取消和题库的匹配时，把匹配前的答案放回去。"""
+    if q.answer_source == "official":
+        q.answer = bm.get("prev_answer")
+        q.answer_source = bm.get("prev_source") or "none"
+        q.solution_md = bm.get("prev_solution")
+
+
 def reject_match(ctx: "AppContext", question_id: str) -> dict:
     """家长说"不是这道题"：取消匹配，恢复原来的答案；没有答案的错题交给 AI 解答。"""
     with ctx.db.session() as s:
@@ -903,10 +911,7 @@ def reject_match(ctx: "AppContext", question_id: str) -> dict:
         bm = dict(q.bank_match or {})
         if bm.get("status") != "auto":
             return {"ok": True}
-        if q.answer_source == "official":
-            q.answer = bm.get("prev_answer")
-            q.answer_source = bm.get("prev_source") or "none"
-            q.solution_md = bm.get("prev_solution")
+        _restore_answer(q, bm)
         q.bank_match = {"question_id": bm.get("question_id"), "score": bm.get("score"), "status": "rejected"}
         solve = q.answer_source == "none" and s.query(Mistake).filter_by(question_id=q.id).first() is not None
     if solve:
@@ -927,6 +932,68 @@ def match_info(s: "Session", q: Question) -> dict | None:
             "number_label": item.number_label, "score": bm.get("score")}
 
 
+# ---------------------------------------------------------------- 改学科
+
+
+def change_subject(ctx: "AppContext", paper_id: str, subject: str) -> str | None:
+    """导入时学科选错了（把物理卷选成了数学）：改卷子和每道题的学科，清掉按原学科分出来的
+    知识点和题位，交给后台重新分类；已经对上这套卷子的错题是跨学科对上的，多半是巧合，
+    取消匹配并恢复它原来的答案。返回重新分类任务的编号（学科没变时为 None）。"""
+    if subject not in prompts.SUBJECT_NAMES:
+        raise ValueError(f"不支持的学科：{subject}")
+    with ctx.db.session() as s:
+        paper = s.get(BankPaper, paper_id)
+        if paper is None:
+            raise ValueError("卷子不存在")
+        if paper.subject == subject:
+            return None
+        paper.subject = subject
+        qids = {i.question_id for i in s.query(BankItem).filter_by(paper_id=paper_id)}
+        for qid in qids:
+            q = s.get(Question, qid)
+            q.subject = subject
+            q.bj_slot = None
+            s.query(QuestionKp).filter_by(question_id=qid).delete()
+        for q in s.query(Question).filter(Question.origin == "captured"):
+            bm = dict(q.bank_match or {})
+            if bm.get("question_id") not in qids:
+                continue
+            if bm.get("status") == "auto":
+                _restore_answer(q, bm)
+            q.bank_match = None  # 以后在正确的学科里还可以重新对上
+            for k in s.query(QuestionKp).filter_by(question_id=q.id).all():
+                if ctx.curriculum.resolve(k.kp_code, q.subject) is None:  # 从题库带来的另一科的知识点
+                    s.delete(k)
+        refresh_stats(s, paper, matched_captured=0)
+    ctx.bank_index.invalidate()
+    return ctx.jobs.submit("bank_classify", {"paper_id": paper_id})
+
+
+def classify_job(ctx: "AppContext", handle: JobHandle, payload: dict) -> dict:
+    """改学科之后：按新学科重新分类知识点，再把已经录入的错题和这套卷子对一遍。"""
+    pid = payload["paper_id"]
+    with ctx.db.session() as s:
+        paper = s.get(BankPaper, pid)
+        if paper is None:
+            return {"skipped": True}
+        subject = paper.subject
+        qids = [i.question_id for i in s.query(BankItem).filter_by(paper_id=pid).order_by(BankItem.seq)]
+    handle.progress("按新学科分类知识点", 10)
+    error = None
+    try:
+        _classify(ctx, subject, qids)
+    except CostCapExceeded as exc:
+        error = f"分类暂停：{exc}"
+    handle.progress("匹配已录入的错题", 80)
+    matched = rematch_captured(ctx, pid)
+    with ctx.db.session() as s:
+        paper = s.get(BankPaper, pid)
+        paper.error = error
+        refresh_stats(s, paper, matched_captured=matched)
+    return {"matched_captured": matched}
+
+
 def register(ctx: "AppContext") -> None:
     ctx.jobs.register("bank_import", import_paper)
     ctx.jobs.register("bank_verify", verify_job)
+    ctx.jobs.register("bank_classify", classify_job)

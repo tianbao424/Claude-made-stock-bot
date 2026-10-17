@@ -11,6 +11,7 @@ export default function MistakeDetail() {
   const navigate = useNavigate();
   const [m, setM] = useState<Detail | null>(null);
   const [orig, setOrig] = useState(false);
+  const [imgVer, setImgVer] = useState(0); // 重新擦除后换个地址，绕过浏览器缓存的旧图
   const [editAnswer, setEditAnswer] = useState<string | null>(null);
   const [kpOpen, setKpOpen] = useState(false);
   const [solveJob, setSolveJob] = useState<string | null>(null);
@@ -37,6 +38,7 @@ export default function MistakeDetail() {
 
   if (!m) return <div className="muted">加载中…</div>;
   const q = m.question;
+  const pageId = m.instances?.find((i) => i.id === m.instance_id)?.page_id ?? null;
   const g = m.gates ?? {};
 
   return (
@@ -49,8 +51,16 @@ export default function MistakeDetail() {
       <div className="card stack">
         {m.instance_id && (
           <>
-            <img className="crop" alt="" src={runtime.fileUrl(`/api/instances/${m.instance_id}/image?kind=${orig ? "original" : "erased"}`)} onClick={() => setOrig(!orig)} />
-            <div className="muted small">点图片切换{orig ? "擦除后" : "原图（含孩子的作答和批改）"}</div>
+            <img className="crop" alt="" src={runtime.fileUrl(`/api/instances/${m.instance_id}/image?kind=${orig ? "original" : "erased"}${imgVer ? `&v=${imgVer}` : ""}`)} onClick={() => setOrig(!orig)} />
+            <div className="row spread">
+              <span className="muted small">点图片切换{orig ? "擦除后" : "原图（含孩子的作答和批改）"}</span>
+              {pageId && (
+                <button className="chip small" onClick={() => act(async () => {
+                  await api.post(`/api/pages/${pageId}/erase`);
+                  setImgVer(Date.now());
+                })}>重新擦除这一页</button>
+              )}
+            </div>
           </>
         )}
         <div className="gates">

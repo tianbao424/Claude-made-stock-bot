@@ -69,6 +69,7 @@ flowchart LR
 - 家长自己填的答案不覆盖；官方答案不会被"请 AI 重新解答"覆盖
 - 批量确认页显示"📚 题库里有这道题：2025 海淀一模 第 1 题"，旁边有**"不是这道题"**：取消匹配、恢复原来的答案，没有答案的交给 AI 解答，以后也不再自动匹配这一对
 - 错题详情页显示出处，点进去能看到整套卷子
+- 卷子页右上角"修改信息"：导入时选错的学科、年份、地区、考试类型、名称都能改（2026-10 家长把一份物理卷选成了数学）
 
 ## 4. 数据
 
@@ -88,7 +89,7 @@ flowchart LR
 | GET | `/api/bank/papers?subject=` | 卷子列表（含统计） |
 | POST | `/api/bank/papers` | 上传（multipart：`subject`、`title`、`year`、`region`、`exam_kind`、`verify`、`paper_files[]`、`answer_files[]`），返回 `paper_id`、`job_id` |
 | GET | `/api/bank/papers/{id}` | 卷子详情和全部题目 |
-| PATCH / DELETE | `/api/bank/papers/{id}` | 改名称等 / 删除（连同文件） |
+| PATCH / DELETE | `/api/bank/papers/{id}` | 改名称、年份、地区、考试类型、学科（`subject`：改学科会清掉原学科的知识点和题位、后台重新分类，返回 `job_id`；跨学科对上的错题取消匹配、恢复原答案） / 删除（连同文件） |
 | POST | `/api/bank/papers/{id}/reimport` | 重新识别（换了模型或识别出错时） |
 | POST | `/api/bank/papers/{id}/verify` | 继续 AI 核对 |
 | PATCH | `/api/bank/questions/{id}` | 改答案、标记"已核对"、改知识点 |

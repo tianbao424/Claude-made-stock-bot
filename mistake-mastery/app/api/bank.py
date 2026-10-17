@@ -75,23 +75,34 @@ class PaperPatch(BaseModel):
     year: int | None = None
     region: str | None = None
     exam_kind: str | None = None
+    subject: str | None = None
 
 
 @router.patch("/bank/papers/{paper_id}")
 def patch_paper(paper_id: str, body: PaperPatch, ctx: AppContext = Depends(get_ctx)) -> dict:
+    """改卷子的名称、年份、地区、考试类型、学科。改学科会在后台重新分类知识点，返回里带 job_id。"""
     with ctx.db.session() as s:
         p = s.get(BankPaper, paper_id)
         if p is None:
             raise not_found("卷子")
+        if p.status == "processing" and body.subject and body.subject != p.subject:
+            raise bad_request("正在导入，等导入完成再改学科")
         if body.title is not None and body.title.strip():
             p.title = body.title.strip()[:100]
         if body.year is not None:
-            p.year = body.year
+            p.year = body.year or None
         if body.region is not None:
             p.region = body.region or None
         if body.exam_kind in bank.EXAM_KINDS:
             p.exam_kind = body.exam_kind
-        return _paper_dict(p)
+    job_id = None
+    if body.subject is not None:
+        try:
+            job_id = bank.change_subject(ctx, paper_id, body.subject)
+        except ValueError as exc:
+            raise bad_request(str(exc)) from exc
+    with ctx.db.session() as s:
+        return {**_paper_dict(s.get(BankPaper, paper_id)), "job_id": job_id}
 
 
 @router.delete("/bank/papers/{paper_id}")
