@@ -25,7 +25,7 @@ else
   git cat-file -e origin/develop:daily-morning-news/pipeline/render.py 2>/dev/null || BASE=origin/claude/kind-feynman-6hv106
   git checkout --no-track -B daily-morning-news "$BASE"   # 不跟踪基准分支，避免误推到别处
 fi
-cd daily-morning-news && bash pipeline/setup.sh
+cd daily-morning-news && bash pipeline/setup.sh --with-asr   # 含回听用的 ASR 模型
 D=$(TZ=Asia/Shanghai date +%F); mkdir -p reports/$D
 PREV=$(ls -d reports/20*/ | grep -v "$D" | sort | tail -1)   # 上一期，作为模板
 echo "D=$D PREV=$PREV"
@@ -98,8 +98,13 @@ echo "D=$D PREV=$PREV"
 
 ## 5. 生成与检查
 
+执行要点和自查脚本见 `../.claude/skills/daily-morning-news/SKILL.md`。
+
 ```bash
-bash pipeline/make_video.sh reports/$D
+S=../.claude/skills/daily-morning-news/scripts
+python3 $S/check_report.py reports/$D     # 字幕 ≤45 字、页脚宽度、数据时点、结尾语，有 ✗ 先修
+bash pipeline/make_video.sh reports/$D    # duration 需 ≤190 秒，超了删句
+python3 $S/asr_recheck.py reports/$D      # 回听「美股/港股」，bad>0 时重跑 make_video.sh 再回听，最多 3 轮
 ```
 
 - 修掉 lint 输出里的 ✗ 项；逐条看 · 项，读音不对的加到 `report.json` 的 `lexicon_extra`（如 `"行长 hang2 zhang3"`）或换说法。
