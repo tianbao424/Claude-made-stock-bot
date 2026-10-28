@@ -22,7 +22,7 @@
       "10月27日收盘"
     ]
   ],
-  "information_cutoff": "2026-10-28T08:00:00+08:00",
+  "information_cutoff": "2026-10-28T11:03:02.970307+08:00",
   "source_urls": [
     "https://www.xinhuanet.com/20261028/5af1501b2a9b47b897808de6d6a5c2ed/c.html",
     "https://tw.stock.yahoo.com/news/%E7%BE%8E%E8%82%A1%E7%9B%A4%E5%BE%8C-%E6%94%B6%E9%AB%98-211122873.html/",
@@ -40,7 +40,15 @@
     "https://www.federalreserve.gov/monetarypolicy.htm",
     "https://www.chicagofed.org/utilities/about-us/federal-reserve-calendars",
     "https://big5.www.gov.cn/gate/big5/www.gov.cn/zhengce/content/202511/content_7047090.htm",
-    "https://www.sse.com.cn/disclosure/announcement/general/c/c_20251222_10802507.shtml"
+    "https://www.sse.com.cn/disclosure/announcement/general/c/c_20251222_10802507.shtml",
+    "https://www.cboe.com/tradable_products/vix/vix_historical_data",
+    "https://fred.stlouisfed.org/series/VIXCLS",
+    "https://www.multpl.com/shiller-pe/table/by-month",
+    "https://www.multpl.com/s-p-500-pe-ratio/table/by-month",
+    "https://oss-ch.csindex.com.cn/static/html/csindex/public/uploads/file/autofile/indicator/000300indicator.xls",
+    "https://oss-ch.csindex.com.cn/static/html/csindex/public/uploads/file/autofile/indicator/000688indicator.xls",
+    "https://fred.stlouisfed.org/series/BAMLH0A0HYM2",
+    "https://fred.stlouisfed.org/series/BAMLC0A0CM"
   ],
   "slides": [
     {
@@ -67,7 +75,7 @@
       ],
       "visual": {
         "headline": "美股续涨 · A港承压",
-        "subtitle": "信息截点：北京时间08:00"
+        "subtitle": "行情10/27收盘 · 指标11:03核验"
       },
       "sentences": [
         {
@@ -83,8 +91,8 @@
           ]
         },
         {
-          "sub": "本期信息截至北京时间08:00，不含今日盘中行情。",
-          "say": "本期信息截至北京时间上午八点，不含今日盘中行情。",
+          "sub": "本期补充核验情绪指标，行情仍用10月27日收盘。",
+          "say": "本期补充核验情绪指标，行情仍用十月二十七日收盘。",
           "hi": [
             "chips"
           ]
@@ -356,66 +364,88 @@
     {
       "type": "macro",
       "tab": "情绪",
-      "asof": "截至10月28日08:00 · 指标不齐",
-      "src": "来源：公开收盘资料；缺口详见文稿",
+      "asof": "10月28日11:03补充核验 · 日期分项标注",
+      "src": "来源：中证指数、Cboe、Multpl、FRED",
       "groups": [
         [
-          "已核实信号",
+          "估值",
           "cn",
           [
             [
-              "两市成交",
-              "14609亿元",
-              "较前一日减少1479亿元"
+              "沪深300市盈率1",
+              "13.84倍",
+              "总股本；10月27日"
+            ],
+            [
+              "标普500市盈率",
+              "26.35倍",
+              "来源估算；10月27日"
             ]
           ]
         ],
         [
-          "本期处理",
+          "恐慌",
+          "us",
+          [
+            [
+              "VIX收盘",
+              "17.52",
+              "10月27日；Cboe"
+            ]
+          ]
+        ],
+        [
+          "信用",
           "cal",
           [
             [
-              "综合评分",
-              "暂缓",
-              "最新估值、恐慌、信用指标不齐"
+              "两项OAS",
+              "已获取",
+              "观察日期10月26日；原始值仅本地核验"
             ]
           ]
         ]
       ],
       "visual": {
-        "headline": "风险偏好弱 · 暂缓评分",
+        "headline": "核心指标齐备 · 分项看日期",
+        "background": "global",
         "rows": [
           [
-            "已核实信号",
-            "缩量下跌",
-            "两市成交14609亿元"
+            "估值 · 10/27",
+            "沪深300 13.84倍",
+            "总股本口径 · 标普估算26.35倍"
           ],
           [
-            "数据边界",
-            "涨跌家数口径不同",
-            "不报精确家数 · 不混用统计范围"
+            "恐慌指标 · 10/27",
+            "VIX 17.52",
+            "采用Cboe收盘 · 同日核对FRED"
           ],
           [
-            "综合情绪评分",
-            "暂缓",
-            "估值、恐慌及信用指标不齐"
+            "信用数据日 · 10/26",
+            "两项利差已获取",
+            "较股市滞后一日 · 按来源日期观察"
           ]
         ]
       },
       "sentences": [
         {
-          "sub": "情绪方面，A股缩量下跌，市场风险偏好仍需修复。",
-          "say": "情绪方面，A股缩量下跌，市场风险偏好仍需修复。",
+          "sub": "沪深300总股本口径市盈率13.84倍，估值口径须分清。",
+          "say": "沪深三百总股本口径市盈率十三点八四倍，估值口径需要分清。",
           "hi": []
         },
         {
-          "sub": "不同来源的涨跌家数口径不一，本期不报精确家数。",
-          "say": "不同来源的涨跌家数口径不一，本期不报精确家数。",
+          "sub": "恐慌指数10月27日收于17.52，未达框架极端阈值。",
+          "say": "恐慌指数十月二十七日收于十七点五二，未达到框架的极端阈值。",
           "hi": []
         },
         {
-          "sub": "估值、恐慌与信用指标不齐，暂缓综合情绪评分。",
-          "say": "估值、恐慌与信用指标不齐，暂缓综合情绪评分。",
+          "sub": "两项信用利差已取得，观察日期为10月26日。",
+          "say": "两项信用利差已取得，观察日期是十月二十六日。",
+          "hi": []
+        },
+        {
+          "sub": "以上是分项观察，不据此给出全框架综合分。",
+          "say": "以上是分项观察，不据此给出全框架综合分。",
           "hi": []
         }
       ]
@@ -527,5 +557,203 @@
         }
       ]
     }
-  ]
+  ],
+  "original_information_cutoff": "2026-10-28T08:00:00+08:00",
+  "supplemented_at": "2026-10-28T11:03:02.970307+08:00",
+  "sentiment_data": {
+    "schema_version": 1,
+    "generated_at": "2026-10-28T11:03:02.970307+08:00",
+    "snapshot_kind": "retrieval_snapshot_not_historical_vintage",
+    "us_market_date": "2026-10-27",
+    "cn_market_date": "2026-10-27",
+    "metrics": [
+      {
+        "key": "vix",
+        "label": "VIX收盘",
+        "category": "panic",
+        "unit": "index",
+        "target_market_date": "2026-10-27",
+        "max_business_day_lag": 1,
+        "restricted_publication": false,
+        "value": 17.52,
+        "observation_date": "2026-10-27",
+        "lag_business_days": 0,
+        "status": "fresh",
+        "usable": true,
+        "source": "cboe_vix",
+        "source_url": "https://cdn.cboe.com/api/global/us_indices/daily_prices/VIX_History.csv",
+        "retrieved_at": "2026-10-28T10:56:52.967451+08:00",
+        "cache_used": false,
+        "origin": "live",
+        "fetch_error": null,
+        "details": {}
+      },
+      {
+        "key": "hy_oas",
+        "label": "高收益债OAS",
+        "category": "credit",
+        "unit": "percent",
+        "target_market_date": "2026-10-27",
+        "max_business_day_lag": 2,
+        "restricted_publication": true,
+        "observation_date": "2026-10-26",
+        "lag_business_days": 1,
+        "status": "source_lag",
+        "usable": true,
+        "source": "hy_oas",
+        "source_url": "https://fred.stlouisfed.org/graph/fredgraph.csv?id=BAMLH0A0HYM2",
+        "retrieved_at": "2026-10-28T10:56:48.890565+08:00",
+        "cache_used": false,
+        "origin": "live",
+        "fetch_error": null,
+        "publication_note": "ICE source permits internal use only without separate approval; keep raw values and raw files out of public GitHub/video",
+        "public_display": "已获取，按实际发布日留档；具体数值仅作本地内部核验"
+      },
+      {
+        "key": "ig_oas",
+        "label": "投资级债OAS",
+        "category": "credit",
+        "unit": "percent",
+        "target_market_date": "2026-10-27",
+        "max_business_day_lag": 2,
+        "restricted_publication": true,
+        "observation_date": "2026-10-26",
+        "lag_business_days": 1,
+        "status": "source_lag",
+        "usable": true,
+        "source": "ig_oas",
+        "source_url": "https://fred.stlouisfed.org/graph/fredgraph.csv?id=BAMLC0A0CM",
+        "retrieved_at": "2026-10-28T10:56:47.958950+08:00",
+        "cache_used": false,
+        "origin": "live",
+        "fetch_error": null,
+        "publication_note": "ICE source permits internal use only without separate approval; keep raw values and raw files out of public GitHub/video",
+        "public_display": "已获取，按实际发布日留档；具体数值仅作本地内部核验"
+      },
+      {
+        "key": "cape",
+        "label": "Shiller CAPE（来源估算）",
+        "category": "valuation",
+        "unit": "times",
+        "target_market_date": "2026-10-27",
+        "max_business_day_lag": 3,
+        "restricted_publication": false,
+        "value": 40.89,
+        "observation_date": "2026-10-27",
+        "lag_business_days": 0,
+        "status": "fresh",
+        "usable": true,
+        "source": "cape",
+        "source_url": "https://www.multpl.com/shiller-pe/table/by-month",
+        "retrieved_at": "2026-10-28T10:56:49.376881+08:00",
+        "cache_used": false,
+        "origin": "live",
+        "fetch_error": null,
+        "details": {
+          "estimated": false
+        }
+      },
+      {
+        "key": "sp500_pe",
+        "label": "标普500报告利润市盈率（来源估算）",
+        "category": "valuation",
+        "unit": "times",
+        "target_market_date": "2026-10-27",
+        "max_business_day_lag": 3,
+        "restricted_publication": false,
+        "value": 26.35,
+        "observation_date": "2026-10-27",
+        "lag_business_days": 0,
+        "status": "fresh",
+        "usable": true,
+        "source": "sp500_pe",
+        "source_url": "https://www.multpl.com/s-p-500-pe-ratio/table/by-month",
+        "retrieved_at": "2026-10-28T10:56:50.850607+08:00",
+        "cache_used": false,
+        "origin": "live",
+        "fetch_error": null,
+        "details": {
+          "estimated": true
+        }
+      },
+      {
+        "key": "hs300_pe",
+        "label": "沪深300市盈率1（总股本）",
+        "category": "valuation",
+        "unit": "times",
+        "target_market_date": "2026-10-27",
+        "max_business_day_lag": 1,
+        "restricted_publication": false,
+        "value": 13.84,
+        "observation_date": "2026-10-27",
+        "lag_business_days": 0,
+        "status": "fresh",
+        "usable": true,
+        "source": "hs300_pe",
+        "source_url": "https://oss-ch.csindex.com.cn/static/html/csindex/public/uploads/file/autofile/indicator/000300indicator.xls",
+        "retrieved_at": "2026-10-28T10:56:51.337360+08:00",
+        "cache_used": false,
+        "origin": "live",
+        "fetch_error": null,
+        "details": {
+          "pe2": 15.23,
+          "pe1_definition": "市盈率1（总股本）P/E1",
+          "pe2_definition": "市盈率2（计算用股本）P/E2",
+          "index_code": "000300"
+        }
+      },
+      {
+        "key": "star50_pe",
+        "label": "科创50市盈率1（总股本）",
+        "category": "valuation",
+        "unit": "times",
+        "target_market_date": "2026-10-27",
+        "max_business_day_lag": 1,
+        "restricted_publication": false,
+        "value": 82.6,
+        "observation_date": "2026-10-27",
+        "lag_business_days": 0,
+        "status": "fresh",
+        "usable": true,
+        "source": "star50_pe",
+        "source_url": "https://oss-ch.csindex.com.cn/static/html/csindex/public/uploads/file/autofile/indicator/000688indicator.xls",
+        "retrieved_at": "2026-10-28T10:56:51.311097+08:00",
+        "cache_used": false,
+        "origin": "live",
+        "fetch_error": null,
+        "details": {
+          "pe2": 83.37,
+          "pe1_definition": "市盈率1（总股本）P/E1",
+          "pe2_definition": "市盈率2（计算用股本）P/E2",
+          "index_code": "000688"
+        }
+      }
+    ],
+    "vix_same_date_crosscheck": {
+      "date": "2026-10-26",
+      "passed": true
+    },
+    "coverage": {
+      "valuation": {
+        "available": 4,
+        "expected": 4
+      },
+      "panic": {
+        "available": 1,
+        "expected": 1
+      },
+      "credit": {
+        "available": 2,
+        "expected": 2
+      }
+    },
+    "core_complete": true,
+    "aggregate_score": null,
+    "aggregate_reason": "Seven core observations are not the complete original sentiment framework; no automatic full-framework score or position advice",
+    "backfill_note": "retrieved_at is not publication time. This snapshot cannot prove data were available at an earlier 08:00 cutoff; label later supplements explicitly.",
+    "collection_started_at": "2026-10-28T10:56:46.127751+08:00"
+  },
+  "visual": {
+    "badge": "补充核验版 · AI图"
+  }
 }
