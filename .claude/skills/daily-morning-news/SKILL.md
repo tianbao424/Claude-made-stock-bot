@@ -31,7 +31,7 @@ description: >
    python3 $S/asr_recheck.py reports/$D         # 只读检查全部「A股/美股/港股」，不删缓存
    # bad>0：保留证据并诊断，不能跳过 A股 或自动删缓存盲目重试
    ```
-   然后用 Read 看 `reports/$D/build/contact_sheet.png`（溢出、重叠、截断）。最终文件必须
+   然后用 Read 看 `reports/$D/build/illustrated/contact_sheet.jpg`（溢出、重叠、截断）。最终文件必须
    <3,000,000 字节、完整解码通过、字幕与新音轨同步。已有视频不能覆盖；需要重做时按手册
    第 5 步在独立候选根下建立同名日期目录，验证通过后才提升产物并保留原版。
 5. **script.md**（手册第 6 步）→ 再跑一次 `check_report.py` → 提交推送（手册第 7 步，只推 `daily-morning-news`）。
@@ -79,8 +79,9 @@ description: >
 ## 资源
 
 - `pipeline/assets/intro.mp4`（4.5 秒片头，由 `pipeline/make_intro.py` 生成）、`pipeline/assets/bgm.mp3`
-  （原创香颂手风琴华尔兹，由 `pipeline/make_bgm.py` 生成，音量 `BGM_VOL`，默认 0.12）。`make_video.sh` 默认关闭片头、启用低音量混音；`INTRO_VIDEO=<路径>` 可显式启用片头。
+  （原创香颂手风琴华尔兹，由 `pipeline/make_bgm.py` 生成）。静态底图默认入口无独立片头，背景音乐音量0.18并自动避让人声；需要无配乐时显式使用 run_illustrated.py 的 --skip-bgm。
 - 情绪判定阈值见 `.claude/skills/market-sentiment/SKILL.md`「指标全集」。
-- 外部 Claude 定时任务「每日股市早报视频」（原约定工作日北京时间 07:36）应在每次运行时
-  拉取 `daily-morning-news` 最新版本并读取 `ROUTINE_PROMPT.md`。本次仓库修复没有访问或修改
-  该外部定时器，不能据此声称其已启用或下一次触发已确认；不要另建重复任务。
+- 既有早报定时任务应在每次生成前拉取最新分支并读取执行手册；启动时间以实际配置为准。不要从旧文档推断启用状态或下一次触发，不创建重复任务。
+
+## 静态画面与本地调度同步
+默认入口 make_video.sh 调用 run_illustrated.py，使用内置静态AI底图；生成前需 report.json 和 script.md。FONT_PATH 与 MODELS_DIR 由执行环境设置。所有模型检查、合成与ASR使用同一独立Python。外部调度提示词应同步新参数并在生成前仅快进更新分支；保存提示词不代表已验证下一次触发。

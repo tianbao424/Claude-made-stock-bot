@@ -24,7 +24,11 @@ if [ ! -f "$MODELS/kokoro-multi-lang-v1_1/model.onnx" ]; then
   fetch "$REL/tts-models/kokoro-multi-lang-v1_1.tar.bz2" "$MODELS/kokoro.tar.bz2"
   tar xjf "$MODELS/kokoro.tar.bz2" -C "$MODELS" && rm "$MODELS/kokoro.tar.bz2"
 fi
-(cd "$MODELS" && sha256sum -c "$HERE/kokoro-v1.1.sha256")
+if command -v sha256sum >/dev/null; then
+  (cd "$MODELS" && sha256sum -c "$HERE/kokoro-v1.1.sha256")
+else
+  (cd "$MODELS" && shasum -a 256 -c "$HERE/kokoro-v1.1.sha256")
+fi
 if [ "${1:-}" = "--with-asr" ] && [ ! -f "$MODELS/sherpa-onnx-sense-voice-zh-en-ja-ko-yue-2024-07-17/model.int8.onnx" ]; then
   fetch "$REL/asr-models/sherpa-onnx-sense-voice-zh-en-ja-ko-yue-2024-07-17.tar.bz2" "$MODELS/asr.tar.bz2"
   tar xjf "$MODELS/asr.tar.bz2" -C "$MODELS" && rm "$MODELS/asr.tar.bz2"

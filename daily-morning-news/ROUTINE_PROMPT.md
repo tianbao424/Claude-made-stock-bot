@@ -1,17 +1,17 @@
 # 每日股市早报 · 定时任务执行手册
 
-由 Claude 定时任务在每个交易日（周一至周五）北京时间 07:36 启动的全新云端会话执行，目标 8:00 左右出片。
+由既有早报定时任务执行。启动时间、时区和节假日规则以实际调度配置为准，不能从本手册推断；不要创建重复任务。
 全程自主完成，不要停下来等人确认。
 
 **2026-10-29 起固定采用用户已确认的双语音色与修正版流程**：仅通过仓库里的
 `pipeline/make_video.sh` 生成，禁止临时脚本覆盖配音参数。具体版本与读音规则见第 5 步。
-本文件是仓库内执行说明，不等于外部 Claude 定时器已被修改：外部任务须在每次运行时拉取
-`daily-morning-news` 最新分支并读取本文件。当前修复未访问或修改外部 Claude 定时器，
-不得声称已确认其启用状态或下一次触发；不要新建重复定时任务。
+本文件是仓库内执行说明，不等于外部定时器已被修改：外部任务须在每次运行时拉取
+`daily-morning-news` 最新分支并读取本文件。仓库内容无法证明调度器已加载新的提示词，
+不得仅据本手册声称已确认下一次触发；不要新建重复定时任务。
 
 ## 0. 原则
 
-- **只用真实数据**：查不到的就删掉该项或写"待公布"，绝不编造或"估计"成事实。关键数字至少两个来源交叉核对，并检查自洽（点数变化 ÷ 前收盘 ≈ 涨跌幅）。
+- **只用真实数据**：已确认尚未发布的数据明确写事件名称与“待公布”；无法获取或核实的数据删掉或说明缺失，绝不编造或"估计"成事实。关键数字至少两个来源交叉核对，并检查自洽（点数变化 ÷ 前收盘 ≈ 涨跌幅）。
 - **获取方式**：运行环境拦截了行情接口（东方财富、新浪、腾讯、FRED、multpl、CNN 等直连都返回 403），WebFetch 也无法解析这些域名，所以数据一律用 **WebSearch**（重要的用 `extended` 模式，同一轮并行发出多个查询）。WebSearch 返回的是摘要，务必核对日期，不要把往年同月的数据当成今年的。
 - 观点要有依据，用"大概率 / 或 / 有望"等措辞，不预测具体点位，不推荐个股，免责声明保留在每页页脚（不再口播）。
 
@@ -25,7 +25,8 @@ git fetch origin daily-morning-news
 git show-ref --verify --quiet refs/remotes/origin/daily-morning-news || {
   echo "缺少权威 daily-morning-news 分支，停止；不要回退旧分支流水线" >&2; exit 1;
 }
-git checkout -B daily-morning-news origin/daily-morning-news
+[ "$(git branch --show-current)" = "daily-morning-news" ] || { echo "请在专用早报分支运行" >&2; exit 1; }
+git merge --ff-only origin/daily-morning-news
 # 不自动合并 develop：避免旧配音设置覆盖用户已经确认的版本。
 cd daily-morning-news && bash pipeline/setup.sh --with-asr   # 含回听用的 ASR 模型
 D=$(TZ=Asia/Shanghai date +%F); mkdir -p reports/$D
@@ -100,6 +101,8 @@ echo "D=$D PREV=$PREV"
 
 ## 5. 生成与检查
 
+生成前先按第6步写好带来源及原始信息截点的 script.md。默认保留已确认的静态AI底图、紧凑页头和大字字幕，使用 pipeline/assets/backgrounds。设置 FONT_PATH 为有效中文字体；在独立虚拟环境运行，MODELS_DIR 指向模型目录。
+
 执行要点和自查脚本见 `../.claude/skills/daily-morning-news/SKILL.md`。
 
 **唯一日常入口和固定参数（2026-10-29 起）**：`pipeline/make_video.sh`，由
@@ -124,10 +127,10 @@ python3 $S/asr_recheck.py reports/$D      # SenseVoice 只读检查 A股 / 美�
 - ASR 必须覆盖当天全部含 `A股` 的句子；保存原始识别结果，不能把 A股 识别失败记为通过。
   `bad > 0` 时保留候选与缓存并诊断，不能自动删缓存盲目重试。ASR 只是辅助证据，
   不等于实际试听；没有人工试听就写 `human_listening_confirmed=false`。
-- 查看 `reports/$D/build/contact_sheet.png`，检查文字溢出、重叠、空白；检查字幕与最终音频
+- 查看 `reports/$D/build/illustrated/contact_sheet.jpg`，检查文字溢出、重叠、空白；检查字幕与最终音频
   同一时间轴、视频完整解码通过、体积严格小于 3,000,000 字节，再发布。
 - **重做已有视频**：入口拒绝覆盖原视频。在独立候选根目录中建立同名日期子目录，
-  例如 `build/candidates/<唯一批次>/$D/`，复制当天 `report.json` 后用同一入口生成，
+  例如 `build/candidates/<唯一批次>/$D/`，复制当天 `report.json` 和 `script.md` 后用同一入口生成，
   对该候选目录执行上面的自查与 ASR。验证通过后才将候选 MP4、字幕、配音和验证记录
   提升到 `reports/$D/`；先保留旧产物或其已提交版本。不要仅为绕过保护而删除原视频。
 - 生成失败或模型缺失须报告具体错误；不能悄悄退回旧引擎、旧缓存或旧音轨。

@@ -1,6 +1,6 @@
 {
   "profile": "illustrated-under3mb",
-  "size_bytes": 1964981,
+  "size_bytes": 2867744,
   "limit_bytes": 3000000,
   "under_limit": true,
   "full_decode_pass": true,
@@ -13,26 +13,26 @@
         "width": 720,
         "height": 1280,
         "r_frame_rate": "12/1",
-        "bit_rate": "84969"
+        "bit_rate": "140271"
       },
       {
         "codec_name": "aac",
         "r_frame_rate": "0/0",
-        "bit_rate": "32607"
+        "bit_rate": "32427"
       }
     ],
     "format": {
-      "duration": "130.517000",
-      "size": "1964981"
+      "duration": "130.667000",
+      "size": "2867744"
     }
   },
   "encoding_attempts": [
     {
-      "video_kbps": 135,
-      "bytes": 1964981
+      "video_kbps": 136,
+      "bytes": 2867744
     }
   ],
-  "a_pronunciation": "Kokoro sid3 speed1; A股 -> ashareletter股 -> stressed English /eɪ/",
+  "a_pronunciation": "Kokoro v1.1; A股 → ashareletter股; stressed English /eɪ/; sid=3; speed=1.0; gaps=0.15/0.35",
   "human_listening_confirmed": false,
   "backgrounds": "AI-generated illustrative stills; reuse bundled assets",
   "intro_seconds": 0,
@@ -229,118 +229,7 @@
     "backfill_note": "retrieved_at is not publication time. This snapshot cannot prove data were available at an earlier 08:00 cutoff; label later supplements explicitly.",
     "collection_started_at": "2026-10-29T08:00:19.372867+08:00"
   },
-  "date": "2026-10-29",
-  "information_cutoff": "2026-10-29T08:04:34.616216+08:00",
-  "market_dates": {
-    "美股": "2026-10-28",
-    "A股": "2026-10-28",
-    "港股": "2026-10-28"
-  },
-  "calendar": {
-    "date": "2026-10-29",
-    "weekday": "Thursday",
-    "weekend": false,
-    "official_holiday": false,
-    "allowed": true,
-    "sources": [
-      "https://www.beijing.gov.cn/cs/gncs/zcwj/202603/t20260327_4568275.html",
-      "https://www.sse.com.cn/disclosure/announcement/general/c/c_20251222_10802507.shtml"
-    ]
-  },
-  "index_checks": [
-    {
-      "name": "道指",
-      "previous_close": 52377.57,
-      "close": 52475.1,
-      "change": 97.53,
-      "percent": 0.19,
-      "arithmetic_pass": true
-    },
-    {
-      "name": "标普500",
-      "previous_close": 7722.6,
-      "close": 7743.98,
-      "change": 21.38,
-      "percent": 0.28,
-      "arithmetic_pass": true
-    },
-    {
-      "name": "纳指",
-      "previous_close": 26477.81,
-      "close": 26549.85,
-      "change": 72.04,
-      "percent": 0.27,
-      "arithmetic_pass": true
-    },
-    {
-      "name": "上证",
-      "previous_close": 3648.3,
-      "close": 3681.47,
-      "change": 33.17,
-      "percent": 0.91,
-      "arithmetic_pass": true
-    },
-    {
-      "name": "深成",
-      "previous_close": 11245.73,
-      "close": 11473.18,
-      "change": 227.45,
-      "percent": 2.02,
-      "arithmetic_pass": true
-    },
-    {
-      "name": "创业板",
-      "previous_close": 2548.15,
-      "close": 2634.76,
-      "change": 86.61,
-      "percent": 3.4,
-      "arithmetic_pass": true
-    },
-    {
-      "name": "科创50",
-      "previous_close": 1252.28,
-      "close": 1282.93,
-      "change": 30.65,
-      "percent": 2.45,
-      "arithmetic_pass": true
-    },
-    {
-      "name": "恒指",
-      "previous_close": 23041.32,
-      "close": 23094.83,
-      "change": 53.51,
-      "percent": 0.23,
-      "arithmetic_pass": true
-    },
-    {
-      "name": "恒科",
-      "previous_close": 3800.43,
-      "close": 3853.72,
-      "change": 53.29,
-      "percent": 1.4,
-      "arithmetic_pass": true
-    },
-    {
-      "name": "国企",
-      "previous_close": 7766.91,
-      "close": 7791.63,
-      "change": 24.72,
-      "percent": 0.32,
-      "arithmetic_pass": true
-    }
-  ],
-  "data_gaps": [
-    "VIX及两项信用指标最新已取得观察日是10月27日，较美股10月28日收盘滞后一日；属于可用但滞后，未用新闻盘中值替代官方收盘。",
-    "四项估值的观察日是10月28日；中证市盈率1为总股本、市盈率2为计算用股本，Multpl为其来源口径估算，不混用或擅自按另一行情源价格反推。",
-    "七项核心全部取得，但CNN恐贪、AAII、完整历史分位等全框架指标未统一核验，不给原框架综合分或仓位建议。",
-    "信用ICE原始值及本地缓存不上传公开GitHub；公开摘要保留状态、日期、来源。",
-    "沪深两市成交采用约1.63万亿元；包含北交所的三市约1.64万亿元不是同一统计范围。涨跌家数只使用多源一致的“超4100家上涨”概数。",
-    "不同新闻转载的成交增量有小幅差异，未播报精确增量；部分网页正文不可访问，保存检索摘要交叉核对来源。",
-    "个别全球行情聚合站美股点位不同，本期采用澎湃快讯／新华社与Portfolio Terminal一致的三指数收盘，另核对道指及涨跌算术。",
-    "机构观点未取得完整原研报，本期不引用二手目标价或精确仓位；展望是基于已核实数据的观察条件。",
-    "宏观中GDP只写计划今日公布，未将未来公布值作为已知事实；美联储决议以10月28日官方声明PDF为准。"
-  ],
-  "asr": {
+  "asr_keywords": {
     "read_only_audio": true,
     "human_listening_confirmed": false,
     "checked": 6,
@@ -357,7 +246,7 @@
         ],
         "asr": "数据10点，每股是每东10月28日，A股和港股市10月28日收盘。",
         "passed": true,
-        "clip_sha256": "f9bb40b22d1900894958e05db2ac9c0c6c5c82b959f6577ee56208be4cc60701"
+        "clip_sha256": "6468bde3fe56097dbf570d63afda77c0763866249456d43d4d0b938765ab9f35"
       },
       {
         "slide": 1,
@@ -366,9 +255,9 @@
         "keywords": [
           "美股"
         ],
-        "asr": "接着看美股，美东10月28日收盘三大指数小幅上涨。",
+        "asr": "接着看美股，美东10月28日收盘，三大指数小幅上涨。",
         "passed": true,
-        "clip_sha256": "a7842402ee597021c47043fcbece47e4484965e0e5e5e51015d50d9e3a0059f0"
+        "clip_sha256": "b2fa7ce5ae3a05b65d28462d75366a1628dd7a8ca995a03872dfbb4a166c93d1"
       },
       {
         "slide": 2,
@@ -377,9 +266,9 @@
         "keywords": [
           "A股"
         ],
-        "asr": "A股方面，10月28日震荡走高，成长板快反弹。",
+        "asr": "A股方面，10月28日震荡走高，成长板块反弹。",
         "passed": true,
-        "clip_sha256": "61576f0ccfb7eb7179fee72819533d95ba9ec561fecd79ac4118fd6d8bae5ee8"
+        "clip_sha256": "b1362c6cce04f8de91e6ad03c4a510c852062ecc089f50fb20816a4054f65898"
       },
       {
         "slide": 3,
@@ -390,7 +279,7 @@
         ],
         "asr": "港股方面，10月28日收盘，恒指上涨0.23%，恒科上涨1.40%。",
         "passed": true,
-        "clip_sha256": "578c6df3bf672341350d2108070c998241b57858dd45b09690f6a15b845cf74f"
+        "clip_sha256": "dcf4bcdc83903abca18d3a7eb29a3d36a61bd5def377767c78dd5a01b0914847"
       },
       {
         "slide": 6,
@@ -401,7 +290,7 @@
         ],
         "asr": "A股观察反弹能否延续，并留易成交和市场广度。",
         "passed": true,
-        "clip_sha256": "5a1581e13fd8c89f17ea0c7ee0936a5dbb91c8a916c0ab5c8754a8893b15fd6a"
+        "clip_sha256": "b8432f07f7914585ce3bb2dbac2a28123e5ef8fb36593824ee0ed4c61265067e"
       },
       {
         "slide": 6,
@@ -413,34 +302,14 @@
         ],
         "asr": "港股看科技轮动，每股看经济数据与盈利兑现。",
         "passed": true,
-        "clip_sha256": "1f1a9e2d18e8b9df19602396697c6755440e6046230c7c749c228d64e75bd923"
+        "clip_sha256": "32fca559d61e00171b149340e95467736c431bb92d5d39853a6046aba697fb4c"
       }
     ]
   },
-  "layout_review": {
-    "actual_decoded_data_frame": "passed",
-    "contact_sheet": "passed",
-    "human_audio_listening": false
-  },
-  "mcp_read_checks": {
-    "authenticated_user": "tianbao424",
-    "repository": "tianbao424/Claude-made-stock-bot",
-    "branch": "daily-morning-news",
-    "passed": true
-  },
-  "sha256_mp4": "0d26c79ddb4b438f0949eaf621de4da4c210cc97b2a0c7713a5fb7f99f04c76b",
-  "audio_repair": {
-    "code_commit": "5f81d88810853b6e945b2310108fb7899f3ebcc7",
-    "sentence_gap": 0.15,
-    "slide_gap": 0.35,
-    "trim_db": -50,
-    "trim_pad": 0.04,
-    "report_change_only": "slides[4].visual.headline",
-    "headline": "联储维持利率 · 关注三季度GDP",
-    "source_sha256": "587d8e2b6825429fd56c53a43b8776bccf77d6debe0fd1d0d21f5ade9f4fbccf",
-    "original_video_sha256": "565f44dda9931bf091e96c58d442726c61986fa902e46f2546bc591203d42ca9",
-    "timeline_pass": true,
-    "human_listening_confirmed": false,
-    "visual_headline_actual_frame_checked": true
-  }
+  "report_sha256": "dff34ae018737e3c54b27890ad96919f65b4e47b198333d9dcad432658867b24",
+  "video_sha256": "ec260d29c498bf7cfb897f3455e825ea90e28c7b2e854ac0c12428d10bfa606d",
+  "regeneration_scope": "Audio and rendering only; published report, source links and original 08:04 Beijing information cutoff unchanged",
+  "subtitle_count": 23,
+  "visual_review": "Contact sheet and decoded market page checked; forced transition keyframes remove observed first-frame artifacts",
+  "sentence_transition_keyframes": true
 }
