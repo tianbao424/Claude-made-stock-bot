@@ -3,6 +3,12 @@
 由 Claude 定时任务在每个交易日（周一至周五）北京时间 07:36 启动的全新云端会话执行，目标 8:00 左右出片。
 全程自主完成，不要停下来等人确认。
 
+**2026-10-29 起固定采用用户已确认的双语音色与修正版流程**：仅通过仓库里的
+`pipeline/make_video.sh` 生成，禁止临时脚本覆盖配音参数。具体版本与读音规则见第 5 步。
+本文件是仓库内执行说明，不等于外部 Claude 定时器已被修改：外部任务须在每次运行时拉取
+`daily-morning-news` 最新分支并读取本文件。当前修复未访问或修改外部 Claude 定时器，
+不得声称已确认其启用状态或下一次触发；不要新建重复定时任务。
+
 ## 0. 原则
 
 - **只用真实数据**：查不到的就删掉该项或写"待公布"，绝不编造或"估计"成事实。关键数字至少两个来源交叉核对，并检查自洽（点数变化 ÷ 前收盘 ≈ 涨跌幅）。
@@ -13,18 +19,14 @@
 
 ```bash
 cd "$(git rev-parse --show-toplevel)"
-git fetch origin
-if git ls-remote --exit-code --heads origin daily-morning-news >/dev/null; then
-  git checkout -B daily-morning-news origin/daily-morning-news
-  # develop 合入了更新的流水线时，先同步过来
-  if git cat-file -e origin/develop:daily-morning-news/pipeline/render.py 2>/dev/null; then
-    git merge --no-edit origin/develop || { git merge --abort; echo "合并 develop 冲突，沿用当前分支的流水线"; }
-  fi
-else
-  BASE=origin/develop
-  git cat-file -e origin/develop:daily-morning-news/pipeline/render.py 2>/dev/null || BASE=origin/claude/kind-feynman-6hv106
-  git checkout --no-track -B daily-morning-news "$BASE"   # 不跟踪基准分支，避免误推到别处
-fi
+# 此步骤用于专用、干净的每日任务 checkout；不要覆盖其他任务的未提交修改。
+[ -z "$(git status --porcelain)" ] || { echo "工作区有未提交修改，先安全保留，禁止重置" >&2; exit 1; }
+git fetch origin daily-morning-news
+git show-ref --verify --quiet refs/remotes/origin/daily-morning-news || {
+  echo "缺少权威 daily-morning-news 分支，停止；不要回退旧分支流水线" >&2; exit 1;
+}
+git checkout -B daily-morning-news origin/daily-morning-news
+# 不自动合并 develop：避免旧配音设置覆盖用户已经确认的版本。
 cd daily-morning-news && bash pipeline/setup.sh --with-asr   # 含回听用的 ASR 模型
 D=$(TZ=Asia/Shanghai date +%F); mkdir -p reports/$D
 PREV=$(ls -d reports/20*/ | grep -v "$D" | sort | tail -1)   # 上一期，作为模板
@@ -89,7 +91,7 @@ echo "D=$D PREV=$PREV"
 **sub / say 规则**：
 - `sub` 是字幕（阿拉伯数字），`say` 是朗读文本，两者意思一致。
 - `say` 的数字全部写成汉字：百分之零点四三、三千七百九十七点二四点、一点五四万亿元、二零二六年（年份逐字读）、标普五百、科创五十、沪深三百。
-- 英文只保留 `AI`、`A股`（流水线会替换成正确读音）；其他缩写写中文：PMI→采购经理指数，CPI→消费者物价指数，VIX→恐慌指数，CAPE→席勒市盈率，ERP→股权风险溢价。
+- 英文只保留 `AI`、`A股`（Kokoro 双语读音；A 的内部定向别名由流水线处理，原稿不改）；其他缩写写中文：PMI→采购经理指数，CPI→消费者物价指数，VIX→恐慌指数，CAPE→席勒市盈率，ERP→股权风险溢价。
 - 避免单独的多音字，例如"为""处"（"PMI为50.1%"写成"录得"，"处于"写成"位于"或"在"），也避免"1167只股票"里的"只"（写成"家"）。
 - 每句字幕不超过约 45 字（最多 3 行），长句拆开。
 - `hi` 标出每句对应的卡片或要点，让画面跟着播报高亮。
@@ -100,16 +102,35 @@ echo "D=$D PREV=$PREV"
 
 执行要点和自查脚本见 `../.claude/skills/daily-morning-news/SKILL.md`。
 
+**唯一日常入口和固定参数（2026-10-29 起）**：`pipeline/make_video.sh`，由
+`setup.sh` 安装固定 `sherpa-onnx==2.0.1` 和 Kokoro v1.1 双语模型；中文女声
+`sid=3`、`speed=1.0`。`A股` 内部映射为 `ashareletter股`，专用词典条目
+`ashareletter ˈ A` 对应英语 /eɪ/，不影响字幕和事实原稿。句间/页间停顿
+0.15/0.35 秒；只裁首尾低于峰值 -50 dB 的静音并保留 40 ms 边缘缓冲，
+不删句内停顿。模型、音色、语速、读音与裁剪配置均进入缓存键。
+**禁止**沿用 Matcha、改为「诶股」或「诶，股」、给含 A股 的句子单独降速到 0.85，
+以及用 ad-hoc 合成脚本替代仓库入口。
+
 ```bash
 S=../.claude/skills/daily-morning-news/scripts
 python3 $S/check_report.py reports/$D     # 字幕 ≤45 字、页脚宽度、数据时点、结尾语，有 ✗ 先修
-bash pipeline/make_video.sh reports/$D    # duration 需 ≤190 秒，超了删句
-python3 $S/asr_recheck.py reports/$D      # 回听「美股/港股」，bad>0 时重跑 make_video.sh 再回听，最多 3 轮
+bash pipeline/make_video.sh reports/$D   # 固定双语流程；duration ≤190 秒、文件 <3,000,000 字节
+python3 $S/asr_recheck.py reports/$D      # SenseVoice 只读检查 A股 / 美股 / 港股，不删除缓存
 ```
 
-- 修掉 lint 输出里的 ✗ 项；逐条看 · 项，读音不对的加到 `report.json` 的 `lexicon_extra`（如 `"行长 hang2 zhang3"`）或换说法。
-- 用 Read 工具查看 `reports/$D/build/contact_sheet.png`，检查文字溢出、重叠、空白。有问题改 `report.json` 后重跑（只会重新合成改动的句子）。
-- 可选回听：`bash pipeline/setup.sh --with-asr && python3 pipeline/qa_asr.py reports/$D ~/.cache/daily-morning-news/models`（小模型对专有名词常误判，仅作参考）。
+- 修掉文本检查里的 ✗ 项。Kokoro 不使用旧 Matcha 的拼音 `lexicon_extra` 作为发音覆盖；
+  重要多音字、专有名词、数字需复核，必要时修正合适的中文说法或明确的 Kokoro 音素词典，
+  不能以旧拼音词典已经填写为由宣称读音正确。
+- ASR 必须覆盖当天全部含 `A股` 的句子；保存原始识别结果，不能把 A股 识别失败记为通过。
+  `bad > 0` 时保留候选与缓存并诊断，不能自动删缓存盲目重试。ASR 只是辅助证据，
+  不等于实际试听；没有人工试听就写 `human_listening_confirmed=false`。
+- 查看 `reports/$D/build/contact_sheet.png`，检查文字溢出、重叠、空白；检查字幕与最终音频
+  同一时间轴、视频完整解码通过、体积严格小于 3,000,000 字节，再发布。
+- **重做已有视频**：入口拒绝覆盖原视频。在独立候选根目录中建立同名日期子目录，
+  例如 `build/candidates/<唯一批次>/$D/`，复制当天 `report.json` 后用同一入口生成，
+  对该候选目录执行上面的自查与 ASR。验证通过后才将候选 MP4、字幕、配音和验证记录
+  提升到 `reports/$D/`；先保留旧产物或其已提交版本。不要仅为绕过保护而删除原视频。
+- 生成失败或模型缺失须报告具体错误；不能悄悄退回旧引擎、旧缓存或旧音轨。
 
 ## 6. 写 reports/$D/script.md
 

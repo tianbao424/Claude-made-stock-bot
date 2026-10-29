@@ -16,22 +16,24 @@ description: >
 
 ## 流程总览
 
-1. **准备分支**：仓库根目录 `git fetch origin`；远端有 `daily-morning-news` 就
-   `git checkout -B daily-morning-news origin/daily-morning-news`，否则按手册第 1 步创建（`--no-track`）。
-   然后 `cd daily-morning-news && bash pipeline/setup.sh --with-asr`（含回听用的 ASR 模型）。
+1. **准备分支**：按手册第 1 步，在专用干净 checkout 拉取并使用 `origin/daily-morning-news`
+   最新版本；工作区有未提交修改先保留，禁止覆盖。不自动合并 develop，也不回退旧分支。
+   然后 `cd daily-morning-news && bash pipeline/setup.sh --with-asr`（固定双语 TTS 和 SenseVoice ASR）。
 2. **采集数据**（手册第 2–3 步）：同一轮并行发多个 `extended` WebSearch。
 3. **写 report.json**：以上一期 `reports/<上期>/report.json` 为模板，用一个 Python 脚本整体改写
    （放在 scratchpad，逐页替换 cards / bullets / sentences），不要手改 JSON。
 4. **生成与自查**：
    ```bash
    S=../.claude/skills/daily-morning-news/scripts
-   python3 pipeline/lint_say.py reports/$D/report.json ~/.cache/daily-morning-news/models  # 读音
+   python3 pipeline/lint_say.py reports/$D/report.json ~/.cache/daily-morning-news/models --engine=kokoro --strict
    python3 $S/check_report.py reports/$D        # 字幕长度、页脚宽度、数据时点、结尾语
    bash pipeline/make_video.sh reports/$D       # 看最后的 duration
-   python3 $S/asr_recheck.py reports/$D         # 回听「美股/港股」，读错的删缓存
-   # 输出 bad>0 时重跑 make_video.sh 再回听，最多 3 轮
+   python3 $S/asr_recheck.py reports/$D         # 只读检查全部「A股/美股/港股」，不删缓存
+   # bad>0：保留证据并诊断，不能跳过 A股 或自动删缓存盲目重试
    ```
-   然后用 Read 看 `reports/$D/build/contact_sheet.png`（溢出、重叠、截断）。
+   然后用 Read 看 `reports/$D/build/contact_sheet.png`（溢出、重叠、截断）。最终文件必须
+   <3,000,000 字节、完整解码通过、字幕与新音轨同步。已有视频不能覆盖；需要重做时按手册
+   第 5 步在独立候选根下建立同名日期目录，验证通过后才提升产物并保留原版。
 5. **script.md**（手册第 6 步）→ 再跑一次 `check_report.py` → 提交推送（手册第 7 步，只推 `daily-morning-news`）。
 6. **汇报**：一段话 + 三大市场指数表格 + 存疑数据清单（手册第 8 步）。
 
@@ -51,25 +53,34 @@ description: >
 
 ## 文稿与画面要点
 
-- **时长**：目标约 3 分钟，`make_video.sh` 输出的 duration **≤190 秒**（含 4.5 秒片头）。超了就删句、
+- **时长**：目标约 3 分钟，`make_video.sh` 输出的 duration **≤190 秒**（默认无片头）。超了就删句、
   合并句，优先删宏观日历和情绪页里重复画面的内容。约 22–25 句。
 - **字幕 ≤45 字**：`check_report.py` 会报；长句在分号处拆成两句，各自配 `hi`。
 - **页脚来源**：`default_src` / `src` 过长会被截断（约 35 个汉字宽，英文字母按半个算）。
 - **结尾固定**：展望页最后一句「祝您账户常红，天天开心！」，不口播免责声明（页脚已显示）。
 - **数据时点五处**：开场 `data_note`、开场数据时点句（`hi: ["note"]`）、三个市场页的 `asof` 和第一句、script.md 开头。
 
-## 读音要点
+## 读音要点（2026-10-29 起采用用户确认版本）
 
-- 固定读音在 `pipeline/lexicon_extra.txt`：A股的 A 读 ei1、AI 读 ai1 ai4、美股/港股按三声变调读
-  mei2 gu3 / gang2 gu3。当天特有词放 `report.json` 的 `lexicon_extra`（如 `大行 da4 hang2`、`富国银行 … yin2 hang2`、`长鑫 chang2 xin1`）。
-- `lint_say.py` 的「·」提示要逐条看：含「行」的词（银行名、大行、行业）、「长」「重」「为」「处」「只」等多音字最常出错。
-- `say` 里不能有英文字母（AI、A股除外）：PCB→印制电路板、CPI→消费者物价指数、PPI→生产者物价指数、VIX→恐慌指数。
-- TTS 每次合成有随机性，开头的「美股方面」最容易被读糊，`asr_recheck.py` 会删掉读错的缓存让它重合成。
-  ASR 把 mei2 gu3 听成「煤股」属于正确读音；A股的 ei1 ASR 基本认不出来，不必追。
+- 日常生成只调用 `pipeline/make_video.sh`。默认 `sherpa-onnx==2.0.1` / Kokoro v1.1，
+  中文女声 `sid=3`、`speed=1.0`；禁止临时脚本或旧引擎覆盖配置。
+- `A股` 的 A 使用专用内部别名 `ashareletter` 和音素 `ˈ A`，读英语 /eɪ/；
+  原始 `say` / `sub` 仍写 `A股`。不得改为「诶股」「诶，股」或单独降速到 0.85。
+- 句间/页间停顿 0.15/0.35 秒；首尾静音按 -50 dB 裁剪并保留 40 ms 缓冲，不裁句内停顿。
+  缓存包含模型、音色、语速、读音与裁剪配置，不能复用旧 MD5 配音缓存。
+- 旧 `pipeline/lexicon_extra.txt` 和 `report.json.lexicon_extra` 是 Matcha 拼音格式，
+  不能当作 Kokoro 发音覆盖。银行名、行业、长/重/为等多音字仍须实际音频复核。
+- `say` 里不能有未确认的英文字母（AI、A股除外）：PCB→印制电路板、CPI→消费者物价指数、
+  PPI→生产者物价指数、VIX→恐慌指数。
+- SenseVoice `asr_recheck.py` 只读核查全部 A股/美股/港股句子，记录原始识别结果。
+  A股 未识别正确不能忽略或计为通过；不删除缓存，不盲目自动重合成。
+  ASR 不等于人耳试听；没有实际人工试听必须保持 `human_listening_confirmed=false`。
 
 ## 资源
 
 - `pipeline/assets/intro.mp4`（4.5 秒片头，由 `pipeline/make_intro.py` 生成）、`pipeline/assets/bgm.mp3`
-  （原创香颂手风琴华尔兹，由 `pipeline/make_bgm.py` 生成，音量 `BGM_VOL`，默认 0.4）。`make_video.sh` 自动拼接和混音。
+  （原创香颂手风琴华尔兹，由 `pipeline/make_bgm.py` 生成，音量 `BGM_VOL`，默认 0.12）。`make_video.sh` 默认关闭片头、启用低音量混音；`INTRO_VIDEO=<路径>` 可显式启用片头。
 - 情绪判定阈值见 `.claude/skills/market-sentiment/SKILL.md`「指标全集」。
-- 定时任务「每日股市早报视频」（工作日北京时间 07:36）唤醒固定会话执行本流程；暂停/恢复用 `update_trigger` 的 `enabled`。
+- 外部 Claude 定时任务「每日股市早报视频」（原约定工作日北京时间 07:36）应在每次运行时
+  拉取 `daily-morning-news` 最新版本并读取 `ROUTINE_PROMPT.md`。本次仓库修复没有访问或修改
+  该外部定时器，不能据此声称其已启用或下一次触发已确认；不要另建重复任务。

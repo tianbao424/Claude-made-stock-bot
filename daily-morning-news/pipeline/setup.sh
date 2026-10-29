@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# 安装依赖并下载离线语音模型（约 130MB，放在仓库外的缓存目录，不提交）。
+# 安装依赖并下载离线语音模型（约 350MB，放在仓库外的缓存目录，不提交）。
 # 用法: bash setup.sh [--with-asr]
 set -euo pipefail
 HERE="$(cd "$(dirname "$0")" && pwd)"
@@ -19,13 +19,14 @@ fetch() {  # fetch <url> <dest>，失败按 2/4/8/16 秒退避重试
   done
   mv "$dest.part" "$dest"
 }
-if [ ! -f "$MODELS/matcha-icefall-zh-baker/model-steps-3.onnx" ]; then
-  fetch "$REL/tts-models/matcha-icefall-zh-baker.tar.bz2" "$MODELS/baker.tar.bz2"
-  tar xjf "$MODELS/baker.tar.bz2" -C "$MODELS" && rm "$MODELS/baker.tar.bz2"
+# Bilingual English /eɪ/ + Chinese; no homophone substitution for A股.
+if [ ! -f "$MODELS/kokoro-multi-lang-v1_1/model.onnx" ]; then
+  fetch "$REL/tts-models/kokoro-multi-lang-v1_1.tar.bz2" "$MODELS/kokoro.tar.bz2"
+  tar xjf "$MODELS/kokoro.tar.bz2" -C "$MODELS" && rm "$MODELS/kokoro.tar.bz2"
 fi
-[ -f "$MODELS/vocos-22khz-univ.onnx" ] || fetch "$REL/vocoder-models/vocos-22khz-univ.onnx" "$MODELS/vocos-22khz-univ.onnx"
-if [ "${1:-}" = "--with-asr" ] && [ ! -d "$MODELS/sherpa-onnx-paraformer-zh-small-2024-03-09" ]; then
-  fetch "$REL/asr-models/sherpa-onnx-paraformer-zh-small-2024-03-09.tar.bz2" "$MODELS/asr.tar.bz2"
+(cd "$MODELS" && sha256sum -c "$HERE/kokoro-v1.1.sha256")
+if [ "${1:-}" = "--with-asr" ] && [ ! -f "$MODELS/sherpa-onnx-sense-voice-zh-en-ja-ko-yue-2024-07-17/model.int8.onnx" ]; then
+  fetch "$REL/asr-models/sherpa-onnx-sense-voice-zh-en-ja-ko-yue-2024-07-17.tar.bz2" "$MODELS/asr.tar.bz2"
   tar xjf "$MODELS/asr.tar.bz2" -C "$MODELS" && rm "$MODELS/asr.tar.bz2"
 fi
 echo "模型目录: $MODELS"

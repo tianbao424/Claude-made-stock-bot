@@ -1,29 +1,61 @@
 #!/usr/bin/env python3
-"""回听关键词：用离线 ASR 识别含「美股」「港股」的句子，没识别出来的删掉缓存音频，
-由下一次 make_video.sh 重新合成（TTS 每次合成有随机性）。
-「美股」按变调读 mei2 gu3，识别成「煤股」也算正确。
-用法: python3 asr_recheck.py <report_dir> [models_dir]
-输出最后一行 "bad N"；N>0 时重跑 make_video.sh 再执行本脚本，最多 3 轮。"""
-import json, os, sys
-import numpy as np, soundfile as sf, sherpa_onnx
+"""Read-only bilingual keyword regression check; never delete audio/cache.
 
-d = sys.argv[1]
-models = sys.argv[2] if len(sys.argv) > 2 else os.path.expanduser("~/.cache/daily-morning-news/models")
-m = os.path.join(models, "sherpa-onnx-paraformer-zh-small-2024-03-09")
-if not os.path.isdir(m):
-    sys.exit("缺 ASR 模型，先运行: bash pipeline/setup.sh --with-asr")
-asr = sherpa_onnx.OfflineRecognizer.from_paraformer(paraformer=m + "/model.int8.onnx", tokens=m + "/tokens.txt")
-OK = {"美股": ("美股", "煤股"), "港股": ("港股",)}
-bad = 0
-for it in json.load(open(os.path.join(d, "build", "timeline.json")))["items"]:
-    keys = [k for k in OK if k in it["sub"]]
-    if not keys:
-        continue
-    s, sr = sf.read(it["clip"], dtype="float32")
-    s16 = np.interp(np.arange(0, len(s), sr / 16000), np.arange(len(s)), s).astype(np.float32)
-    st = asr.create_stream(); st.accept_waveform(16000, s16); asr.decode_stream(st)
-    text = st.result.text
-    if not all(any(v in text for v in OK[k]) for k in keys):
-        os.remove(it["clip"]); bad += 1
-        print("重合成:", it["sub"], "→ 识别为", text)
-print("bad", bad)
+Usage: asr_recheck.py <report_dir> [models_dir]
+ASR is diagnostic evidence, not human listening or full-content validation.
+"""
+import hashlib
+import json
+import os
+from pathlib import Path
+import subprocess
+import sys
+import tempfile
+
+import soundfile as sf
+import sherpa_onnx
+
+
+def main():
+    report = Path(sys.argv[1]).resolve()
+    models = Path(sys.argv[2] if len(sys.argv) > 2 else os.path.expanduser("~/.cache/daily-morning-news/models"))
+    model = models / "sherpa-onnx-sense-voice-zh-en-ja-ko-yue-2024-07-17"
+    if not (model / "model.int8.onnx").is_file():
+        sys.exit("缺少 SenseVoice ASR：请运行 bash pipeline/setup.sh --with-asr")
+    asr = sherpa_onnx.OfflineRecognizer.from_sense_voice(
+        model=str(model / "model.int8.onnx"), tokens=str(model / "tokens.txt"),
+        num_threads=4, language="zh", use_itn=True)
+    # Mandarin homophones do not indicate wrong sound. A股 must retain the
+    # English letter, rather than accepting arbitrary Chinese approximations.
+    accepted = {"A股": ("A股", "a股"), "美股": ("美股", "煤股", "每股"), "港股": ("港股",)}
+    timeline = json.loads((report / "build/timeline.json").read_text())
+    rows = []
+    for item in timeline["items"]:
+        keys = [key for key in accepted if key in item["sub"]]
+        if not keys:
+            continue
+        clip = Path(item["clip"])
+        with tempfile.TemporaryDirectory() as tmp:
+            wav = Path(tmp) / "resampled.wav"
+            subprocess.run(["ffmpeg", "-v", "error", "-i", str(clip), "-ar", "16000", "-ac", "1", str(wav)], check=True)
+            samples, sr = sf.read(wav, dtype="float32")
+        stream = asr.create_stream()
+        stream.accept_waveform(sr, samples)
+        asr.decode_stream(stream)
+        text = stream.result.text
+        passed = all(any(v in text.replace(" ", "") for v in accepted[key]) for key in keys)
+        rows.append({"slide": item["slide"], "idx": item["idx"], "sub": item["sub"],
+                     "keywords": keys, "asr": text, "passed": passed,
+                     "clip_sha256": hashlib.sha256(clip.read_bytes()).hexdigest()})
+        print("通过:" if passed else "需复核:", item["sub"], "→", text)
+    bad = sum(not row["passed"] for row in rows)
+    result = {"read_only_audio": True, "human_listening_confirmed": False,
+              "checked": len(rows), "bad": bad, "items": rows}
+    (report / "build/asr-keywords.json").write_text(json.dumps(result, ensure_ascii=False, indent=2) + "\n")
+    print("checked", len(rows))
+    print("bad", bad)
+    return 1 if bad else 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())
