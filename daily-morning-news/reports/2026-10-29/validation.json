@@ -1,6 +1,6 @@
 {
   "profile": "illustrated-under3mb",
-  "size_bytes": 2831950,
+  "size_bytes": 1964981,
   "limit_bytes": 3000000,
   "under_limit": true,
   "full_decode_pass": true,
@@ -13,26 +13,26 @@
         "width": 720,
         "height": 1280,
         "r_frame_rate": "12/1",
-        "bit_rate": "132369"
+        "bit_rate": "84969"
       },
       {
         "codec_name": "aac",
         "r_frame_rate": "0/0",
-        "bit_rate": "32478"
+        "bit_rate": "32607"
       }
     ],
     "format": {
-      "duration": "135.083333",
-      "size": "2831950"
+      "duration": "130.517000",
+      "size": "1964981"
     }
   },
   "encoding_attempts": [
     {
-      "video_kbps": 130,
-      "bytes": 2831950
+      "video_kbps": 135,
+      "bytes": 1964981
     }
   ],
-  "a_pronunciation": "A股 → 诶，股; model-native character pronunciation; speed 0.85 for affected sentences",
+  "a_pronunciation": "Kokoro sid3 speed1; A股 -> ashareletter股 -> stressed English /eɪ/",
   "human_listening_confirmed": false,
   "backgrounds": "AI-generated illustrative stills; reuse bundled assets",
   "intro_seconds": 0,
@@ -341,11 +341,81 @@
     "宏观中GDP只写计划今日公布，未将未来公布值作为已知事实；美联储决议以10月28日官方声明PDF为准。"
   ],
   "asr": {
-    "checked": 4,
+    "read_only_audio": true,
+    "human_listening_confirmed": false,
+    "checked": 6,
     "bad": 0,
-    "read_only_final_check": true,
-    "date_clarity_repair_rounds": 1,
-    "raw_log": "识别: 数据时点：美股为美东10月28日，A股和港股为10月28日收盘。 → 数据时点美股是美东十月二十八日 i 股和港股是十月二十八日收盘\n识别: 美股方面，美东10月28日收盘，三大指数小幅上涨。 → 接着看美股美东十月二十八日收盘三大指数小幅上涨\n识别: 港股方面，10月28日恒指涨0.23%，恒科涨1.40%。 → 港股方面十月二十八日收盘横指上涨百分之零点二三恒科上涨百分之一点四零\n识别: 港股看科技轮动，美股看经济数据与盈利兑现。 → 港股看科技轮动每股看经济数据与盈利兑现\nchecked 4\nbad 0\n"
+    "items": [
+      {
+        "slide": 0,
+        "idx": 1,
+        "sub": "数据时点：美股为美东10月28日，A股和港股为10月28日收盘。",
+        "keywords": [
+          "A股",
+          "美股",
+          "港股"
+        ],
+        "asr": "数据10点，每股是每东10月28日，A股和港股市10月28日收盘。",
+        "passed": true,
+        "clip_sha256": "f9bb40b22d1900894958e05db2ac9c0c6c5c82b959f6577ee56208be4cc60701"
+      },
+      {
+        "slide": 1,
+        "idx": 0,
+        "sub": "美股方面，美东10月28日收盘，三大指数小幅上涨。",
+        "keywords": [
+          "美股"
+        ],
+        "asr": "接着看美股，美东10月28日收盘三大指数小幅上涨。",
+        "passed": true,
+        "clip_sha256": "a7842402ee597021c47043fcbece47e4484965e0e5e5e51015d50d9e3a0059f0"
+      },
+      {
+        "slide": 2,
+        "idx": 0,
+        "sub": "A股方面，10月28日震荡走高，成长板块反弹。",
+        "keywords": [
+          "A股"
+        ],
+        "asr": "A股方面，10月28日震荡走高，成长板快反弹。",
+        "passed": true,
+        "clip_sha256": "61576f0ccfb7eb7179fee72819533d95ba9ec561fecd79ac4118fd6d8bae5ee8"
+      },
+      {
+        "slide": 3,
+        "idx": 0,
+        "sub": "港股方面，10月28日恒指涨0.23%，恒科涨1.40%。",
+        "keywords": [
+          "港股"
+        ],
+        "asr": "港股方面，10月28日收盘，恒指上涨0.23%，恒科上涨1.40%。",
+        "passed": true,
+        "clip_sha256": "578c6df3bf672341350d2108070c998241b57858dd45b09690f6a15b845cf74f"
+      },
+      {
+        "slide": 6,
+        "idx": 1,
+        "sub": "A股观察反弹能否延续，并留意成交和市场广度。",
+        "keywords": [
+          "A股"
+        ],
+        "asr": "A股观察反弹能否延续，并留易成交和市场广度。",
+        "passed": true,
+        "clip_sha256": "5a1581e13fd8c89f17ea0c7ee0936a5dbb91c8a916c0ab5c8754a8893b15fd6a"
+      },
+      {
+        "slide": 6,
+        "idx": 2,
+        "sub": "港股看科技轮动，美股看经济数据与盈利兑现。",
+        "keywords": [
+          "美股",
+          "港股"
+        ],
+        "asr": "港股看科技轮动，每股看经济数据与盈利兑现。",
+        "passed": true,
+        "clip_sha256": "1f1a9e2d18e8b9df19602396697c6755440e6046230c7c749c228d64e75bd923"
+      }
+    ]
   },
   "layout_review": {
     "actual_decoded_data_frame": "passed",
@@ -358,5 +428,19 @@
     "branch": "daily-morning-news",
     "passed": true
   },
-  "sha256_mp4": "565f44dda9931bf091e96c58d442726c61986fa902e46f2546bc591203d42ca9"
+  "sha256_mp4": "0d26c79ddb4b438f0949eaf621de4da4c210cc97b2a0c7713a5fb7f99f04c76b",
+  "audio_repair": {
+    "code_commit": "5f81d88810853b6e945b2310108fb7899f3ebcc7",
+    "sentence_gap": 0.15,
+    "slide_gap": 0.35,
+    "trim_db": -50,
+    "trim_pad": 0.04,
+    "report_change_only": "slides[4].visual.headline",
+    "headline": "联储维持利率 · 关注三季度GDP",
+    "source_sha256": "587d8e2b6825429fd56c53a43b8776bccf77d6debe0fd1d0d21f5ade9f4fbccf",
+    "original_video_sha256": "565f44dda9931bf091e96c58d442726c61986fa902e46f2546bc591203d42ca9",
+    "timeline_pass": true,
+    "human_listening_confirmed": false,
+    "visual_headline_actual_frame_checked": true
+  }
 }
