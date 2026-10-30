@@ -1,31 +1,34 @@
 # 每日股市早报 · 定时任务执行手册
 
-由 Claude 定时任务在每个交易日（周一至周五）北京时间 07:36 启动的全新云端会话执行，目标 8:00 左右出片。
+由既有早报定时任务执行。启动时间、时区和节假日规则以实际调度配置为准，不能从本手册推断；不要创建重复任务。
 全程自主完成，不要停下来等人确认。
+
+**2026-10-29 起固定采用用户已确认的双语音色与修正版流程**：仅通过仓库里的
+`pipeline/make_video.sh` 生成，禁止临时脚本覆盖配音参数。具体版本与读音规则见第 5 步。
+本文件是仓库内执行说明，不等于外部定时器已被修改：外部任务须在每次运行时拉取
+`daily-morning-news` 最新分支并读取本文件。仓库内容无法证明调度器已加载新的提示词，
+不得仅据本手册声称已确认下一次触发；不要新建重复定时任务。
 
 ## 0. 原则
 
-- **只用真实数据**：查不到的就删掉该项或写"待公布"，绝不编造或"估计"成事实。关键数字至少两个来源交叉核对，并检查自洽（点数变化 ÷ 前收盘 ≈ 涨跌幅）。
+- **只用真实数据**：已确认尚未发布的数据明确写事件名称与“待公布”；无法获取或核实的数据删掉或说明缺失，绝不编造或"估计"成事实。关键数字至少两个来源交叉核对，并检查自洽（点数变化 ÷ 前收盘 ≈ 涨跌幅）。
 - **获取方式**：运行环境拦截了行情接口（东方财富、新浪、腾讯、FRED、multpl、CNN 等直连都返回 403），WebFetch 也无法解析这些域名，所以数据一律用 **WebSearch**（重要的用 `extended` 模式，同一轮并行发出多个查询）。WebSearch 返回的是摘要，务必核对日期，不要把往年同月的数据当成今年的。
-- 观点要有依据，用"大概率 / 或 / 有望"等措辞，不预测具体点位，不推荐个股，结尾保留免责声明。
+- 观点要有依据，用"大概率 / 或 / 有望"等措辞，不预测具体点位，不推荐个股，免责声明保留在每页页脚（不再口播）。
 
 ## 1. 准备分支和环境
 
 ```bash
 cd "$(git rev-parse --show-toplevel)"
-git fetch origin
-if git ls-remote --exit-code --heads origin daily-morning-news >/dev/null; then
-  git checkout -B daily-morning-news origin/daily-morning-news
-  # develop 合入了更新的流水线时，先同步过来
-  if git cat-file -e origin/develop:daily-morning-news/pipeline/render.py 2>/dev/null; then
-    git merge --no-edit origin/develop || { git merge --abort; echo "合并 develop 冲突，沿用当前分支的流水线"; }
-  fi
-else
-  BASE=origin/develop
-  git cat-file -e origin/develop:daily-morning-news/pipeline/render.py 2>/dev/null || BASE=origin/claude/kind-feynman-6hv106
-  git checkout --no-track -B daily-morning-news "$BASE"   # 不跟踪基准分支，避免误推到别处
-fi
-cd daily-morning-news && bash pipeline/setup.sh
+# 此步骤用于专用、干净的每日任务 checkout；不要覆盖其他任务的未提交修改。
+[ -z "$(git status --porcelain)" ] || { echo "工作区有未提交修改，先安全保留，禁止重置" >&2; exit 1; }
+git fetch origin daily-morning-news
+git show-ref --verify --quiet refs/remotes/origin/daily-morning-news || {
+  echo "缺少权威 daily-morning-news 分支，停止；不要回退旧分支流水线" >&2; exit 1;
+}
+[ "$(git branch --show-current)" = "daily-morning-news" ] || { echo "请在专用早报分支运行" >&2; exit 1; }
+git merge --ff-only origin/daily-morning-news
+# 不自动合并 develop：避免旧配音设置覆盖用户已经确认的版本。
+cd daily-morning-news && bash pipeline/setup.sh --with-asr   # 含回听用的 ASR 模型
 D=$(TZ=Asia/Shanghai date +%F); mkdir -p reports/$D
 PREV=$(ls -d reports/20*/ | grep -v "$D" | sort | tail -1)   # 上一期，作为模板
 echo "D=$D PREV=$PREV"
@@ -47,7 +50,7 @@ echo "D=$D PREV=$PREV"
 | 位置 | 美股 | A股 / 港股 |
 |---|---|---|
 | 顶层 `data_note`（开场页说明框） | `["美股", "北京时间今晨收盘（美东10月12日）"]` | `["A股 · 港股", "上一交易日（10月12日）收盘"]` |
-| 开场第 3 句（`hi: ["note"]`） | 「说明一下数据时点：美股是北京时间今天凌晨的收盘数据，A股和港股是上一交易日、十月十二日的收盘数据。」（字幕用阿拉伯数字） | 同左 |
+| 开场数据时点句（`hi: ["note"]`） | 「说明一下数据时点：美股是北京时间今天凌晨的收盘数据，A股和港股是上一交易日、十月十二日的收盘数据。」（字幕用阿拉伯数字） | 同左 |
 | 市场页 `asof`（右上角金色标签） | `北京时间今晨收盘 · 美东10月12日` | `上一交易日 · 10月12日收盘` |
 | 市场页第一句 | 「美股方面，北京时间今天凌晨收盘，三大指数……」 | 「A股方面，上一交易日（十月十二日）三大指数……」/「港股方面，上一交易日……」 |
 | `script.md` 开头「数据时点」 | 同 `data_note` | 同 `data_note` |
@@ -76,17 +79,20 @@ echo "D=$D PREV=$PREV"
 
 复制 `$PREV/report.json` 作为模板，整体改写（格式见 README「report.json 格式」）。页面顺序：开场 → 美股 → A股 → 港股 → 宏观 → 情绪 → 展望。
 
-**文稿结构**（总时长 4–6 分钟，约 50 句）：
-- 开场 4 句：问候；"今天是二零二六年十月十三日，星期二。"；数据时点说明（见第 2 步表格）；"一起来看美股、A股和港股的最新表现。"（`hi: ["chips"]`）
-- 美股 / A股 / 港股：概况 → 各指数点位涨跌 → 驱动因素/成交/板块/个股
-- 宏观：已公布数据 → 海外数据 → 本周/今日日历与预期
-- 情绪：框架说明 → 美股估值与情绪 → A股 → 计数与结论
-- 展望：「最后是上一交易日复盘和今日展望。」→ 上一交易日盘面特点（一句话概括，如"权重稳、成长弱"）→ A股 / 港股 / 美股短期预期及依据 → 关键事件的情景分析 → 整体结论 →「以上内容仅供参考，不构成投资建议。」→「我们下期再见。」
+**文稿结构**（精简版：总时长约 3 分钟，不超过 3 分 10 秒，约 24 句；每句只讲一件事，画面上的卡片和要点不必逐条念）：
+- 开场 3 句：「大家好，今天是二零二六年十月十三日，星期二。」；数据时点（`hi: ["note"]`，可精简为「数据时点：美股是北京时间今晨收盘，A股和港股是上一交易日、十月十二日收盘。」）；「一起来看三大市场的表现。」（`hi: ["chips"]`）
+- 美股 4 句：第一句按第 2 步格式交代时点和概况 → 三大指数涨跌幅合成一句（不念点位，点位看卡片）→ 驱动因素/板块/个股一句 → 今日看点一句
+- A股 4 句：时点和概况 → 主要指数涨跌幅一句 → 成交额与涨跌家数一句 → 领涨领跌板块一句
+- 港股 2 句：时点 + 恒指、恒科涨跌幅 → 板块/个股一句
+- 宏观 3 句：国内最重要的已公布数据 → 海外最重要的数据 → 近期日历与预期
+- 情绪 3 句：美股估值与情绪 → A股 → 计数与结论（不念框架说明）
+- 展望 4 句：「最后是上一交易日复盘和今日展望。」→ 盘面特点 + A股短期判断一句 → 港股/美股判断与关键事件情景一句 → 固定结尾「祝您账户常红，天天开心！」（免责声明已在每页页脚显示，不再口播）
+- 生成后看 make_video.sh 输出的 duration，超过 190 秒就继续删句或缩短。
 
 **sub / say 规则**：
 - `sub` 是字幕（阿拉伯数字），`say` 是朗读文本，两者意思一致。
 - `say` 的数字全部写成汉字：百分之零点四三、三千七百九十七点二四点、一点五四万亿元、二零二六年（年份逐字读）、标普五百、科创五十、沪深三百。
-- 英文只保留 `AI`、`A股`（流水线会替换成正确读音）；其他缩写写中文：PMI→采购经理指数，CPI→消费者物价指数，VIX→恐慌指数，CAPE→席勒市盈率，ERP→股权风险溢价。
+- 英文只保留 `AI`、`A股`（Kokoro 双语读音；A 的内部定向别名由流水线处理，原稿不改）；其他缩写写中文：PMI→采购经理指数，CPI→消费者物价指数，VIX→恐慌指数，CAPE→席勒市盈率，ERP→股权风险溢价。
 - 避免单独的多音字，例如"为""处"（"PMI为50.1%"写成"录得"，"处于"写成"位于"或"在"），也避免"1167只股票"里的"只"（写成"家"）。
 - 每句字幕不超过约 45 字（最多 3 行），长句拆开。
 - `hi` 标出每句对应的卡片或要点，让画面跟着播报高亮。
@@ -95,19 +101,45 @@ echo "D=$D PREV=$PREV"
 
 ## 5. 生成与检查
 
+生成前先按第6步写好带来源及原始信息截点的 script.md。默认保留已确认的静态AI底图、紧凑页头和大字字幕，使用 pipeline/assets/backgrounds。设置 FONT_PATH 为有效中文字体；在独立虚拟环境运行，MODELS_DIR 指向模型目录。
+
+执行要点和自查脚本见 `../.claude/skills/daily-morning-news/SKILL.md`。
+
+**唯一日常入口和固定参数（2026-10-29 起）**：`pipeline/make_video.sh`，由
+`setup.sh` 安装固定 `sherpa-onnx==2.0.1` 和 Kokoro v1.1 双语模型；中文女声
+`sid=3`、`speed=1.0`。`A股` 内部映射为 `ashareletter股`，专用词典条目
+`ashareletter ˈ A` 对应英语 /eɪ/，不影响字幕和事实原稿。句间/页间停顿
+0.15/0.35 秒；只裁首尾低于峰值 -50 dB 的静音并保留 40 ms 边缘缓冲，
+不删句内停顿。模型、音色、语速、读音与裁剪配置均进入缓存键。
+**禁止**沿用 Matcha、改为「诶股」或「诶，股」、给含 A股 的句子单独降速到 0.85，
+以及用 ad-hoc 合成脚本替代仓库入口。
+
 ```bash
-bash pipeline/make_video.sh reports/$D
+S=../.claude/skills/daily-morning-news/scripts
+python3 $S/check_report.py reports/$D     # 字幕 ≤45 字、页脚宽度、数据时点、结尾语，有 ✗ 先修
+bash pipeline/make_video.sh reports/$D   # 固定双语流程；duration ≤190 秒、文件 <3,000,000 字节
+python3 $S/asr_recheck.py reports/$D      # SenseVoice 只读检查 A股 / 美股 / 港股，不删除缓存
 ```
 
-- 修掉 lint 输出里的 ✗ 项；逐条看 · 项，读音不对的加到 `report.json` 的 `lexicon_extra`（如 `"行长 hang2 zhang3"`）或换说法。
-- 用 Read 工具查看 `reports/$D/build/contact_sheet.png`，检查文字溢出、重叠、空白。有问题改 `report.json` 后重跑（只会重新合成改动的句子）。
-- 可选回听：`bash pipeline/setup.sh --with-asr && python3 pipeline/qa_asr.py reports/$D ~/.cache/daily-morning-news/models`（小模型对专有名词常误判，仅作参考）。
+- 修掉文本检查里的 ✗ 项。Kokoro 不使用旧 Matcha 的拼音 `lexicon_extra` 作为发音覆盖；
+  重要多音字、专有名词、数字需复核，必要时修正合适的中文说法或明确的 Kokoro 音素词典，
+  不能以旧拼音词典已经填写为由宣称读音正确。
+- ASR 必须覆盖当天全部含 `A股` 的句子；保存原始识别结果，不能把 A股 识别失败记为通过。
+  `bad > 0` 时保留候选与缓存并诊断，不能自动删缓存盲目重试。ASR 只是辅助证据，
+  不等于实际试听；没有人工试听就写 `human_listening_confirmed=false`。
+- 查看 `reports/$D/build/illustrated/contact_sheet.jpg`，检查文字溢出、重叠、空白；检查字幕与最终音频
+  同一时间轴、视频完整解码通过、体积严格小于 3,000,000 字节，再发布。
+- **重做已有视频**：入口拒绝覆盖原视频。在独立候选根目录中建立同名日期子目录，
+  例如 `build/candidates/<唯一批次>/$D/`，复制当天 `report.json` 和 `script.md` 后用同一入口生成，
+  对该候选目录执行上面的自查与 ASR。验证通过后才将候选 MP4、字幕、配音和验证记录
+  提升到 `reports/$D/`；先保留旧产物或其已提交版本。不要仅为绕过保护而删除原视频。
+- 生成失败或模型缺失须报告具体错误；不能悄悄退回旧引擎、旧缓存或旧音轨。
 
 ## 6. 写 reports/$D/script.md
 
 包括：标题；紧接着一段「**数据时点**」，逐行写明「美股：北京时间今晨收盘（美东10月12日）」「A股、港股：上一交易日（10月12日）收盘」（周一等例外按第 2 步改写）；逐段文稿（用字幕文本）；**数据来源**（实际用到的 URL，Markdown 链接）；数据缺口或存疑说明。
 
-推送前自查：开场说明框、开场第 3 句、三个市场页的 `asof` 和第一句、script.md 开头，这五处的数据时点是否都写了、日期是否一致。
+推送前自查：开场说明框、开场数据时点句、三个市场页的 `asof` 和第一句、script.md 开头，这五处的数据时点是否都写了、日期是否一致。
 
 ## 7. 提交并推送
 

@@ -1,0 +1,315 @@
+{
+  "profile": "illustrated-under3mb",
+  "size_bytes": 2867744,
+  "limit_bytes": 3000000,
+  "under_limit": true,
+  "full_decode_pass": true,
+  "media": {
+    "programs": [],
+    "stream_groups": [],
+    "streams": [
+      {
+        "codec_name": "h264",
+        "width": 720,
+        "height": 1280,
+        "r_frame_rate": "12/1",
+        "bit_rate": "140271"
+      },
+      {
+        "codec_name": "aac",
+        "r_frame_rate": "0/0",
+        "bit_rate": "32427"
+      }
+    ],
+    "format": {
+      "duration": "130.667000",
+      "size": "2867744"
+    }
+  },
+  "encoding_attempts": [
+    {
+      "video_kbps": 136,
+      "bytes": 2867744
+    }
+  ],
+  "a_pronunciation": "Kokoro v1.1; A股 → ashareletter股; stressed English /eɪ/; sid=3; speed=1.0; gaps=0.15/0.35",
+  "human_listening_confirmed": false,
+  "backgrounds": "AI-generated illustrative stills; reuse bundled assets",
+  "intro_seconds": 0,
+  "sentiment_data": {
+    "schema_version": 1,
+    "generated_at": "2026-10-29T08:00:22.457326+08:00",
+    "snapshot_kind": "retrieval_snapshot_not_historical_vintage",
+    "us_market_date": "2026-10-28",
+    "cn_market_date": "2026-10-28",
+    "metrics": [
+      {
+        "key": "vix",
+        "label": "VIX收盘",
+        "category": "panic",
+        "unit": "index",
+        "target_market_date": "2026-10-28",
+        "max_business_day_lag": 1,
+        "restricted_publication": false,
+        "value": 17.52,
+        "observation_date": "2026-10-27",
+        "lag_business_days": 1,
+        "status": "source_lag",
+        "usable": true,
+        "source": "cboe_vix",
+        "source_url": "https://cdn.cboe.com/api/global/us_indices/daily_prices/VIX_History.csv",
+        "retrieved_at": "2026-10-29T08:00:22.143810+08:00",
+        "cache_used": false,
+        "origin": "live",
+        "fetch_error": null,
+        "details": {}
+      },
+      {
+        "key": "hy_oas",
+        "label": "高收益债OAS",
+        "category": "credit",
+        "unit": "percent",
+        "target_market_date": "2026-10-28",
+        "max_business_day_lag": 2,
+        "restricted_publication": true,
+        "observation_date": "2026-10-27",
+        "lag_business_days": 1,
+        "status": "source_lag",
+        "usable": true,
+        "source": "hy_oas",
+        "source_url": "https://fred.stlouisfed.org/graph/fredgraph.csv?id=BAMLH0A0HYM2",
+        "retrieved_at": "2026-10-29T08:00:20.441669+08:00",
+        "cache_used": false,
+        "origin": "live",
+        "fetch_error": null,
+        "publication_note": "ICE source permits internal use only without separate approval; keep raw values and raw files out of public GitHub/video",
+        "public_display": "已获取，按实际发布日留档；具体数值仅作本地内部核验"
+      },
+      {
+        "key": "ig_oas",
+        "label": "投资级债OAS",
+        "category": "credit",
+        "unit": "percent",
+        "target_market_date": "2026-10-28",
+        "max_business_day_lag": 2,
+        "restricted_publication": true,
+        "observation_date": "2026-10-27",
+        "lag_business_days": 1,
+        "status": "source_lag",
+        "usable": true,
+        "source": "ig_oas",
+        "source_url": "https://fred.stlouisfed.org/graph/fredgraph.csv?id=BAMLC0A0CM",
+        "retrieved_at": "2026-10-29T08:00:20.361322+08:00",
+        "cache_used": false,
+        "origin": "live",
+        "fetch_error": null,
+        "publication_note": "ICE source permits internal use only without separate approval; keep raw values and raw files out of public GitHub/video",
+        "public_display": "已获取，按实际发布日留档；具体数值仅作本地内部核验"
+      },
+      {
+        "key": "cape",
+        "label": "Shiller CAPE（来源估算）",
+        "category": "valuation",
+        "unit": "times",
+        "target_market_date": "2026-10-28",
+        "max_business_day_lag": 3,
+        "restricted_publication": false,
+        "value": 41.04,
+        "observation_date": "2026-10-28",
+        "lag_business_days": 0,
+        "status": "fresh",
+        "usable": true,
+        "source": "cape",
+        "source_url": "https://www.multpl.com/shiller-pe/table/by-month",
+        "retrieved_at": "2026-10-29T08:00:20.932417+08:00",
+        "cache_used": false,
+        "origin": "live",
+        "fetch_error": null,
+        "details": {
+          "estimated": false
+        }
+      },
+      {
+        "key": "sp500_pe",
+        "label": "标普500报告利润市盈率（来源估算）",
+        "category": "valuation",
+        "unit": "times",
+        "target_market_date": "2026-10-28",
+        "max_business_day_lag": 3,
+        "restricted_publication": false,
+        "value": 26.44,
+        "observation_date": "2026-10-28",
+        "lag_business_days": 0,
+        "status": "fresh",
+        "usable": true,
+        "source": "sp500_pe",
+        "source_url": "https://www.multpl.com/s-p-500-pe-ratio/table/by-month",
+        "retrieved_at": "2026-10-29T08:00:21.646756+08:00",
+        "cache_used": false,
+        "origin": "live",
+        "fetch_error": null,
+        "details": {
+          "estimated": true
+        }
+      },
+      {
+        "key": "hs300_pe",
+        "label": "沪深300市盈率1（总股本）",
+        "category": "valuation",
+        "unit": "times",
+        "target_market_date": "2026-10-28",
+        "max_business_day_lag": 1,
+        "restricted_publication": false,
+        "value": 13.91,
+        "observation_date": "2026-10-28",
+        "lag_business_days": 0,
+        "status": "fresh",
+        "usable": true,
+        "source": "hs300_pe",
+        "source_url": "https://oss-ch.csindex.com.cn/static/html/csindex/public/uploads/file/autofile/indicator/000300indicator.xls",
+        "retrieved_at": "2026-10-29T08:00:21.862422+08:00",
+        "cache_used": false,
+        "origin": "live",
+        "fetch_error": null,
+        "details": {
+          "pe2": 15.37,
+          "pe1_definition": "市盈率1（总股本）P/E1",
+          "pe2_definition": "市盈率2（计算用股本）P/E2",
+          "index_code": "000300"
+        }
+      },
+      {
+        "key": "star50_pe",
+        "label": "科创50市盈率1（总股本）",
+        "category": "valuation",
+        "unit": "times",
+        "target_market_date": "2026-10-28",
+        "max_business_day_lag": 1,
+        "restricted_publication": false,
+        "value": 84.64,
+        "observation_date": "2026-10-28",
+        "lag_business_days": 0,
+        "status": "fresh",
+        "usable": true,
+        "source": "star50_pe",
+        "source_url": "https://oss-ch.csindex.com.cn/static/html/csindex/public/uploads/file/autofile/indicator/000688indicator.xls",
+        "retrieved_at": "2026-10-29T08:00:22.453415+08:00",
+        "cache_used": false,
+        "origin": "live",
+        "fetch_error": null,
+        "details": {
+          "pe2": 85.48,
+          "pe1_definition": "市盈率1（总股本）P/E1",
+          "pe2_definition": "市盈率2（计算用股本）P/E2",
+          "index_code": "000688"
+        }
+      }
+    ],
+    "vix_same_date_crosscheck": {
+      "date": "2026-10-27",
+      "passed": true
+    },
+    "coverage": {
+      "valuation": {
+        "available": 4,
+        "expected": 4
+      },
+      "panic": {
+        "available": 1,
+        "expected": 1
+      },
+      "credit": {
+        "available": 2,
+        "expected": 2
+      }
+    },
+    "core_complete": true,
+    "aggregate_score": null,
+    "aggregate_reason": "Seven core observations are not the complete original sentiment framework; no automatic full-framework score or position advice",
+    "backfill_note": "retrieved_at is not publication time. This snapshot cannot prove data were available at an earlier 08:00 cutoff; label later supplements explicitly.",
+    "collection_started_at": "2026-10-29T08:00:19.372867+08:00"
+  },
+  "asr_keywords": {
+    "read_only_audio": true,
+    "human_listening_confirmed": false,
+    "checked": 6,
+    "bad": 0,
+    "items": [
+      {
+        "slide": 0,
+        "idx": 1,
+        "sub": "数据时点：美股为美东10月28日，A股和港股为10月28日收盘。",
+        "keywords": [
+          "A股",
+          "美股",
+          "港股"
+        ],
+        "asr": "数据10点，每股是每东10月28日，A股和港股市10月28日收盘。",
+        "passed": true,
+        "clip_sha256": "6468bde3fe56097dbf570d63afda77c0763866249456d43d4d0b938765ab9f35"
+      },
+      {
+        "slide": 1,
+        "idx": 0,
+        "sub": "美股方面，美东10月28日收盘，三大指数小幅上涨。",
+        "keywords": [
+          "美股"
+        ],
+        "asr": "接着看美股，美东10月28日收盘，三大指数小幅上涨。",
+        "passed": true,
+        "clip_sha256": "b2fa7ce5ae3a05b65d28462d75366a1628dd7a8ca995a03872dfbb4a166c93d1"
+      },
+      {
+        "slide": 2,
+        "idx": 0,
+        "sub": "A股方面，10月28日震荡走高，成长板块反弹。",
+        "keywords": [
+          "A股"
+        ],
+        "asr": "A股方面，10月28日震荡走高，成长板块反弹。",
+        "passed": true,
+        "clip_sha256": "b1362c6cce04f8de91e6ad03c4a510c852062ecc089f50fb20816a4054f65898"
+      },
+      {
+        "slide": 3,
+        "idx": 0,
+        "sub": "港股方面，10月28日恒指涨0.23%，恒科涨1.40%。",
+        "keywords": [
+          "港股"
+        ],
+        "asr": "港股方面，10月28日收盘，恒指上涨0.23%，恒科上涨1.40%。",
+        "passed": true,
+        "clip_sha256": "dcf4bcdc83903abca18d3a7eb29a3d36a61bd5def377767c78dd5a01b0914847"
+      },
+      {
+        "slide": 6,
+        "idx": 1,
+        "sub": "A股观察反弹能否延续，并留意成交和市场广度。",
+        "keywords": [
+          "A股"
+        ],
+        "asr": "A股观察反弹能否延续，并留易成交和市场广度。",
+        "passed": true,
+        "clip_sha256": "b8432f07f7914585ce3bb2dbac2a28123e5ef8fb36593824ee0ed4c61265067e"
+      },
+      {
+        "slide": 6,
+        "idx": 2,
+        "sub": "港股看科技轮动，美股看经济数据与盈利兑现。",
+        "keywords": [
+          "美股",
+          "港股"
+        ],
+        "asr": "港股看科技轮动，每股看经济数据与盈利兑现。",
+        "passed": true,
+        "clip_sha256": "32fca559d61e00171b149340e95467736c431bb92d5d39853a6046aba697fb4c"
+      }
+    ]
+  },
+  "report_sha256": "dff34ae018737e3c54b27890ad96919f65b4e47b198333d9dcad432658867b24",
+  "video_sha256": "ec260d29c498bf7cfb897f3455e825ea90e28c7b2e854ac0c12428d10bfa606d",
+  "regeneration_scope": "Audio and rendering only; published report, source links and original 08:04 Beijing information cutoff unchanged",
+  "subtitle_count": 23,
+  "visual_review": "Contact sheet and decoded market page checked; forced transition keyframes remove observed first-frame artifacts",
+  "sentence_transition_keyframes": true
+}
