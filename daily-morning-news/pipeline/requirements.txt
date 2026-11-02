@@ -3,3 +3,4 @@ soundfile==0.14.0
 numpy>=2.0
 pillow>=11.0
 jieba==0.42.1
+xlrd==2.0.2

@@ -53,7 +53,7 @@ description: >
 
 ## 文稿与画面要点
 
-- **时长**：目标约 3 分钟，`make_video.sh` 输出的 duration **≤190 秒**（默认无片头）。超了就删句、
+- **时长**：目标约 3 分钟，`make_video.sh` 输出的 duration **≤190 秒**（默认2秒纯音乐首屏前奏）。超了就删句、
   合并句，优先删宏观日历和情绪页里重复画面的内容。约 22–25 句。
 - **字幕 ≤45 字**：`check_report.py` 会报；长句在分号处拆成两句，各自配 `hi`。
 - **页脚来源**：`default_src` / `src` 过长会被截断（约 35 个汉字宽，英文字母按半个算）。
@@ -79,9 +79,12 @@ description: >
 ## 资源
 
 - `pipeline/assets/intro.mp4`（4.5 秒片头，由 `pipeline/make_intro.py` 生成）、`pipeline/assets/bgm.mp3`
-  （原创香颂手风琴华尔兹，由 `pipeline/make_bgm.py` 生成）。静态底图默认入口无独立片头，背景音乐音量0.18并自动避让人声；需要无配乐时显式使用 run_illustrated.py 的 --skip-bgm。
+  （原创香颂手风琴华尔兹，由 `pipeline/make_bgm.py` 生成）。静态底图默认入口2秒纯音乐首屏前奏，背景音乐音量0.2852807746（较原0.18提高4 dB）并自动避让人声；需要无配乐时显式使用 run_illustrated.py 的 --skip-bgm。
 - 情绪判定阈值见 `.claude/skills/market-sentiment/SKILL.md`「指标全集」。
 - 既有早报定时任务应在每次生成前拉取最新分支并读取执行手册；启动时间以实际配置为准。不要从旧文档推断启用状态或下一次触发，不创建重复任务。
 
 ## 静态画面与本地调度同步
 默认入口 make_video.sh 调用 run_illustrated.py，使用内置静态AI底图；生成前需 report.json 和 script.md。FONT_PATH 与 MODELS_DIR 由执行环境设置。所有模型检查、合成与ASR使用同一独立Python。外部调度提示词应同步新参数并在生成前仅快进更新分支；保存提示词不代表已验证下一次触发。
+
+## 默认音乐前奏（2026-10-30）
+背景音乐保持原版基础+4dB（增益0.2852807746），先播放2秒纯音乐并展示无旁白字幕的首屏，再进入完整早报。旁白、字幕及后续画面统一后移2秒，不截断尾部；音乐连续混合并自动避让人声。最终时长包含前奏且仍需小于190秒、文件小于3MB。run_video.py/run_illustrated.py 的 --skip-intro 或 --skip-bgm 可显式取消前奏。

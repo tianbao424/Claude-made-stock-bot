@@ -13,7 +13,7 @@
   └─ 唤醒固定的「每日股市早报机器人」云端会话（已挂载本仓库），按 ROUTINE_PROMPT.md 执行
        1. WebSearch 收集隔夜美股、A股/港股收盘、宏观数据、情绪指标、机构观点
        2. 写 reports/<日期>/report.json（数据 + 逐句文稿）
-       3. pipeline/make_video.sh：读音检查 → 离线 TTS 配音 → 逐句渲染画面 → ffmpeg 合成（默认无片头、低音量背景音乐；手动启用片头时字幕自动后移）
+       3. pipeline/make_video.sh：读音检查 → 离线 TTS 配音 → 逐句渲染画面 → ffmpeg 合成（默认2秒纯音乐首屏前奏、低音量背景音乐；旁白字幕和画面整体后移2秒且尾部完整）
        4. 检查拼图、写 script.md（文稿 + 数据来源）
        5. 提交并推送到 daily-morning-news 分支
 ```
@@ -30,9 +30,9 @@ daily-morning-news/
 ├── pipeline/
 │   ├── setup.sh             # 安装依赖 + 下载离线语音模型（~350MB，缓存在 ~/.cache，不提交）
 │   ├── make_video.sh        # report.json → 配音 / 字幕 / 视频
-│   ├── assets/intro.mp4     # 4.5 秒片头（K线 + 走势线 + 标题），默认关闭；INTRO_VIDEO=<路径> 可显式启用
+│   ├── assets/intro.mp4     # 4.5 秒片头（K线 + 走势线 + 标题），历史素材；当前静态默认入口不调用
 │   ├── make_intro.py        # 生成上面的片头（改文案、配色后重跑一次即可）
-│   ├── assets/bgm.mp3       # 背景音乐：原创法式香颂手风琴华尔兹，循环铺满全片、有人声时自动压低（BGM_AUDIO= 可跳过，BGM_VOL 调音量）
+│   ├── assets/bgm.mp3       # 背景音乐：原创法式香颂手风琴华尔兹，循环铺满全片、有人声时自动压低（默认增益0.2852807746（较0.18提高4dB））
 │   ├── make_bgm.py          # 合成上面的背景音乐（改旋律、和弦、速度后重跑）
 │   ├── lint_say.py          # 朗读文本检查（字母数字残留、多音字）
 │   ├── synth.py             # 逐句 TTS，按句缓存

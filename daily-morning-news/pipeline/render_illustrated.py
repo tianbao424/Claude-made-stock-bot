@@ -113,17 +113,18 @@ def overlay(item,index):
    fit_text(d,(90,yy+80),str(value),55,880)
    fit_text(d,(90,yy+166),str(note),36,880,MUTED)
  # Subtitle region is fixed below all data panels.
- d.rounded_rectangle((42,1500,1038,1775),24,fill=(2,7,14,255),outline=(255,255,255,145),width=2)
- lines=subtitle_lines(item['sub'],F(64),920)
- assert len(lines)<=3,(item['sub'],lines)
- yy=1523+(3-len(lines))*40
- for line in lines:
-  xx=(W-F(64).getlength(line))/2;text(d,(xx,yy),line,64);yy+=81
+ if not item.get('music_prelude'):
+  d.rounded_rectangle((42,1500,1038,1775),24,fill=(2,7,14,255),outline=(255,255,255,145),width=2)
+  lines=subtitle_lines(item['sub'],F(64),920)
+  assert len(lines)<=3,(item['sub'],lines)
+  yy=1523+(3-len(lines))*40
+  for line in lines:
+   xx=(W-F(64).getlength(line))/2;text(d,(xx,yy),line,64);yy+=81
  source=sl.get('src',R.get('default_src','')).replace('；详见文稿','')
  for j,line in enumerate(wrap(source,F(28),940)[:2]):text(d,(66,1790+j*35),line,28,MUTED)
  text(d,(66,1862),'AI生成示意画面  ·  仅供参考，不构成投资建议',27,MUTED)
  d.rectangle((64,1895,1016,1898),fill=(255,255,255,50))
- d.rectangle((64,1895,64+int(952*(index+1)/len(TL['items'])),1898),fill=GOLD)
+ d.rectangle((64,1895,64+int(952*max(0,index+1-bool(TL.get('music_prelude_seconds')))/(len(TL['items'])-bool(TL.get('music_prelude_seconds')))),1898),fill=GOLD)
  path=BUILD/f'overlay-{index:02d}.png';im.save(path)
  return path
 
@@ -143,7 +144,7 @@ def main():
   bg=ImageEnhance.Color(bg.filter(ImageFilter.GaussianBlur(1.3))).enhance(.8)
   ov=Image.open(overlay(it,i)).convert('RGBA').resize((720,1280),Image.Resampling.LANCZOS)
   frame=Image.alpha_composite(bg.convert('RGBA'),ov).convert('RGB');path=BUILD/f'frame-{i:02d}.png';frame.save(path)
-  start=0 if i==0 else round(it['start']*fps)/fps;end=round(it['show_end']*fps)/fps
+  start=0 if i==0 else (TL['music_prelude_seconds'] if i==1 and TL.get('music_prelude_seconds') else round(it['start']*fps)/fps);end=round(it['show_end']*fps)/fps
   frames.append((path.resolve(),end-start))
  lines=[]
  for path,duration in frames:lines.extend(["file '"+str(path).replace("'", "'\\''")+"'",f'duration {duration:.9f}'])
