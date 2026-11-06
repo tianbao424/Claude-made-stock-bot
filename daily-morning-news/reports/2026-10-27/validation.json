@@ -1,0 +1,76 @@
+{
+  "index_checks": [
+    {
+      "name": "道指",
+      "previous_close": 52215.16,
+      "change": 146.42,
+      "close": 52361.58,
+      "percent": 0.28,
+      "arithmetic_pass": true
+    },
+    {
+      "name": "标普",
+      "previous_close": 7623.68,
+      "change": 53.09,
+      "close": 7676.77,
+      "percent": 0.7,
+      "arithmetic_pass": true
+    },
+    {
+      "name": "纳指",
+      "previous_close": 25955.34,
+      "change": 214.04,
+      "close": 26169.38,
+      "percent": 0.82,
+      "arithmetic_pass": true
+    },
+    {
+      "name": "上证",
+      "previous_close": 3690.48,
+      "change": 7.04,
+      "close": 3697.52,
+      "percent": 0.19,
+      "arithmetic_pass": true
+    },
+    {
+      "name": "深成",
+      "previous_close": 11673.83,
+      "change": -139.45,
+      "close": 11534.38,
+      "percent": -1.19,
+      "arithmetic_pass": true
+    },
+    {
+      "name": "创业板",
+      "previous_close": 2684.1,
+      "change": -45.87,
+      "close": 2638.23,
+      "percent": -1.71,
+      "arithmetic_pass": true
+    },
+    {
+      "name": "恒指",
+      "previous_close": 23093.37,
+      "change": 118.44,
+      "close": 23211.81,
+      "percent": 0.51,
+      "arithmetic_pass": true
+    },
+    {
+      "name": "恒科",
+      "previous_close": 3871.66,
+      "change": -14.13,
+      "close": 3857.53,
+      "percent": -0.36,
+      "arithmetic_pass": true
+    }
+  ],
+  "subtitle_checks": "passed",
+  "data_cutoff": "US 2026-10-26; CN/HK 2026-10-26; macro 2026-10-27 09:30+",
+  "asr_keyword_bad": 0,
+  "layout_review": "passed",
+  "pronunciation_lint": "0 issues, 0 notes",
+  "duration_seconds": 133.84,
+  "resolution": "1080x1920",
+  "voice": "original sherpa-onnx baker model"
+}
