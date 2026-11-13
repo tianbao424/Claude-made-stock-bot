@@ -14,7 +14,7 @@ import sys
 import jieba
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-from synth import load_extra_lexicon, prepare_say  # noqa: E402
+from synth import KOKORO_ALIAS, load_extra_lexicon, prepare_say  # noqa: E402
 
 POLY = set("为处只长行重调还得地着了都便传种相乐发干降几差曾应藏将朝露解角会率省塞宁曲区转觉没似参称冲当")
 SAFE_SINGLE = set("了都和的得地着将")  # 默认读音在财经语境下通常正确，不单独报错
@@ -24,6 +24,20 @@ def main():
     path, models = sys.argv[1], sys.argv[2]; strict = "--strict" in sys.argv
     z = os.path.join(models, "matcha-icefall-zh-baker")
     rep = json.load(open(path, encoding="utf8"))
+    if "--engine=kokoro" in sys.argv:
+        problems = []
+        for sl in rep["slides"]:
+            for sent in sl["sentences"]:
+                say = prepare_say(sent["say"], "kokoro")
+                # These native bilingual tokens are intentional. Other abbreviations
+                # and digits still require editorial review.
+                remaining = say.replace(KOKORO_ALIAS + "股", "").replace("AI", "")
+                if re.search(r"[A-Za-z0-9]", remaining):
+                    problems.append(say)
+        for problem in problems:
+            print("✗ 未确认的字母/数字：", problem)
+        print(f"{len(problems)} 个文本问题；Kokoro 多音字和字母仍须音频复核")
+        sys.exit(1 if strict and problems else 0)
     lex = {}
     for line in load_extra_lexicon(rep) + list(open(os.path.join(z, "lexicon.txt"), encoding="utf8")):
         p = line.split()
