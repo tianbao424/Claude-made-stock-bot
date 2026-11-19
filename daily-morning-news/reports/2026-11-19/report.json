@@ -1,0 +1,647 @@
+{
+  "date": "2026-11-19",
+  "title": "股市早报",
+  "date_display": "2026年11月19日 周四",
+  "intro_date": "2026年11月19日 星期四",
+  "default_src": "来源：详见文稿链接",
+  "visual": {
+    "badge": "AI示意画面"
+  },
+  "information_cutoff": "2026-11-19T08:01:50.888729+08:00",
+  "market_dates": {
+    "美股": "2026-11-18",
+    "A股": "2026-11-18",
+    "港股": "2026-11-18"
+  },
+  "data_note": [
+    [
+      "美股",
+      "美东11月18日收盘"
+    ],
+    [
+      "A股 · 港股",
+      "11月18日收盘"
+    ]
+  ],
+  "sentiment_data": {
+    "schema_version": 1,
+    "generated_at": "2026-11-19T08:01:29.924575+08:00",
+    "snapshot_kind": "retrieval_snapshot_not_historical_vintage",
+    "us_market_date": "2026-11-18",
+    "cn_market_date": "2026-11-18",
+    "metrics": [
+      {
+        "key": "vix",
+        "label": "VIX收盘",
+        "category": "panic",
+        "unit": "index",
+        "target_market_date": "2026-11-18",
+        "max_business_day_lag": 1,
+        "restricted_publication": false,
+        "value": 25.46,
+        "observation_date": "2026-11-17",
+        "lag_business_days": 1,
+        "status": "source_lag",
+        "usable": true,
+        "source": "cboe_vix",
+        "source_url": "https://cdn.cboe.com/api/global/us_indices/daily_prices/VIX_History.csv",
+        "retrieved_at": "2026-11-19T08:00:51.035399+08:00",
+        "cache_used": false,
+        "origin": "live",
+        "fetch_error": null,
+        "details": {}
+      },
+      {
+        "key": "hy_oas",
+        "label": "高收益债OAS",
+        "category": "credit",
+        "unit": "percent",
+        "target_market_date": "2026-11-18",
+        "max_business_day_lag": 2,
+        "restricted_publication": true,
+        "observation_date": "2026-11-02",
+        "lag_business_days": 12,
+        "status": "stale",
+        "usable": false,
+        "source": "hy_oas",
+        "source_url": "https://fred.stlouisfed.org/graph/fredgraph.csv?id=BAMLH0A0HYM2",
+        "retrieved_at": "2026-11-04T08:02:17.685180+08:00",
+        "cache_used": true,
+        "origin": "cache_fallback",
+        "fetch_error": "The read operation timed out",
+        "cache_note": "Failed live fetch; original observation date retained, never relabeled as fresh fetch",
+        "publication_note": "ICE source permits internal use only without separate approval; keep raw values and raw files out of public GitHub/video",
+        "public_display": "已获取，按实际发布日留档；具体数值仅作本地内部核验"
+      },
+      {
+        "key": "ig_oas",
+        "label": "投资级债OAS",
+        "category": "credit",
+        "unit": "percent",
+        "target_market_date": "2026-11-18",
+        "max_business_day_lag": 2,
+        "restricted_publication": true,
+        "observation_date": "2026-11-02",
+        "lag_business_days": 12,
+        "status": "stale",
+        "usable": false,
+        "source": "ig_oas",
+        "source_url": "https://fred.stlouisfed.org/graph/fredgraph.csv?id=BAMLC0A0CM",
+        "retrieved_at": "2026-11-04T08:02:17.962116+08:00",
+        "cache_used": true,
+        "origin": "cache_fallback",
+        "fetch_error": "The read operation timed out",
+        "cache_note": "Failed live fetch; original observation date retained, never relabeled as fresh fetch",
+        "publication_note": "ICE source permits internal use only without separate approval; keep raw values and raw files out of public GitHub/video",
+        "public_display": "已获取，按实际发布日留档；具体数值仅作本地内部核验"
+      },
+      {
+        "key": "cape",
+        "label": "Shiller CAPE（来源估算）",
+        "category": "valuation",
+        "unit": "times",
+        "target_market_date": "2026-11-18",
+        "max_business_day_lag": 3,
+        "restricted_publication": false,
+        "value": 38.63,
+        "observation_date": "2026-11-18",
+        "lag_business_days": 0,
+        "status": "fresh",
+        "usable": true,
+        "source": "cape",
+        "source_url": "https://www.multpl.com/shiller-pe/table/by-month",
+        "retrieved_at": "2026-11-19T08:00:49.782961+08:00",
+        "cache_used": false,
+        "origin": "live",
+        "fetch_error": null,
+        "details": {
+          "estimated": false
+        }
+      },
+      {
+        "key": "sp500_pe",
+        "label": "标普500报告利润市盈率（来源估算）",
+        "category": "valuation",
+        "unit": "times",
+        "target_market_date": "2026-11-18",
+        "max_business_day_lag": 3,
+        "restricted_publication": false,
+        "value": 24.96,
+        "observation_date": "2026-11-18",
+        "lag_business_days": 0,
+        "status": "fresh",
+        "usable": true,
+        "source": "sp500_pe",
+        "source_url": "https://www.multpl.com/s-p-500-pe-ratio/table/by-month",
+        "retrieved_at": "2026-11-19T08:00:51.198088+08:00",
+        "cache_used": false,
+        "origin": "live",
+        "fetch_error": null,
+        "details": {
+          "estimated": true
+        }
+      },
+      {
+        "key": "hs300_pe",
+        "label": "沪深300市盈率1（总股本）",
+        "category": "valuation",
+        "unit": "times",
+        "target_market_date": "2026-11-18",
+        "max_business_day_lag": 1,
+        "restricted_publication": false,
+        "value": 13.78,
+        "observation_date": "2026-11-18",
+        "lag_business_days": 0,
+        "status": "fresh",
+        "usable": true,
+        "source": "hs300_pe",
+        "source_url": "https://oss-ch.csindex.com.cn/static/html/csindex/public/uploads/file/autofile/indicator/000300indicator.xls",
+        "retrieved_at": "2026-11-19T08:00:52.590640+08:00",
+        "cache_used": false,
+        "origin": "live",
+        "fetch_error": null,
+        "details": {
+          "pe2": 14.99,
+          "pe1_definition": "市盈率1（总股本）P/E1",
+          "pe2_definition": "市盈率2（计算用股本）P/E2",
+          "index_code": "000300"
+        }
+      },
+      {
+        "key": "star50_pe",
+        "label": "科创50市盈率1（总股本）",
+        "category": "valuation",
+        "unit": "times",
+        "target_market_date": "2026-11-18",
+        "max_business_day_lag": 1,
+        "restricted_publication": false,
+        "value": 84.36,
+        "observation_date": "2026-11-18",
+        "lag_business_days": 0,
+        "status": "fresh",
+        "usable": true,
+        "source": "star50_pe",
+        "source_url": "https://oss-ch.csindex.com.cn/static/html/csindex/public/uploads/file/autofile/indicator/000688indicator.xls",
+        "retrieved_at": "2026-11-19T08:00:52.669388+08:00",
+        "cache_used": false,
+        "origin": "live",
+        "fetch_error": null,
+        "details": {
+          "pe2": 83.6,
+          "pe1_definition": "市盈率1（总股本）P/E1",
+          "pe2_definition": "市盈率2（计算用股本）P/E2",
+          "index_code": "000688"
+        }
+      }
+    ],
+    "vix_same_date_crosscheck": {
+      "date": "2026-11-02",
+      "passed": true
+    },
+    "coverage": {
+      "valuation": {
+        "available": 4,
+        "expected": 4
+      },
+      "panic": {
+        "available": 1,
+        "expected": 1
+      },
+      "credit": {
+        "available": 0,
+        "expected": 2
+      }
+    },
+    "core_complete": false,
+    "aggregate_score": null,
+    "aggregate_reason": "Seven core observations are not the complete original sentiment framework; no automatic full-framework score or position advice",
+    "backfill_note": "retrieved_at is not publication time. This snapshot cannot prove data were available at an earlier 08:00 cutoff; label later supplements explicitly.",
+    "collection_started_at": "2026-11-19T08:00:48.254639+08:00"
+  },
+  "slides": [
+    {
+      "type": "intro",
+      "src": "来源：美联社、东方财富、信报",
+      "chips": [
+        [
+          "美股",
+          "标普500",
+          "-0.23%",
+          "down"
+        ],
+        [
+          "A股",
+          "上证指数",
+          "+0.09%",
+          "up"
+        ],
+        [
+          "港股",
+          "恒生指数",
+          "-0.91%",
+          "down"
+        ]
+      ],
+      "visual": {
+        "headline": "美股分化 · 内地缩量修复",
+        "subtitle": "信息截点：北京时间08:01"
+      },
+      "sentences": [
+        {
+          "sub": "大家好，今天是2026年11月19日，星期四。",
+          "say": "大家好，今天是二零二六年十一月十九日，星期四。",
+          "hi": []
+        },
+        {
+          "sub": "数据时点：美股为美东11月18日，A股和港股为11月18日收盘。",
+          "say": "数据时点：美股是美东十一月十八日，A股和港股是十一月十八日收盘。",
+          "hi": [
+            "note"
+          ]
+        },
+        {
+          "sub": "一起来看三大市场的表现。",
+          "say": "一起来看三大市场的表现。",
+          "hi": []
+        }
+      ]
+    },
+    {
+      "type": "market",
+      "tab": "美股",
+      "asof": "今晨收盘 · 美东11月18日",
+      "src": "来源：美联社、东方财富",
+      "cards": [
+        [
+          "道琼斯指数",
+          "50198.17",
+          "-1.11%",
+          "down"
+        ],
+        [
+          "标普500",
+          "7323.63",
+          "-0.23%",
+          "down"
+        ],
+        [
+          "纳斯达克指数",
+          "24429.88",
+          "+0.42%",
+          "up"
+        ]
+      ],
+      "bullets": [],
+      "visual": {
+        "headline": "道指回落 · 纳指小涨",
+        "note": "主要指数收跌 · 关注波动"
+      },
+      "sentences": [
+        {
+          "sub": "美股方面，美东11月18日三大指数涨跌不一。",
+          "say": "美股方面，美东十一月十八日三大指数涨跌不一。",
+          "hi": []
+        },
+        {
+          "sub": "道指跌1.11%，标普500跌0.23%，纳指涨0.42%。",
+          "say": "道指跌百分之一点一一，标普五百跌百分之零点二三，纳指涨百分之零点四二。",
+          "hi": []
+        },
+        {
+          "sub": "标普连续五日收低，观察反弹能否持续。",
+          "say": "标普连续五日收低，观察反弹能否持续。",
+          "hi": []
+        }
+      ]
+    },
+    {
+      "type": "market",
+      "tab": "A股",
+      "asof": "上一交易日 · 11月18日收盘",
+      "src": "来源：中财网、东方财富、证券时报",
+      "cards": [
+        [
+          "上证指数",
+          "3587.83",
+          "+0.09%",
+          "up"
+        ],
+        [
+          "深证成指",
+          "10659.41",
+          "+0.20%",
+          "up"
+        ],
+        [
+          "创业板指",
+          "2311.62",
+          "+0.85%",
+          "up"
+        ]
+      ],
+      "bullets": [],
+      "visual": {
+        "headline": "三大指数收红 · 成交缩量",
+        "note": "通信电子相对较强 · 传媒偏弱"
+      },
+      "sentences": [
+        {
+          "sub": "A股方面，11月18日三大指数集体收涨。",
+          "say": "A股方面，十一月十八日三大指数集体收涨。",
+          "hi": []
+        },
+        {
+          "sub": "沪指涨0.09%，深成指涨0.20%，创业板涨0.85%。",
+          "say": "沪指涨百分之零点零九，深成指涨百分之零点二零，创业板涨百分之零点八五。",
+          "hi": []
+        },
+        {
+          "sub": "通信与电子相对较强，传媒表现偏弱。",
+          "say": "通信与电子相对较强，传媒表现偏弱。",
+          "hi": []
+        },
+        {
+          "sub": "沪深成交约1.37万亿元，较前日继续缩量。",
+          "say": "沪深成交约一点三七万亿元，较前日继续缩量。",
+          "hi": []
+        }
+      ]
+    },
+    {
+      "type": "market",
+      "tab": "港股",
+      "asof": "上一交易日 · 11月18日收盘",
+      "src": "来源：信报、凯基行情",
+      "cards": [
+        [
+          "恒生指数",
+          "23294.75",
+          "-0.91%",
+          "down"
+        ],
+        [
+          "恒生科技",
+          "3736.33",
+          "-0.58%",
+          "down"
+        ]
+      ],
+      "bullets": [],
+      "visual": {
+        "headline": "恒指恒科回落 · 关注承接",
+        "note": "指数回落 · 半导体局部走强"
+      },
+      "sentences": [
+        {
+          "sub": "港股方面，11月18日恒指跌0.91%，恒科跌0.58%。",
+          "say": "港股方面，十一月十八日恒指跌百分之零点九一，恒科跌百分之零点五八。",
+          "hi": []
+        },
+        {
+          "sub": "两大指数继续回落，关注后续承接力度。",
+          "say": "两大指数继续回落，关注后续承接力度。",
+          "hi": []
+        }
+      ]
+    },
+    {
+      "type": "macro",
+      "tab": "宏观",
+      "asof": "截至11月19日08:01",
+      "src": "来源：国家统计局、美国劳工统计局",
+      "groups": [
+        [
+          "已公布数据",
+          "cn",
+          [
+            [
+              "中国10月规上工业",
+              "同比 +4.8%",
+              "实际增长 · 11/16公布"
+            ],
+            [
+              "工业环比变化",
+              "环比 +0.21%",
+              "季调口径"
+            ],
+            [
+              "美国10月生产者价格",
+              "环比 +0.3%",
+              "11/13公布 · 最终需求"
+            ]
+          ]
+        ]
+      ],
+      "visual": {
+        "headline": "工业数据公布 · 区分口径",
+        "rows": [
+          [
+            "中国10月规上工业",
+            "同比 +4.8%",
+            "实际增长 · 11/16公布"
+          ],
+          [
+            "工业环比变化",
+            "环比 +0.21%",
+            "季调口径"
+          ],
+          [
+            "美国10月生产者价格",
+            "环比 +0.3%",
+            "11/13公布 · 最终需求"
+          ]
+        ]
+      },
+      "sentences": [
+        {
+          "sub": "中国10月规模以上工业增加值同比实际增长4.8%。",
+          "say": "中国十月规模以上工业增加值同比实际增长百分之四点八。",
+          "hi": []
+        },
+        {
+          "sub": "季调后环比增长0.21%，与同比口径不同。",
+          "say": "季调后环比增长百分之零点二一，与同比口径不同。",
+          "hi": []
+        },
+        {
+          "sub": "国内工业数据已于北京时间16日上午10点公布。",
+          "say": "国内工业数据已于北京时间十六日上午十点公布。",
+          "hi": []
+        },
+        {
+          "sub": "此前美国10月最终需求生产者价格环比上涨0.3%。",
+          "say": "此前美国十月最终需求生产者价格环比上涨百分之零点三。",
+          "hi": []
+        }
+      ]
+    },
+    {
+      "type": "sentiment",
+      "tab": "情绪",
+      "asof": "截至11月19日08:01",
+      "src": "来源：中证、Cboe、Multpl、FRED",
+      "verdict": [
+        "按分项日期披露",
+        "不打综合分"
+      ],
+      "counts": {},
+      "cols": [],
+      "groups": [
+        [
+          "核心快照",
+          "cn",
+          [
+            [
+              "估值 · 11月18日",
+              "沪深300 13.78倍",
+              "市盈率1 · 总股本口径"
+            ],
+            [
+              "恐慌指标 · 11月17日",
+              "VIX 25.46",
+              "收盘值 · 按实际观察日引用"
+            ],
+            [
+              "信用指标",
+              "0/2项可用",
+              "原始数值仅本地 · 不当作中性"
+            ]
+          ]
+        ]
+      ],
+      "visual": {
+        "headline": "估值与波动 · 分项标日期",
+        "rows": [
+          [
+            "估值 · 11月18日",
+            "沪深300 13.78倍",
+            "市盈率1 · 总股本口径"
+          ],
+          [
+            "恐慌指标 · 11月17日",
+            "VIX 25.46",
+            "收盘值 · 按实际观察日引用"
+          ],
+          [
+            "信用指标",
+            "0/2项可用",
+            "原始数值仅本地 · 不当作中性"
+          ]
+        ]
+      },
+      "sentences": [
+        {
+          "sub": "11月18日沪深300市盈率13.78倍，总股本口径。",
+          "say": "十一月十八日沪深三百市盈率十三点七八倍，总股本口径。",
+          "hi": []
+        },
+        {
+          "sub": "恐慌指数采用11月17日收盘25.46，按观察日引用。",
+          "say": "恐慌指数采用十一月十七日收盘二十五点四六，按观察日引用。",
+          "hi": []
+        },
+        {
+          "sub": "信用指标覆盖不足，超期项剔除，暂不打综合分。",
+          "say": "信用指标覆盖不足，超期项剔除，暂不打综合分。",
+          "hi": []
+        }
+      ]
+    },
+    {
+      "type": "outlook",
+      "tab": "展望",
+      "asof": "基于11月18日收盘 · 今日观察",
+      "src": "来源：上述市场数据综合观察",
+      "banner": {
+        "label": "上一交易日盘面",
+        "headline": "美股分化 · 内地小涨",
+        "stats": [
+          [
+            "上证 +0.09%",
+            "down"
+          ],
+          [
+            "恒科 -0.58%",
+            "down"
+          ]
+        ]
+      },
+      "cards": [],
+      "scen": [],
+      "visual": {
+        "headline": "关注承接 · 观察利率预期",
+        "rows": [
+          [
+            "A股",
+            "成交与市场广度",
+            "观察下跌后的承接"
+          ],
+          [
+            "港股",
+            "科网板块承接",
+            "观察反弹持续性"
+          ],
+          [
+            "美股",
+            "物价公布后的利率预期",
+            "观察利率预期变化"
+          ]
+        ]
+      },
+      "sentences": [
+        {
+          "sub": "最后是上一交易日复盘和今日展望。",
+          "say": "最后是上一交易日复盘和今日展望。",
+          "hi": []
+        },
+        {
+          "sub": "A股观察成交与市场广度，留意下跌后的承接。",
+          "say": "A股观察成交与市场广度，留意下跌后的承接。",
+          "hi": []
+        },
+        {
+          "sub": "港股关注科技股承接，美股观察利率预期变化。",
+          "say": "港股关注科技股承接，美股观察利率预期变化。",
+          "hi": []
+        },
+        {
+          "sub": "祝您账户常红，天天开心！",
+          "say": "祝您账户常红，天天开心！",
+          "hi": []
+        }
+      ]
+    }
+  ],
+  "source_urls": [
+    "https://apnews.com/article/990749d3d269f7ef05b9f6c089713a58",
+    "https://www.cls.cn/detail/2538424",
+    "https://finance.eastmoney.com/a/202611183933949553.html",
+    "https://finance.eastmoney.com/a/202611183934057391.html",
+    "https://www.jiemian.com/article/15346907.html",
+    "https://finance.eastmoney.com/a/202611183933983998.html",
+    "https://www.xinhuanet.com/20261118/2d1c360df96a4ec7a704bf90be5f8f1d/c.html",
+    "https://www.stats.gov.cn/sj/zxfb/202611/t20261116_1965842.html",
+    "https://www.bls.gov/news.release/archives/ppi_11132026.pdf",
+    "https://cdn.cboe.com/api/global/us_indices/daily_prices/VIX_History.csv",
+    "https://fred.stlouisfed.org/graph/fredgraph.csv?id=BAMLH0A0HYM2",
+    "https://fred.stlouisfed.org/graph/fredgraph.csv?id=BAMLC0A0CM",
+    "https://www.multpl.com/shiller-pe/table/by-month",
+    "https://www.multpl.com/s-p-500-pe-ratio/table/by-month",
+    "https://oss-ch.csindex.com.cn/static/html/csindex/public/uploads/file/autofile/indicator/000300indicator.xls",
+    "https://oss-ch.csindex.com.cn/static/html/csindex/public/uploads/file/autofile/indicator/000688indicator.xls"
+  ],
+  "data_gaps": [
+    "核心快照覆盖：估值4/4、恐慌1/1、信用0/2；完整度不等于综合评分。",
+    "VIX收盘：观察日2026-11-17；状态source_lag；可用",
+    "高收益债OAS：观察日2026-11-02；状态stale；剔除；缓存回退，保留原日期；具体数值仅本地",
+    "投资级债OAS：观察日2026-11-02；状态stale；剔除；缓存回退，保留原日期；具体数值仅本地",
+    "Shiller CAPE（来源估算）：观察日2026-11-18；状态fresh；可用",
+    "标普500报告利润市盈率（来源估算）：观察日2026-11-18；状态fresh；可用",
+    "沪深300市盈率1（总股本）：观察日2026-11-18；状态fresh；可用",
+    "科创50市盈率1（总股本）：观察日2026-11-18；状态fresh；可用",
+    "三市场均为11月18日收盘；美股用美东交易日。",
+    "中国工业数据11月16日10点公布，美国生产者价格报告11月13日公布。",
+    "主要指数双源核验并算术复核；成交额本期使用沪深口径，不与沪深京混用。",
+    "信用超期项剔除，原始值不公开；全框架指标未齐，不计算综合分。"
+  ]
+}
