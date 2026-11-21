@@ -1,0 +1,5 @@
+99db0bc8fd0c5033d249fe922db16768b71b4a6b26cfd93d206fbf66c76efb5f  kokoro-multi-lang-v1_1/model.onnx
+e64a5a581d8c2a350d848f51c3121657cd83aa07ed6109172177345874a7244c  kokoro-multi-lang-v1_1/voices.bin
+931ab2df2400cd65d580a22402024c2347ced8ae9ea300e545144b1aacc48e14  kokoro-multi-lang-v1_1/tokens.txt
+7daaab53a181be9885b853a8582bf1838186317e5dadacbcef9c426d6fa0da14  kokoro-multi-lang-v1_1/lexicon-us-en.txt
+fea060803db3e59193987f1a3436f56917bda09f3b3595b6588e46ae60cebf93  kokoro-multi-lang-v1_1/lexicon-zh.txt
